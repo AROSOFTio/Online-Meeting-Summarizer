@@ -9,6 +9,7 @@ from app.schemas.schemas import UserCreate, UserOut, UserUpdate
 
 router = APIRouter()
 
+@router.get("", response_model=List[UserOut], include_in_schema=False)
 @router.get("/", response_model=List[UserOut])
 def read_staff(
     db: Session = Depends(deps.get_db),
@@ -17,6 +18,7 @@ def read_staff(
     """Retrieve list of staff accounts (Admin Only)"""
     return db.query(User).all()
 
+@router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 @router.post("/", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def create_staff(
     request: Request,

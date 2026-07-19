@@ -42,6 +42,7 @@ def get_db_setting(db: Session, key: str) -> str:
         return new_setting.value
     return ""
 
+@router.get("", include_in_schema=False)
 @router.get("/")
 def get_settings(db: Session = Depends(deps.get_db), current_user: User = Depends(deps.get_current_user)):
     """Fetch all school settings (Authenticated Users Only)"""
@@ -93,6 +94,7 @@ def get_logo(db: Session = Depends(deps.get_db)):
         raise HTTPException(status_code=404, detail="No custom logo uploaded")
     return FileResponse(setting.value)
 
+@router.put("", include_in_schema=False)
 @router.put("/")
 def update_settings(
     settings_in: Dict[str, str],
