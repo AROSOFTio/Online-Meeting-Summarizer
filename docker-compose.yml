@@ -29,6 +29,7 @@ services:
     build: ./backend
     image: online-meeting-summarizer-backend
     restart: unless-stopped
+    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     depends_on:
       db:
         condition: service_healthy
