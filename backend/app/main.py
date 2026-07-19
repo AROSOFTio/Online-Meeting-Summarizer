@@ -10,9 +10,8 @@ from app.api.endpoints import auth, staff, settings as settings_router, health, 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup actions: Auto-create tables for SQLite fallback
-    if settings.is_sqlite:
-        Base.metadata.create_all(bind=engine)
+    # Ensure the schema exists before querying or seeding application data.
+    Base.metadata.create_all(bind=engine)
         
     # Seed default administrator account if database is empty
     db = SessionLocal()
