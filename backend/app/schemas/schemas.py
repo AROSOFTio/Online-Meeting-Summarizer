@@ -116,3 +116,61 @@ class ProcessingJobOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+# Summary schemas
+class SummaryOut(BaseModel):
+    id: int
+    meeting_id: int
+    text: str
+    key_points: List[str] = []
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class SummaryUpdate(BaseModel):
+    text: Optional[str] = None
+    key_points: Optional[List[str]] = None
+
+# Decision schemas
+class DecisionOut(BaseModel):
+    id: int
+    meeting_id: int
+    text: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class DecisionCreate(BaseModel):
+    text: str
+
+# ActionItem schemas
+class ActionItemBase(BaseModel):
+    text: str
+    assignee_id: Optional[int] = None
+    priority: Optional[str] = "medium"
+    deadline: Optional[str] = None
+    status: Optional[str] = "pending"
+
+class ActionItemCreate(ActionItemBase):
+    meeting_id: int
+
+class ActionItemUpdate(BaseModel):
+    text: Optional[str] = None
+    assignee_id: Optional[int] = None
+    priority: Optional[str] = None
+    deadline: Optional[str] = None
+    status: Optional[str] = None
+
+class ActionItemOut(ActionItemBase):
+    id: int
+    meeting_id: int
+    assignee_name: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+

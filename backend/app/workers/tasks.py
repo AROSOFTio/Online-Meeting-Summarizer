@@ -105,13 +105,13 @@ def transcribe_meeting(meeting_id: int, job_id: str):
         segments = transcription_service.transcribe(output_path)
 
         # Step 3: Write Transcript Records
-        job.status = JobStatus.summarising # Stage set for Phase 3 summariser
+        job.status = JobStatus.summarising
         job.progress = 85
         db.commit()
 
         # Assemble full text
         full_text = " ".join([seg["text"] for seg in segments])
-        
+
         # Delete old transcript if retrying
         existing_transcript = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()
         if existing_transcript:
@@ -134,6 +134,62 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             )
             db.add(db_seg)
         db.commit()
+
+        # Step 4: Auto-generate TextRank summary + decisions + action item candidates
+        try:
+            import json
+            from app.services.summarizer import summarize, extract_decisions, extract_action_items, extract_key_points
+            from app.models.models import Summary, Decision, ActionItem
+
+            summary_text = summarize(full_text, sentence_count=6)
+            key_points = extract_key_points(full_text, count=5)
+            decision_texts = extract_decisions(full_text)
+            action_candidates = extract_action_items(full_text)
+
+            # Upsert Summary
+            existing_summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
+            if existing_summary:
+                existing_summary.summary_text = summary_text
+                existing_summary.key_points_json = json.dumps(key_points)
+                summary_row = existing_summary
+            else:
+                summary_row = Summary(
+                    meeting_id=meeting_id,
+                    summary_text=summary_text,
+                    key_points_json=json.dumps(key_points)
+                )
+                db.add(summary_row)
+            db.commit()
+            db.refresh(summary_row)
+
+            # Write decisions (idempotent)
+            db.query(Decision).filter(
+                Decision.meeting_id == meeting_id,
+                Decision.summary_id == summary_row.id
+            ).delete()
+            for d_text in decision_texts:
+                db.add(Decision(meeting_id=meeting_id, summary_id=summary_row.id, text=d_text))
+
+            # Write action item candidates (only on first run)
+            existing_actions = db.query(ActionItem).filter(
+                ActionItem.meeting_id == meeting_id,
+                ActionItem.summary_id == summary_row.id
+            ).count()
+            if existing_actions == 0:
+                for candidate in action_candidates:
+                    db.add(ActionItem(
+                        meeting_id=meeting_id,
+                        summary_id=summary_row.id,
+                        description=candidate["text"],
+                        status="pending",
+                        priority="medium",
+                    ))
+
+            db.commit()
+            print(f"[SUCCESS] Auto-summary generated: {len(decision_texts)} decisions, {len(action_candidates)} action items.")
+
+        except Exception as sum_err:
+            print(f"[WARNING] Auto-summarisation failed (non-fatal): {sum_err}")
 
         # Finalise
         job.status = JobStatus.completed

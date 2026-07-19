@@ -19,7 +19,16 @@ import {
   RefreshCw,
   AlertTriangle,
   FileSpreadsheet,
-  CheckSquare
+  CheckSquare,
+  Sparkles,
+  Circle,
+  PlayCircle,
+  CheckCircle,
+  Lightbulb,
+  Gavel,
+  Trash2,
+  Plus,
+  User
 } from "lucide-react";
 
 interface MeetingDetail {
@@ -81,6 +90,12 @@ export default function MeetingWorkspacePage() {
   const [editText, setEditText] = useState("");
   const [editSpeaker, setEditSpeaker] = useState("");
   const [editError, setEditError] = useState<string | null>(null);
+
+  // Summary editing states
+  const [editingSummary, setEditingSummary] = useState(false);
+  const [summaryDraft, setSummaryDraft] = useState("");
+  const [newDecision, setNewDecision] = useState("");
+  const [showDecisionInput, setShowDecisionInput] = useState(false);
 
   // Poll intervals for processing state
   const [pollInterval, setPollInterval] = useState<number | false>(false);
@@ -145,6 +160,70 @@ export default function MeetingWorkspacePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["meeting-detail", meetingId] });
     }
+  });
+
+  // ── Phase 3: Summary queries & mutations ──────────────────────────────
+  const { data: summaryData, isLoading: isSummaryLoading } = useQuery<any>({
+    queryKey: ["meeting-summary", meetingId],
+    queryFn: () => apiRequest(`/api/summaries/${meetingId}`),
+    enabled: meeting?.status === "completed" && activeTab === "summary",
+    retry: false
+  });
+
+  const generateSummaryMutation = useMutation({
+    mutationFn: () => apiRequest(`/api/summaries/${meetingId}/generate`, { method: "POST" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meeting-summary", meetingId] })
+  });
+
+  const saveSummaryMutation = useMutation({
+    mutationFn: (text: string) =>
+      apiRequest(`/api/summaries/${meetingId}`, {
+        method: "PUT",
+        body: JSON.stringify({ text })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["meeting-summary", meetingId] });
+      setEditingSummary(false);
+    }
+  });
+
+  const addDecisionMutation = useMutation({
+    mutationFn: (text: string) =>
+      apiRequest(`/api/summaries/${meetingId}/decisions`, {
+        method: "POST",
+        body: JSON.stringify({ text })
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["meeting-summary", meetingId] });
+      setNewDecision("");
+      setShowDecisionInput(false);
+    }
+  });
+
+  const deleteDecisionMutation = useMutation({
+    mutationFn: (decisionId: number) =>
+      apiRequest(`/api/summaries/${meetingId}/decisions/${decisionId}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meeting-summary", meetingId] })
+  });
+
+  // ── Phase 3: Action items queries & mutations ──────────────────────────
+  const { data: actionItems, isLoading: isActionsLoading } = useQuery<any[]>({
+    queryKey: ["meeting-actions", meetingId],
+    queryFn: () => apiRequest(`/api/action-items/?meeting_id=${meetingId}`),
+    enabled: meeting?.status === "completed" && activeTab === "actions",
+    retry: false
+  });
+
+  const updateActionMutation = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: any }) =>
+      apiRequest(`/api/action-items/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meeting-actions", meetingId] })
+  });
+
+  const deleteActionMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiRequest(`/api/action-items/${id}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meeting-actions", meetingId] })
   });
 
   const handleEditClick = (segment: TranscriptSegment) => {
@@ -455,24 +534,255 @@ export default function MeetingWorkspacePage() {
             </div>
           )}
 
-          {/* DRAFT PLACEHOLDER WORKSPACES (NO MOCKS - DISPLAY FROM REAL DATABASE STATE) */}
+          {/* ── SUMMARY TAB ────────────────────────────────────────────── */}
           {activeTab === "summary" && (
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 text-center py-16">
-              <FileSpreadsheet className="text-gray-300 mx-auto mb-3" size={40} />
-              <h4 className="font-bold text-gray-900">Summary Workspace</h4>
-              <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-                TextRank extractive summarization will populate this workspace on Phase 3 integration.
-              </p>
+            <div className="space-y-5">
+              {/* Generate / Regenerate Button */}
+              {meeting.status === "completed" && (
+                <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
+                  <p className="text-sm text-gray-600">
+                    {summaryData ? "Summary generated from transcript using TextRank." : "No summary generated yet."}
+                  </p>
+                  <div className="flex items-center space-x-2">
+                    {/* Export buttons */}
+                    {summaryData && ["pdf", "docx", "txt"].map(fmt => (
+                      <a
+                        key={fmt}
+                        href={`/api/meetings/${meetingId}/export?format=${fmt}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center space-x-1 px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded text-xs font-medium"
+                      >
+                        <Download size={12} />
+                        <span>{fmt.toUpperCase()}</span>
+                      </a>
+                    ))}
+                    <button
+                      onClick={() => generateSummaryMutation.mutate()}
+                      disabled={generateSummaryMutation.isPending}
+                      className="flex items-center space-x-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded text-xs font-semibold"
+                    >
+                      <Sparkles size={13} />
+                      <span>{generateSummaryMutation.isPending ? "Generating..." : summaryData ? "Re-generate" : "Generate Summary"}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {meeting.status !== "completed" && (
+                <div className="text-center py-12 bg-white border border-gray-200 rounded-lg">
+                  <FileSpreadsheet className="text-gray-300 mx-auto mb-3" size={36} />
+                  <p className="text-sm text-gray-500">Complete transcription first to generate a summary.</p>
+                </div>
+              )}
+
+              {isSummaryLoading && (
+                <div className="flex justify-center py-10">
+                  <RefreshCw className="animate-spin text-blue-700" size={22} />
+                </div>
+              )}
+
+              {summaryData && (
+                <>
+                  {/* Summary Text */}
+                  <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+                    <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+                      <h3 className="font-semibold text-sm text-gray-900">Executive Summary</h3>
+                      {!editingSummary && (
+                        <button
+                          onClick={() => { setEditingSummary(true); setSummaryDraft(summaryData.text); }}
+                          className="flex items-center space-x-1 text-xs text-gray-500 hover:text-blue-700"
+                        >
+                          <Edit2 size={12} /><span>Edit</span>
+                        </button>
+                      )}
+                    </div>
+                    <div className="p-5">
+                      {editingSummary ? (
+                        <div className="space-y-3">
+                          <textarea
+                            rows={6}
+                            value={summaryDraft}
+                            onChange={e => setSummaryDraft(e.target.value)}
+                            className="w-full p-3 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => saveSummaryMutation.mutate(summaryDraft)}
+                              disabled={saveSummaryMutation.isPending}
+                              className="flex items-center space-x-1 bg-blue-700 hover:bg-blue-800 text-white text-xs px-3 py-1.5 rounded font-semibold"
+                            >
+                              <Save size={12} /><span>{saveSummaryMutation.isPending ? "Saving..." : "Save"}</span>
+                            </button>
+                            <button
+                              onClick={() => setEditingSummary(false)}
+                              className="flex items-center space-x-1 bg-white border border-gray-300 text-gray-700 text-xs px-3 py-1.5 rounded"
+                            >
+                              <X size={12} /><span>Cancel</span>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-gray-700 leading-relaxed">{summaryData.text}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Key Points */}
+                  {summaryData.key_points?.length > 0 && (
+                    <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+                      <div className="flex items-center space-x-2 px-5 py-3 border-b border-gray-100">
+                        <Lightbulb size={14} className="text-yellow-500" />
+                        <h3 className="font-semibold text-sm text-gray-900">Key Points</h3>
+                      </div>
+                      <div className="p-5 flex flex-wrap gap-2">
+                        {summaryData.key_points.map((kp: string, i: number) => (
+                          <span key={i} className="px-3 py-1.5 bg-blue-50 text-blue-800 text-xs rounded-full border border-blue-100">{kp}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Decisions */}
+                  <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
+                    <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+                      <div className="flex items-center space-x-2">
+                        <Gavel size={14} className="text-gray-500" />
+                        <h3 className="font-semibold text-sm text-gray-900">Decisions ({summaryData.decisions?.length ?? 0})</h3>
+                      </div>
+                      <button
+                        onClick={() => setShowDecisionInput(v => !v)}
+                        className="flex items-center space-x-1 text-xs text-blue-700 hover:underline"
+                      >
+                        <Plus size={12} /><span>Add</span>
+                      </button>
+                    </div>
+                    <div className="p-5 space-y-2">
+                      {showDecisionInput && (
+                        <div className="flex space-x-2 mb-3">
+                          <input
+                            type="text"
+                            value={newDecision}
+                            onChange={e => setNewDecision(e.target.value)}
+                            placeholder="Type decision..."
+                            className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                          />
+                          <button
+                            onClick={() => { if (newDecision.trim()) addDecisionMutation.mutate(newDecision.trim()); }}
+                            disabled={addDecisionMutation.isPending || !newDecision.trim()}
+                            className="px-3 py-1.5 bg-blue-700 text-white text-xs rounded font-semibold hover:bg-blue-800"
+                          >
+                            Add
+                          </button>
+                        </div>
+                      )}
+                      {summaryData.decisions?.length === 0 && (
+                        <p className="text-xs text-gray-400">No decisions extracted. Add one manually above.</p>
+                      )}
+                      {summaryData.decisions?.map((d: any) => (
+                        <div key={d.id} className="flex items-start justify-between group py-2 border-b border-gray-50 last:border-0">
+                          <div className="flex items-start space-x-2">
+                            <CheckCircle size={14} className="text-green-600 mt-0.5 shrink-0" />
+                            <p className="text-sm text-gray-800">{d.text}</p>
+                          </div>
+                          <button
+                            onClick={() => deleteDecisionMutation.mutate(d.id)}
+                            className="opacity-0 group-hover:opacity-100 ml-3 text-gray-300 hover:text-red-500 transition-opacity shrink-0"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
+          {/* ── ACTIONS TAB ─────────────────────────────────────────────── */}
           {activeTab === "actions" && (
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 text-center py-16">
-              <CheckSquare className="text-gray-300 mx-auto mb-3" size={40} />
-              <h4 className="font-bold text-gray-900">Action Items Workspace</h4>
-              <p className="text-xs text-gray-500 mt-1 max-w-sm mx-auto">
-                Action items assignment and candidate extraction will populate this workspace on Phase 3 integration.
-              </p>
+            <div className="space-y-5">
+              <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
+                <p className="text-sm text-gray-600">Action items extracted from transcript. Click status to update inline.</p>
+                <a href="/action-items" className="text-xs text-blue-700 hover:underline font-medium">View all →</a>
+              </div>
+
+              {isActionsLoading && (
+                <div className="flex justify-center py-10">
+                  <RefreshCw className="animate-spin text-blue-700" size={22} />
+                </div>
+              )}
+
+              {actionItems && actionItems.length === 0 && (
+                <div className="text-center py-12 bg-white border border-gray-200 rounded-lg">
+                  <CheckSquare className="text-gray-300 mx-auto mb-3" size={36} />
+                  <p className="text-sm text-gray-500">No action items found. Generate a summary first.</p>
+                </div>
+              )}
+
+              {actionItems && actionItems.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">#</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Action Item</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Priority</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Deadline</th>
+                        <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Status</th>
+                        <th className="w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {actionItems.map((item: any, idx: number) => (
+                        <tr key={item.id} className="hover:bg-gray-50/60 transition-colors">
+                          <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
+                          <td className="px-4 py-3 text-gray-900 text-sm leading-relaxed max-w-xs">{item.text}</td>
+                          <td className="px-4 py-3">
+                            <select
+                              value={item.priority}
+                              onChange={e => updateActionMutation.mutate({ id: item.id, body: { priority: e.target.value } })}
+                              className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none"
+                            >
+                              <option value="high">High</option>
+                              <option value="medium">Medium</option>
+                              <option value="low">Low</option>
+                            </select>
+                          </td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="date"
+                              defaultValue={item.deadline || ""}
+                              onBlur={e => updateActionMutation.mutate({ id: item.id, body: { deadline: e.target.value || null } })}
+                              className="text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none w-full"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <select
+                              value={item.status}
+                              onChange={e => updateActionMutation.mutate({ id: item.id, body: { status: e.target.value } })}
+                              className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none"
+                            >
+                              <option value="pending">Pending</option>
+                              <option value="in_progress">In Progress</option>
+                              <option value="completed">Completed</option>
+                            </select>
+                          </td>
+                          <td className="px-4 py-3">
+                            <button
+                              onClick={() => deleteActionMutation.mutate(item.id)}
+                              className="text-gray-300 hover:text-red-500 transition-colors"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
