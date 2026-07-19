@@ -36,7 +36,24 @@ This file tracks the status of each development phase, including their respectiv
 ---
 
 ## Phase 3: Summaries, Action Items, Exports and Complete UI
-**Status: Pending**
+**Status: Completed**
+
+### Acceptance Criteria Checklist
+- [x] TextRank extractive summarizer runs on completed transcripts (no LLM, no hallucinations)
+- [x] Key decisions auto-extracted using keyword matching
+- [x] Action item candidates auto-extracted with deadline hints
+- [x] Summary is manually editable via API (with audit log)
+- [x] Decisions can be added and deleted manually
+- [x] Action items can be created, updated (status/priority/deadline/assignee), and deleted
+- [x] Action items tracker page shows all items across all meetings with filters
+- [x] PDF export generates a styled, multi-section document (title, attendees, summary, decisions, action items, transcript)
+- [x] DOCX export generates a properly formatted Word document
+- [x] TXT export generates plain-text meeting minutes
+- [x] Summary and Actions tabs in meeting workspace are wired to real API data
+- [x] Auto-summarization triggers in background after transcription completes
+- [x] All 30 Phase 3 tests pass (TextRank unit, export unit, summaries API, action items API)
+- [x] Committed and pushed to GitHub (commit 39ced6d)
+- [x] Deployed to production server (95.111.234.34)
 
 ---
 
