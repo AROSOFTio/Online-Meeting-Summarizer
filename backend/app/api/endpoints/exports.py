@@ -35,12 +35,12 @@ def _gather_export_data(meeting_id: int, db: Session):
     ).mappings().all()
     attendance = {row["participant_id"]: row["attendance_status"] for row in attendance_rows}
     participants = [
-        " — ".join(filter(None, [
-            p.name,
-            p.role_title,
-            f"<{p.email}>" if p.email else None,
-            f"[{attendance.get(p.id, 'present').title()}]",
-        ]))
+        {
+            "name": p.name,
+            "role": p.role_title or "Stakeholder",
+            "email": p.email or "",
+            "status": attendance.get(p.id, "present").title(),
+        }
         for p in meeting.participants
     ]
     summary_text = summary.summary_text if summary else ""

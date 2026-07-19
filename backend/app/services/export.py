@@ -1,5 +1,6 @@
 import io
 import os
+import re
 from datetime import datetime
 from html import escape
 from typing import Any, List, Optional
@@ -34,6 +35,46 @@ def _usable_logo(path: str) -> bool:
     return bool(path and os.path.isfile(path) and not path.lower().endswith(".svg"))
 
 
+def _participant_rows(participants: List[Any]) -> List[dict]:
+    rows = []
+    for participant in participants:
+        if isinstance(participant, dict):
+            rows.append({
+                "name": participant.get("name", ""),
+                "role": participant.get("role", ""),
+                "email": participant.get("email", ""),
+                "status": participant.get("status", "Present"),
+            })
+        else:
+            rows.append({"name": str(participant), "role": "", "email": "", "status": "Present"})
+    return rows
+
+
+def _agenda_items(description: str) -> List[str]:
+    text = (description or "").strip()
+    if not text:
+        return ["Agenda not recorded"]
+    items = [
+        re.sub(r"^\s*(?:\d+[\.\)]|[-•])\s*", "", item).strip()
+        for item in re.split(r"(?:\r?\n|;|,\s*)+", text)
+        if item.strip()
+    ]
+    if len(items) == 1:
+        detected = [
+            item.strip()
+            for item in re.split(
+                r"(?i)(?=\b(?:opening prayer|prayer|introduction(?:s)?|"
+                r"communication from (?:the )?chair(?:person)?|reactions?|"
+                r"way\s*forward|matters arising|any other business|closing)\b)",
+                text,
+            )
+            if item.strip()
+        ]
+        if len(detected) > 1:
+            items = detected
+    return items or [text]
+
+
 def export_txt(
     meeting_title: str, meeting_date: Any, participants: List[str],
     summary_text: str, decisions: List[str], action_items: List[dict],
@@ -42,15 +83,29 @@ def export_txt(
 ) -> bytes:
     org = _org(organization)
     contacts = " | ".join(filter(None, [org["address"], org["phone"], org["email"], org["website"]]))
+    attendee_rows = _participant_rows(participants)
+    agenda = _agenda_items(meeting_description)
     lines = [
         "=" * 78, org["name"].upper(), contacts, org["motto"],
         "OFFICIAL MEETING MINUTES", "=" * 78,
         f"Meeting          : {meeting_title}",
         f"Date             : {_format_date(meeting_date)}",
-        f"Purpose / Agenda : {meeting_description or 'Not specified'}",
-        f"Attendance       : {', '.join(participants) if participants else 'No attendees recorded'}",
+        "AGENDA",
         "", "MINUTES / EXECUTIVE RECORD", "-" * 45,
         summary_text or "No minutes have been generated.", "", "KEY DECISIONS", "-" * 45,
+    ]
+    lines[lines.index("AGENDA") + 1:lines.index("AGENDA") + 1] = [
+        f"{index}. {item}" for index, item in enumerate(agenda, 1)
+    ]
+    attendance_index = lines.index("MINUTES / EXECUTIVE RECORD")
+    lines[attendance_index:attendance_index] = [
+        "", "ATTENDANCE REGISTER", "-" * 45,
+        *[
+            f"{index}. {row['name']} | {row['role'] or 'Stakeholder'} | "
+            f"{row['email'] or 'No email'} | {row['status']}"
+            for index, row in enumerate(attendee_rows, 1)
+        ],
+        "",
     ]
     lines.extend(f"{index}. {text}" for index, text in enumerate(decisions, 1))
     if not decisions:
@@ -123,12 +178,9 @@ def export_pdf(
     story.append(HRFlowable(width="100%", thickness=1.2, color=blue, spaceBefore=5, spaceAfter=9))
     story.append(Paragraph("OFFICIAL MEETING MINUTES", org_title))
 
-    attendees = ", ".join(participants) if participants else "No attendees recorded"
     details = [
         ["Meeting", Paragraph(escape(meeting_title), body)],
         ["Date", _format_date(meeting_date)],
-        ["Purpose / Agenda", Paragraph(escape(meeting_description or "Not specified"), body)],
-        ["Attendance", Paragraph(escape(attendees), body)],
     ]
     detail_table = Table(details, colWidths=[3.5 * cm, 13.5 * cm])
     detail_table.setStyle(TableStyle([
@@ -141,18 +193,52 @@ def export_pdf(
     ]))
     story.append(detail_table)
 
-    story.append(Paragraph("Minutes / Executive Record", heading))
+    story.append(Paragraph("1. Agenda", heading))
+    for index, item in enumerate(_agenda_items(meeting_description), 1):
+        story.append(Paragraph(f"<b>{index}.</b> {escape(item)}", body))
+
+    story.append(Paragraph("2. Attendance Register", heading))
+    attendee_rows = _participant_rows(participants)
+    if attendee_rows:
+        attendance_table_data = [["No.", "Name", "Role / Organization", "Email", "Status"]]
+        for index, row in enumerate(attendee_rows, 1):
+            attendance_table_data.append([
+                str(index),
+                Paragraph(escape(row["name"]), small),
+                Paragraph(escape(row["role"] or "Stakeholder"), small),
+                Paragraph(escape(row["email"] or "—"), small),
+                row["status"],
+            ])
+        attendance_table = Table(
+            attendance_table_data,
+            colWidths=[0.8 * cm, 4.2 * cm, 4.3 * cm, 5.2 * cm, 2.5 * cm],
+            repeatRows=1,
+        )
+        attendance_table.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (-1, 0), blue),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("PADDING", (0, 0), (-1, -1), 5),
+        ]))
+        story.append(attendance_table)
+    else:
+        story.append(Paragraph("No attendance recorded.", body))
+
+    story.append(Paragraph("3. Minutes / Proceedings", heading))
     for paragraph in (summary_text or "No minutes have been generated.").splitlines():
         if paragraph.strip():
             story.append(Paragraph(escape(paragraph.strip()), body))
 
-    story.append(Paragraph("Key Decisions", heading))
+    story.append(Paragraph("4. Resolutions / Key Decisions", heading))
     for index, decision in enumerate(decisions, 1):
         story.append(Paragraph(f"<b>{index}.</b> {escape(decision)}", body))
     if not decisions:
         story.append(Paragraph("No decisions recorded.", body))
 
-    story.append(Paragraph("Action Items", heading))
+    story.append(Paragraph("5. Action Items", heading))
     if action_items:
         rows = [["#", "Action", "Responsible", "Due date", "Status"]]
         for index, item in enumerate(action_items, 1):
@@ -248,8 +334,6 @@ def export_docx(
     details.style = "Table Grid"
     for label, value in [
         ("Meeting", meeting_title), ("Date", _format_date(meeting_date)),
-        ("Purpose / Agenda", meeting_description or "Not specified"),
-        ("Attendance", ", ".join(participants) if participants else "No attendees recorded"),
     ]:
         cells = details.add_row().cells
         cells[0].text, cells[1].text = label, value
@@ -260,17 +344,39 @@ def export_docx(
         for heading_run in heading.runs:
             heading_run.font.color.rgb = blue
 
-    add_heading("Minutes / Executive Record")
+    add_heading("1. Agenda")
+    for item in _agenda_items(meeting_description):
+        doc.add_paragraph(item, style="List Number")
+
+    add_heading("2. Attendance Register")
+    attendee_rows = _participant_rows(participants)
+    if attendee_rows:
+        attendance_table = doc.add_table(rows=1, cols=5)
+        attendance_table.style = "Table Grid"
+        for cell, label in zip(attendance_table.rows[0].cells, ["No.", "Name", "Role / Organization", "Email", "Status"]):
+            cell.text = label
+            cell.paragraphs[0].runs[0].bold = True
+        for index, row in enumerate(attendee_rows, 1):
+            cells = attendance_table.add_row().cells
+            for cell, value in zip(cells, [
+                str(index), row["name"], row["role"] or "Stakeholder",
+                row["email"] or "—", row["status"],
+            ]):
+                cell.text = value
+    else:
+        doc.add_paragraph("No attendance recorded.")
+
+    add_heading("3. Minutes / Proceedings")
     for paragraph in (summary_text or "No minutes have been generated.").splitlines():
         if paragraph.strip():
             doc.add_paragraph(paragraph.strip())
-    add_heading("Key Decisions")
+    add_heading("4. Resolutions / Key Decisions")
     if decisions:
         for decision in decisions:
             doc.add_paragraph(decision, style="List Number")
     else:
         doc.add_paragraph("No decisions recorded.")
-    add_heading("Action Items")
+    add_heading("5. Action Items")
     if action_items:
         action_table = doc.add_table(rows=1, cols=5)
         action_table.style = "Table Grid"
