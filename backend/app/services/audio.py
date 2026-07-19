@@ -2,6 +2,7 @@ import os
 import subprocess
 import wave
 import mimetypes
+from functools import lru_cache
 from pathlib import Path
 from typing import Tuple
 
@@ -50,6 +51,7 @@ def get_audio_duration_python_wave(wav_path: str) -> float:
         pass
     return 0.0
 
+@lru_cache(maxsize=1)
 def check_ffmpeg_available() -> bool:
     """Verify if the ffmpeg command exists in system path."""
     try:
@@ -66,6 +68,21 @@ def normalise_audio(input_path: str, output_path: str) -> float:
     """
     if not os.path.exists(input_path):
         raise FileNotFoundError(f"Input file not found: {input_path}")
+
+    # Avoid an FFmpeg pass when the input already matches Whisper's preferred format.
+    if Path(input_path).suffix.lower() == ".wav":
+        try:
+            with wave.open(input_path, "rb") as source:
+                if (
+                    source.getnchannels() == 1
+                    and source.getframerate() == 16000
+                    and source.getsampwidth() == 2
+                ):
+                    import shutil
+                    shutil.copy2(input_path, output_path)
+                    return source.getnframes() / source.getframerate()
+        except (wave.Error, EOFError):
+            pass
 
     # Check FFmpeg availability
     ffmpeg_available = check_ffmpeg_available()

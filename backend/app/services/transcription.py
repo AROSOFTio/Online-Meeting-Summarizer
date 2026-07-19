@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from typing import List, Dict, Any
 from app.core.config import settings
 
@@ -15,11 +16,14 @@ class TranscriptionService:
                 return None
                 
             from faster_whisper import WhisperModel
+            model_cache = Path(settings.STORAGE_DIR) / "models"
+            model_cache.mkdir(parents=True, exist_ok=True)
             # Load model onto CPU with int8 quantization (lightweight and platform-agnostic)
             self._model = WhisperModel(
                 self.model_size,
                 device="cpu",
-                compute_type="int8"
+                compute_type="int8",
+                download_root=str(model_cache),
             )
         return self._model
 
@@ -44,8 +48,12 @@ class TranscriptionService:
 
             segments, info = model.transcribe(
                 audio_path,
-                beam_size=5,
-                vad_filter=True,  # Filter silence out using Voice Activity Detection
+                beam_size=1,
+                best_of=1,
+                vad_filter=True,
+                vad_parameters={"min_silence_duration_ms": 500},
+                condition_on_previous_text=False,
+                word_timestamps=False,
             )
             
             output_segments = []
@@ -54,7 +62,8 @@ class TranscriptionService:
                     "start": round(segment.start, 2),
                     "end": round(segment.end, 2),
                     "text": segment.text.strip(),
-                    "speaker": f"Speaker {segment.speaker}" if segment.speaker else "Speaker 1"
+                    # Faster-Whisper performs ASR, not speaker diarization.
+                    "speaker": "Speaker 1",
                 })
             
             # If no segments detected (silent file), return empty list rather than crashing

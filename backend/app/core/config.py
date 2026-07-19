@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     SCHOOL_LOGO_URL: str = "/images/logo.png"
     TIMEZONE: str = "Africa/Kampala"
     RETENTION_PERIOD_DAYS: int = 365
-    WHISPER_MODEL: str = "base"
+    WHISPER_MODEL: str = "tiny"
 
     # Gemini AI (preferred summarisation provider; TextRank remains a fallback)
     GEMINI_API_KEY: Optional[str] = None

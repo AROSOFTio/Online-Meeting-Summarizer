@@ -229,8 +229,8 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             from app.services.email import email_service
 
             recipients = [participant.email for participant in meeting.participants if participant.email]
-            if meeting.created_by and meeting.created_by.email:
-                recipients.append(meeting.created_by.email)
+            if meeting.owner and meeting.owner.email:
+                recipients.append(meeting.owner.email)
             sent = email_service.send_meeting_complete(
                 recipients=recipients,
                 meeting_title=meeting.title,
