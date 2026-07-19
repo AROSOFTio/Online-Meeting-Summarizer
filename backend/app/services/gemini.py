@@ -18,8 +18,11 @@ class GeminiService:
             raise RuntimeError("GEMINI_API_KEY is not configured")
 
         prompt = (
-            "You are preparing accurate school meeting minutes. Use only facts in the "
-            "transcript. Return a concise summary, up to 7 key points, explicit decisions, "
+            "Act as a professional minute secretary. Prepare formal, publication-ready meeting "
+            "minutes using only facts stated in the transcript. Write the summary in clear, "
+            "grammatically correct past tense, recording the main agenda discussions, resolutions "
+            "and conclusions in logical order. Do not invent names, dates, attendance or decisions. "
+            "Return a polished summary, up to 10 key points, explicit decisions, "
             "and action items. Each action item must contain description, assignee (empty "
             "string when unknown), priority (low, medium, or high), and due_date (ISO date "
             "or empty string). Transcript:\n\n"

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # Gemini AI (preferred summarisation provider; TextRank remains a fallback)
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-2.5-flash"
+    GEMINI_MODEL: str = "gemini-3.5-flash"
 
     # SMTP notifications
     SMTP_HOST: str = "mail.arofi.net"

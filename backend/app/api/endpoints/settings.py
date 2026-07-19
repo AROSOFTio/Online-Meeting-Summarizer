@@ -24,6 +24,12 @@ ALLOWED_LOGO_TYPES = {
 DEFAULT_SETTINGS = {
     "school_name": "Starlight Secondary School",
     "school_logo_url": "/images/logo.png",
+    "organization_address": "Amuria District, Uganda",
+    "organization_phone": "",
+    "organization_email": "",
+    "organization_website": "",
+    "organization_motto": "",
+    "organization_registration": "",
     "timezone": "Africa/Kampala",
     "retention_period_days": "365",
     "whisper_model": "base"

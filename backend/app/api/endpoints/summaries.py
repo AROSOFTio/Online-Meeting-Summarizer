@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List
@@ -10,6 +11,8 @@ from app.models.models import (
     MeetingStatus, User, UserRole
 )
 from app.services.summarizer import summarize, extract_decisions, extract_action_items, extract_key_points
+from app.services.gemini import gemini_service
+from app.core.config import settings as app_settings
 
 router = APIRouter()
 
@@ -21,7 +24,7 @@ def generate_summary(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user)
 ):
-    """Run TextRank on the meeting transcript and store summary, decisions, and action item candidates."""
+    """Generate professional minutes with Gemini, falling back to local TextRank."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -39,11 +42,34 @@ def generate_summary(
 
     text = transcript.content
 
-    # Run TextRank
-    summary_text = summarize(text, sentence_count=6)
-    key_points = extract_key_points(text, count=5)
-    decision_texts = extract_decisions(text)
-    action_candidates = extract_action_items(text)
+    provider = "TextRank fallback"
+    if gemini_service.enabled:
+        try:
+            generated = gemini_service.summarize_transcript(text)
+            summary_text = generated["summary"]
+            key_points = generated.get("key_points", [])
+            decision_texts = generated.get("decisions", [])
+            action_candidates = [
+                {
+                    "text": item.get("description", ""),
+                    "assignee": item.get("assignee", ""),
+                    "raw_deadline": item.get("due_date", ""),
+                    "priority": item.get("priority", "medium"),
+                }
+                for item in generated.get("action_items", [])
+                if item.get("description")
+            ]
+            provider = "Gemini"
+        except Exception:
+            summary_text = summarize(text, sentence_count=6)
+            key_points = extract_key_points(text, count=5)
+            decision_texts = extract_decisions(text)
+            action_candidates = extract_action_items(text)
+    else:
+        summary_text = summarize(text, sentence_count=6)
+        key_points = extract_key_points(text, count=5)
+        decision_texts = extract_decisions(text)
+        action_candidates = extract_action_items(text)
 
     # Upsert Summary row
     existing = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
@@ -85,7 +111,7 @@ def generate_summary(
                 summary_id=summary.id,
                 description=candidate["text"],
                 status="pending",
-                priority="medium",
+                priority=candidate.get("priority", "medium"),
             )
             db.add(a)
 
@@ -94,7 +120,7 @@ def generate_summary(
     log_action(
         db,
         action="generate_summary",
-        details=f"Generated TextRank summary for meeting {meeting_id}. "
+        details=f"Generated {provider} minutes for meeting {meeting_id}. "
                 f"{len(decision_texts)} decisions, {len(action_candidates)} action candidates.",
         user_id=current_user.id,
         user_email=current_user.email,
@@ -106,7 +132,8 @@ def generate_summary(
         "text": summary.summary_text,
         "key_points": key_points,
         "decisions_count": len(decision_texts),
-        "action_items_count": len(action_candidates)
+        "action_items_count": len(action_candidates),
+        "provider": provider,
     }
 
 
@@ -174,6 +201,35 @@ def update_summary(
     )
 
     return {"detail": "Summary updated"}
+
+
+@router.delete("/{meeting_id}")
+def delete_summary(
+    meeting_id: int,
+    request: Request,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    """Permanently delete generated minutes while preserving the meeting and transcript."""
+    summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
+    if not summary:
+        raise HTTPException(status_code=404, detail="Summary not found")
+    meeting = summary.meeting
+    if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorised")
+    db.query(Decision).filter(Decision.meeting_id == meeting_id).delete()
+    db.query(ActionItem).filter(ActionItem.meeting_id == meeting_id).update(
+        {ActionItem.summary_id: None}, synchronize_session=False
+    )
+    db.delete(summary)
+    db.commit()
+    (Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf").unlink(missing_ok=True)
+    log_action(
+        db, action="delete_minutes", details=f"Deleted minutes for meeting {meeting_id}",
+        user_id=current_user.id, user_email=current_user.email,
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"detail": "Minutes deleted"}
 
 
 @router.post("/{meeting_id}/decisions")

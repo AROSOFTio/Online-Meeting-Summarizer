@@ -1,5 +1,7 @@
+import os
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from pathlib import Path
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -8,6 +10,7 @@ from app.core.audit import log_action
 from app.models.models import Meeting, Participant, MeetingStatus, ProcessingJob, JobStatus, User, UserRole, Transcript
 from app.schemas.schemas import MeetingCreate, MeetingOut, MeetingUpdate, ProcessingJobOut
 from app.workers.tasks import transcribe_meeting, run_background_job
+from app.core.config import settings as app_settings
 
 router = APIRouter()
 
@@ -158,14 +161,15 @@ def update_meeting(
 
     return meeting
 
-@router.delete("/{meeting_id}", response_model=MeetingOut)
+@router.delete("/{meeting_id}")
 def delete_meeting(
     meeting_id: int,
     request: Request,
+    permanent: bool = Query(default=False),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user)
 ):
-    """Soft-archive or delete meeting."""
+    """Archive a meeting, or permanently delete it and all related minutes."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -174,20 +178,33 @@ def delete_meeting(
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorised to delete this meeting")
 
-    meeting.is_archived = True
-    db.commit()
-    db.refresh(meeting)
+    title = meeting.title
+    if permanent:
+        recording_path = meeting.recording.filepath if meeting.recording else None
+        db.delete(meeting)
+        db.commit()
+        if recording_path:
+            try:
+                os.remove(recording_path)
+            except FileNotFoundError:
+                pass
+        final_minutes = Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf"
+        final_minutes.unlink(missing_ok=True)
+    else:
+        meeting.is_archived = True
+        db.commit()
+        db.refresh(meeting)
 
     log_action(
         db,
-        action="archive_meeting",
-        details=f"User archived meeting: {meeting.title}",
+        action="delete_meeting" if permanent else "archive_meeting",
+        details=f"User {'permanently deleted' if permanent else 'archived'} meeting: {title}",
         user_id=current_user.id,
         user_email=current_user.email,
         ip_address=request.client.host if request.client else None
     )
 
-    return meeting
+    return {"detail": "Meeting permanently deleted"} if permanent else meeting
 
 @router.post("/{meeting_id}/transcribe", response_model=ProcessingJobOut)
 def trigger_transcription(

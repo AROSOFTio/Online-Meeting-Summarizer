@@ -10,6 +10,12 @@ import { Save, RefreshCw, Upload } from "lucide-react";
 interface SettingsData {
   school_name: string;
   school_logo_url: string;
+  organization_address: string;
+  organization_phone: string;
+  organization_email: string;
+  organization_website: string;
+  organization_motto: string;
+  organization_registration: string;
   timezone: string;
   retention_period_days: string;
   whisper_model: string;
@@ -18,6 +24,12 @@ interface SettingsData {
 const defaultSettings: SettingsData = {
   school_name: "",
   school_logo_url: "",
+  organization_address: "",
+  organization_phone: "",
+  organization_email: "",
+  organization_website: "",
+  organization_motto: "",
+  organization_registration: "",
   timezone: "",
   retention_period_days: "",
   whisper_model: "",
@@ -153,6 +165,31 @@ export default function SettingsPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
               />
             </div>
+
+            <div className="border-t border-gray-200 pt-5">
+              <h2 className="font-semibold text-gray-900">Official letterhead details</h2>
+              <p className="mt-1 text-xs text-gray-500">These details appear on exported Word and PDF minutes.</p>
+            </div>
+
+            {([
+              ["organization_address", "Postal / Physical Address", "P.O. Box, town, district and country"],
+              ["organization_phone", "Telephone", "+256 ..."],
+              ["organization_email", "Official Email", "office@example.org"],
+              ["organization_website", "Website", "https://example.org"],
+              ["organization_motto", "Motto", "Organization motto"],
+              ["organization_registration", "Registration / Centre Number", "Official registration number"],
+            ] as const).map(([key, label, placeholder]) => (
+              <div key={key}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+                <input
+                  type={key === "organization_email" ? "email" : key === "organization_website" ? "url" : "text"}
+                  value={formValues[key]}
+                  placeholder={placeholder}
+                  onChange={(event) => handleChange(key, event.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
+                />
+              </div>
+            ))}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">School Logo</label>

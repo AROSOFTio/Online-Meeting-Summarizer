@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -78,6 +78,12 @@ interface SummaryData {
   decisions: Array<{ id: number; text: string }>;
 }
 
+interface FinalMinutesStatus {
+  is_final: boolean;
+  finalized_at: number | null;
+  download_url: string | null;
+}
+
 interface ActionItemData {
   id: number;
   text: string;
@@ -90,6 +96,7 @@ type ActionItemUpdate = Partial<Pick<ActionItemData, "priority" | "deadline" | "
 
 export default function MeetingWorkspacePage() {
   const { id } = useParams();
+  const router = useRouter();
   const meetingId = parseInt(id as string);
   const hasValidMeetingId = Number.isInteger(meetingId) && meetingId > 0;
   const queryClient = useQueryClient();
@@ -108,6 +115,8 @@ export default function MeetingWorkspacePage() {
   const [summaryDraft, setSummaryDraft] = useState("");
   const [newDecision, setNewDecision] = useState("");
   const [showDecisionInput, setShowDecisionInput] = useState(false);
+  const [editingMeeting, setEditingMeeting] = useState(false);
+  const [meetingDraft, setMeetingDraft] = useState({ title: "", description: "", date: "" });
 
   // Fetch meeting details
   const { data: meeting, isLoading: isMeetingLoading, isError: isMeetingError, error: meetingError } = useQuery<MeetingDetail>({
@@ -165,12 +174,55 @@ export default function MeetingWorkspacePage() {
     }
   });
 
+  const updateMeetingMutation = useMutation({
+    mutationFn: () => apiRequest(`/api/meetings/${meetingId}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        title: meetingDraft.title,
+        description: meetingDraft.description,
+        date: new Date(meetingDraft.date).toISOString(),
+      }),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["meeting-detail", meetingId] });
+      setEditingMeeting(false);
+    },
+  });
+
+  const deleteMeetingMutation = useMutation({
+    mutationFn: () => apiRequest(`/api/meetings/${meetingId}?permanent=true`, { method: "DELETE" }),
+    onSuccess: () => router.push("/meetings"),
+  });
+
+  const deleteMinutesMutation = useMutation({
+    mutationFn: () => apiRequest(`/api/summaries/${meetingId}`, { method: "DELETE" }),
+    onSuccess: () => queryClient.removeQueries({ queryKey: ["meeting-summary", meetingId] }),
+  });
+
+  const finalizeMutation = useMutation({
+    mutationFn: () => apiRequest(`/api/meetings/${meetingId}/finalize?share=true`, { method: "POST" }),
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["final-minutes", meetingId] });
+      if (result.delivery_error) {
+        window.alert(`Final PDF saved, but email delivery failed: ${result.delivery_error}`);
+      } else {
+        window.alert(`Final PDF saved and emailed to ${result.delivered} participant(s).`);
+      }
+    },
+  });
+
   // ── Phase 3: Summary queries & mutations ──────────────────────────────
   const { data: summaryData, isLoading: isSummaryLoading } = useQuery<SummaryData>({
     queryKey: ["meeting-summary", meetingId],
     queryFn: () => apiRequest(`/api/summaries/${meetingId}`),
     enabled: meeting?.status === "completed" && activeTab === "summary",
     retry: false
+  });
+
+  const { data: finalMinutes } = useQuery<FinalMinutesStatus>({
+    queryKey: ["final-minutes", meetingId],
+    queryFn: () => apiRequest(`/api/meetings/${meetingId}/final-minutes/status`),
+    enabled: hasValidMeetingId,
   });
 
   const generateSummaryMutation = useMutation({
@@ -302,6 +354,30 @@ export default function MeetingWorkspacePage() {
           </div>
           
           <div className="flex items-center space-x-3">
+            <button
+              onClick={() => {
+                setMeetingDraft({
+                  title: meeting.title,
+                  description: meeting.description || "",
+                  date: meeting.date.slice(0, 10),
+                });
+                setEditingMeeting(true);
+              }}
+              className="inline-flex items-center gap-1.5 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+            >
+              <Edit2 size={13} /> Edit
+            </button>
+            <button
+              onClick={() => {
+                if (window.confirm("Permanently delete this meeting, recording, transcript and minutes? This cannot be undone.")) {
+                  deleteMeetingMutation.mutate();
+                }
+              }}
+              disabled={deleteMeetingMutation.isPending}
+              className="inline-flex items-center gap-1.5 rounded border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
+            >
+              <Trash2 size={13} /> Delete
+            </button>
             <span
               className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
                 meeting.status === "completed"
@@ -317,6 +393,45 @@ export default function MeetingWorkspacePage() {
             </span>
           </div>
         </div>
+
+        {editingMeeting && (
+          <form
+            onSubmit={(event) => { event.preventDefault(); updateMeetingMutation.mutate(); }}
+            className="rounded-lg border border-blue-200 bg-white p-5 shadow-sm space-y-4"
+          >
+            <h2 className="font-semibold text-gray-900">Edit meeting details</h2>
+            <div className="grid gap-4 md:grid-cols-2">
+              <input
+                required
+                minLength={3}
+                value={meetingDraft.title}
+                onChange={(event) => setMeetingDraft((value) => ({ ...value, title: event.target.value }))}
+                className="rounded border border-gray-300 px-3 py-2 text-sm text-gray-900"
+                placeholder="Meeting title"
+              />
+              <input
+                required
+                type="date"
+                value={meetingDraft.date}
+                onChange={(event) => setMeetingDraft((value) => ({ ...value, date: event.target.value }))}
+                className="rounded border border-gray-300 px-3 py-2 text-sm text-gray-900"
+              />
+            </div>
+            <textarea
+              rows={3}
+              value={meetingDraft.description}
+              onChange={(event) => setMeetingDraft((value) => ({ ...value, description: event.target.value }))}
+              className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900"
+              placeholder="Purpose, agenda or description"
+            />
+            <div className="flex gap-2">
+              <button type="submit" disabled={updateMeetingMutation.isPending} className="rounded bg-blue-700 px-4 py-2 text-xs font-semibold text-white">
+                {updateMeetingMutation.isPending ? "Saving..." : "Save changes"}
+              </button>
+              <button type="button" onClick={() => setEditingMeeting(false)} className="rounded border border-gray-300 px-4 py-2 text-xs font-medium text-gray-700">Cancel</button>
+            </div>
+          </form>
+        )}
 
         {/* Tab Headers */}
         <div className="border-b border-gray-200">
@@ -544,11 +659,11 @@ export default function MeetingWorkspacePage() {
               {meeting.status === "completed" && (
                 <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
                   <p className="text-sm text-gray-600">
-                    {summaryData ? "Summary generated from transcript using TextRank." : "No summary generated yet."}
+                    {summaryData ? "Professional minutes generated from the verified transcript." : "No minutes generated yet."}
                   </p>
                   <div className="flex items-center space-x-2">
                     {/* Export buttons */}
-                    {summaryData && ["pdf", "docx", "txt"].map(fmt => (
+                    {summaryData && ["pdf", "docx"].map(fmt => (
                       <a
                         key={fmt}
                         href={`/api/meetings/${meetingId}/export?format=${fmt}`}
@@ -560,13 +675,49 @@ export default function MeetingWorkspacePage() {
                         <span>{fmt.toUpperCase()}</span>
                       </a>
                     ))}
+                    {summaryData && user?.role === "admin" && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm("Mark these minutes as final and email the final PDF to every participant with an email address?")) {
+                            finalizeMutation.mutate();
+                          }
+                        }}
+                        disabled={finalizeMutation.isPending}
+                        className="flex items-center space-x-1 px-3 py-1.5 bg-green-700 text-white hover:bg-green-800 rounded text-xs font-semibold"
+                      >
+                        <CheckCircle size={12} />
+                        <span>{finalizeMutation.isPending ? "Finalizing..." : "Finalize & Share"}</span>
+                      </button>
+                    )}
+                    {finalMinutes?.is_final && (
+                      <a
+                        href={finalMinutes.download_url || `/api/meetings/${meetingId}/final-minutes`}
+                        className="flex items-center space-x-1 px-3 py-1.5 border border-green-300 text-green-700 hover:bg-green-50 rounded text-xs font-medium"
+                      >
+                        <Download size={12} />
+                        <span>Download Final Copy</span>
+                      </a>
+                    )}
+                    {summaryData && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm("Delete the generated minutes? The meeting and transcript will be kept.")) {
+                            deleteMinutesMutation.mutate();
+                          }
+                        }}
+                        className="flex items-center space-x-1 px-3 py-1.5 border border-red-300 text-red-700 hover:bg-red-50 rounded text-xs font-medium"
+                      >
+                        <Trash2 size={12} />
+                        <span>Delete minutes</span>
+                      </button>
+                    )}
                     <button
                       onClick={() => generateSummaryMutation.mutate()}
                       disabled={generateSummaryMutation.isPending}
                       className="flex items-center space-x-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded text-xs font-semibold"
                     >
                       <Sparkles size={13} />
-                      <span>{generateSummaryMutation.isPending ? "Generating..." : summaryData ? "Re-generate" : "Generate Summary"}</span>
+                      <span>{generateSummaryMutation.isPending ? "Generating..." : summaryData ? "Re-generate Minutes" : "Generate Minutes"}</span>
                     </button>
                   </div>
                 </div>

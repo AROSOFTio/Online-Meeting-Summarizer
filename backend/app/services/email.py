@@ -2,7 +2,7 @@ import html
 import smtplib
 import ssl
 from email.message import EmailMessage
-from typing import Iterable
+from typing import Iterable, Optional
 
 from app.core.config import settings
 
@@ -16,7 +16,15 @@ class EmailService:
             and settings.SMTP_PASSWORD
         )
 
-    def send(self, recipients: Iterable[str], subject: str, text: str, html_body: str) -> int:
+    def send(
+        self,
+        recipients: Iterable[str],
+        subject: str,
+        text: str,
+        html_body: str,
+        attachment: Optional[bytes] = None,
+        attachment_filename: str = "minutes.pdf",
+    ) -> int:
         unique_recipients = sorted({address.strip() for address in recipients if address and address.strip()})
         if not unique_recipients:
             return 0
@@ -26,9 +34,18 @@ class EmailService:
         message = EmailMessage()
         message["Subject"] = subject
         message["From"] = str(settings.SMTP_FROM_EMAIL)
-        message["To"] = ", ".join(unique_recipients)
+        # Keep participant addresses private from one another.
+        message["To"] = str(settings.SMTP_FROM_EMAIL)
+        message["Bcc"] = ", ".join(unique_recipients)
         message.set_content(text)
         message.add_alternative(html_body, subtype="html")
+        if attachment:
+            message.add_attachment(
+                attachment,
+                maintype="application",
+                subtype="pdf",
+                filename=attachment_filename,
+            )
 
         context = ssl.create_default_context()
         if not settings.SMTP_VERIFY_TLS:
@@ -52,6 +69,33 @@ class EmailService:
                 server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
                 server.send_message(message)
         return len(unique_recipients)
+
+    def send_final_minutes(
+        self,
+        recipients: Iterable[str],
+        meeting_title: str,
+        meeting_id: int,
+        pdf_data: bytes,
+        organization_name: str,
+    ) -> int:
+        public_url = f"https://oms.arosoftlabs.com/meetings/{meeting_id}"
+        safe_title = html.escape(meeting_title)
+        safe_org = html.escape(organization_name)
+        return self.send(
+            recipients,
+            f"Final meeting minutes: {meeting_title}",
+            (
+                f"Please find attached the approved final minutes for \"{meeting_title}\" "
+                f"from {organization_name}.\n\nA copy remains available at {public_url}"
+            ),
+            (
+                f"<h2>{safe_title}</h2>"
+                f"<p>Please find attached the approved final meeting minutes from {safe_org}.</p>"
+                f'<p>The official copy also remains available from the <a href="{public_url}">meeting record</a>.</p>'
+            ),
+            attachment=pdf_data,
+            attachment_filename=f"{meeting_title[:50].replace('/', '-')}-final-minutes.pdf",
+        )
 
     def send_meeting_complete(
         self,
