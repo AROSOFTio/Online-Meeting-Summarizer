@@ -65,6 +65,7 @@ class ParticipantBase(BaseModel):
     name: str
     email: Optional[str] = None
     role_title: Optional[str] = None
+    attendance_status: str = "present"
 
 class ParticipantCreate(ParticipantBase):
     pass
@@ -173,4 +174,3 @@ class ActionItemOut(ActionItemBase):
 
     class Config:
         from_attributes = True
-

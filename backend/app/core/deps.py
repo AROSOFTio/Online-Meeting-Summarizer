@@ -63,3 +63,12 @@ def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
             detail="The user does not have administrator privileges"
         )
     return current_user
+
+
+def get_minutes_editor(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role not in {UserRole.admin, UserRole.minute_secretary}:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Minute Secretary or Administrator access is required",
+        )
+    return current_user

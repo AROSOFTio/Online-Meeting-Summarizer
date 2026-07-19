@@ -14,7 +14,7 @@ interface StaffUser {
   id: number;
   email: string;
   full_name: string;
-  role: "admin" | "staff";
+  role: "admin" | "minute_secretary" | "staff";
   is_active: boolean;
   created_at: string;
 }
@@ -22,7 +22,7 @@ interface StaffUser {
 const staffSchema = z.object({
   email: z.string().email("Please enter a valid school email"),
   full_name: z.string().min(2, "Full name must be at least 2 characters"),
-  role: z.enum(["admin", "staff"]),
+  role: z.enum(["admin", "minute_secretary", "staff"]),
   is_active: z.boolean(),
   password: z.string().optional(),
 });
@@ -194,7 +194,7 @@ export default function StaffPage() {
                         <td className="p-4 text-gray-600">{staff.email}</td>
                         <td className="p-4 capitalize text-gray-600">
                           <span className={`px-2 py-0.5 rounded text-xs font-medium ${staff.role === "admin" ? "bg-purple-50 text-purple-700 border border-purple-100" : "bg-blue-50 text-blue-700 border border-blue-100"}`}>
-                            {staff.role}
+                            {staff.role === "minute_secretary" ? "Minute Secretary" : staff.role === "staff" ? "Staff Reader" : "Administrator"}
                           </span>
                         </td>
                         <td className="p-4">
@@ -287,7 +287,8 @@ export default function StaffPage() {
                   {...register("role")}
                   className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
                 >
-                  <option value="staff">Staff Member</option>
+                  <option value="staff">Staff Reader (view only)</option>
+                  <option value="minute_secretary">Minute Secretary</option>
                   <option value="admin">System Administrator</option>
                 </select>
                 {errors.role && (

@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from app.core import deps
 from app.core.audit import log_action
-from app.models.models import Meeting, Participant, MeetingStatus, ProcessingJob, JobStatus, User, UserRole, Transcript
+from app.models.models import Meeting, Participant, MeetingStatus, ProcessingJob, JobStatus, User, UserRole, Transcript, meeting_participants
 from app.schemas.schemas import MeetingCreate, MeetingOut, MeetingUpdate, ProcessingJobOut
 from app.workers.tasks import transcribe_meeting, run_background_job
 from app.core.config import settings as app_settings
@@ -19,7 +19,7 @@ def create_meeting(
     request: Request,
     meeting_in: MeetingCreate,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Create a new meeting and associate participants."""
     meeting = Meeting(
@@ -50,6 +50,13 @@ def create_meeting(
         
         # Link meeting and participant
         meeting.participants.append(participant)
+        db.flush()
+        db.execute(
+            meeting_participants.update().where(
+                meeting_participants.c.meeting_id == meeting.id,
+                meeting_participants.c.participant_id == participant.id,
+            ).values(attendance_status=p_in.attendance_status)
+        )
     
     db.commit()
     db.refresh(meeting)
@@ -71,17 +78,17 @@ def list_meetings(
     status: Optional[str] = None,
     is_archived: bool = False,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Retrieve list of meetings with permission guards, full-text search, and status filters."""
     query = db.query(Meeting).filter(Meeting.is_archived == is_archived)
 
     # Permission check: Non-admins only see meetings they own or participate in
-    if current_user.role != UserRole.admin:
-        query = query.filter(
-            (Meeting.owner_id == current_user.id) |
-            (Meeting.participants.any(Participant.email == current_user.email))
-        )
+    if current_user.role == UserRole.staff:
+        query = query.filter(Meeting.status == MeetingStatus.completed)
+    elif current_user.role != UserRole.admin:
+        # Minute secretaries can manage and review the complete meeting register.
+        pass
 
     if status:
         query = query.filter(Meeting.status == status)
@@ -107,9 +114,10 @@ def get_meeting(
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-
     # Authorisation check
-    if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
+    if current_user.role == UserRole.staff and meeting.status != MeetingStatus.completed:
+        raise HTTPException(status_code=403, detail="Staff readers can access completed minutes only")
+    if current_user.role not in {UserRole.admin, UserRole.minute_secretary, UserRole.staff}:
         participant_emails = [p.email for p in meeting.participants if p.email]
         if current_user.email not in participant_emails:
             raise HTTPException(
@@ -125,7 +133,7 @@ def update_meeting(
     request: Request,
     meeting_in: MeetingUpdate,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Update meeting details."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -167,7 +175,7 @@ def delete_meeting(
     request: Request,
     permanent: bool = Query(default=False),
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Archive a meeting, or permanently delete it and all related minutes."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -211,7 +219,7 @@ def trigger_transcription(
     meeting_id: int,
     request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Queue a background task to process and transcribe the meeting recording."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -266,12 +274,72 @@ def get_job_status(
         raise HTTPException(status_code=404, detail="No transcription job found for this meeting")
     return job
 
+
+@router.get("/directory/staff-options")
+def staff_attendance_options(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_minutes_editor),
+):
+    return [
+        {"id": user.id, "name": user.full_name, "email": user.email, "access_role": user.role.value}
+        for user in db.query(User).filter(User.is_active.is_(True)).order_by(User.full_name).all()
+    ]
+
+
+@router.get("/{meeting_id}/attendance")
+def get_attendance(
+    meeting_id: int,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if not meeting:
+        raise HTTPException(status_code=404, detail="Meeting not found")
+    rows = db.execute(
+        meeting_participants.select()
+        .where(meeting_participants.c.meeting_id == meeting_id)
+    ).mappings().all()
+    statuses = {row["participant_id"]: row["attendance_status"] for row in rows}
+    return [
+        {
+            "id": participant.id,
+            "name": participant.name,
+            "email": participant.email,
+            "role_title": participant.role_title,
+            "attendance_status": statuses.get(participant.id, "present"),
+        }
+        for participant in meeting.participants
+    ]
+
+
+@router.put("/{meeting_id}/attendance/{participant_id}")
+def update_attendance(
+    meeting_id: int,
+    participant_id: int,
+    body: dict,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_minutes_editor),
+):
+    attendance_status = body.get("attendance_status")
+    if attendance_status not in {"present", "absent", "apology", "invited"}:
+        raise HTTPException(status_code=400, detail="Invalid attendance status")
+    result = db.execute(
+        meeting_participants.update().where(
+            meeting_participants.c.meeting_id == meeting_id,
+            meeting_participants.c.participant_id == participant_id,
+        ).values(attendance_status=attendance_status)
+    )
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="Attendance record not found")
+    db.commit()
+    return {"detail": "Attendance updated", "attendance_status": attendance_status}
+
 @router.post("/{meeting_id}/retry", response_model=ProcessingJobOut)
 def retry_transcription(
     meeting_id: int,
     request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Retry transcription of a failed job without duplicating meeting records."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()

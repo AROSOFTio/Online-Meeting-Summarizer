@@ -63,6 +63,7 @@ export default function Dashboard() {
 
   if (!user) return null;
   const isAdmin = user.role === "admin";
+  const canEditMinutes = isAdmin || user.role === "minute_secretary";
 
   // Prepare chart data for action item progress
   const chartData = stats
@@ -85,7 +86,7 @@ export default function Dashboard() {
               Starlight Secondary School &bull; Amuria District
             </p>
           </div>
-          <div className="flex items-center space-x-3">
+          {canEditMinutes && <div className="flex items-center space-x-3">
             <Link
               href="/meetings/new"
               className="flex items-center space-x-2 bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
@@ -100,7 +101,7 @@ export default function Dashboard() {
               <Mic size={16} />
               <span>Record Live</span>
             </Link>
-          </div>
+          </div>}
         </div>
 
         {/* Loading State */}
@@ -297,5 +298,4 @@ export default function Dashboard() {
     </DashboardLayout>
   );
 }
-
 

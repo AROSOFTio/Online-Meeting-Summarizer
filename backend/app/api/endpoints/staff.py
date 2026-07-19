@@ -40,7 +40,7 @@ def create_staff(
         hashed_password=hashed_password,
         full_name=user_in.full_name,
         role=user_in.role,
-        is_active=user_in.is_active
+        is_active=True
     )
     db.add(new_user)
     db.commit()

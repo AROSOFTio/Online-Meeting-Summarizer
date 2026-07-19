@@ -66,7 +66,7 @@ def create_action_item(
     request: Request,
     body: dict,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Manually create an action item for a meeting."""
     meeting_id = body.get("meeting_id")
@@ -126,7 +126,7 @@ def update_action_item(
     request: Request,
     body: dict,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Update text, assignee, priority, deadline, or status of an action item."""
     item = db.query(ActionItem).filter(ActionItem.id == item_id).first()
@@ -181,7 +181,7 @@ def delete_action_item(
     item_id: int,
     request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Delete an action item."""
     item = db.query(ActionItem).filter(ActionItem.id == item_id).first()

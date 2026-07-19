@@ -28,18 +28,21 @@ export default function Sidebar() {
   if (!user) return null;
 
   const isAdmin = user.role === "admin";
+  const canEditMinutes = isAdmin || user.role === "minute_secretary";
 
   const navigationItems = [
     { name: "Overview", path: "/dashboard", icon: LayoutDashboard, adminOnly: false },
-    { name: "New Meeting", path: "/meetings/new", icon: PlusCircle, adminOnly: false },
-    { name: "Live Recorder", path: "/meetings/record", icon: Mic, adminOnly: false },
+    { name: "New Meeting", path: "/meetings/new", icon: PlusCircle, editorOnly: true, adminOnly: false },
+    { name: "Live Recorder", path: "/meetings/record", icon: Mic, editorOnly: true, adminOnly: false },
     { name: "Meetings", path: "/meetings", icon: Calendar, adminOnly: false },
     { name: "Action Items", path: "/action-items", icon: CheckSquare, adminOnly: false },
     { name: "Staff", path: "/staff", icon: Users, adminOnly: true },
     { name: "System Settings", path: "/settings", icon: Settings, adminOnly: true },
   ];
 
-  const visibleItems = navigationItems.filter(item => !item.adminOnly || isAdmin);
+  const visibleItems = navigationItems.filter(item =>
+    (!item.adminOnly || isAdmin) && (!("editorOnly" in item) || !item.editorOnly || canEditMinutes)
+  );
 
   const sidebarWidth = isCollapsed ? "w-20" : "w-64";
 

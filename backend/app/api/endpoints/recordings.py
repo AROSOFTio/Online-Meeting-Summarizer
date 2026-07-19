@@ -18,7 +18,7 @@ async def upload_recording(
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """
     Streamed upload of audio recordings.

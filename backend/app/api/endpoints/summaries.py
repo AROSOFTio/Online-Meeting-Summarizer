@@ -22,7 +22,7 @@ def generate_summary(
     meeting_id: int,
     request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Generate professional minutes with Gemini, falling back to local TextRank."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -172,7 +172,7 @@ def update_summary(
     request: Request,
     body: dict,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Manually edit summary text or key points."""
     summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
@@ -208,7 +208,7 @@ def delete_summary(
     meeting_id: int,
     request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user),
+    current_user: User = Depends(deps.get_minutes_editor),
 ):
     """Permanently delete generated minutes while preserving the meeting and transcript."""
     summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
@@ -238,7 +238,7 @@ def add_decision(
     request: Request,
     body: dict,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Manually add a decision to a meeting."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -275,7 +275,7 @@ def delete_decision(
     decision_id: int,
     request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Delete a decision."""
     decision = db.query(Decision).filter(

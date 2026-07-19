@@ -4,12 +4,20 @@ from contextlib import asynccontextmanager
 
 from app.core.config import settings
 from app.core.database import Base, engine, SessionLocal
+from sqlalchemy import text
 from app.models.models import User, UserRole
 from app.core.security import get_password_hash
 from app.api.endpoints import auth, staff, settings as settings_router, health, stats, meetings, recordings, transcripts, summaries, action_items, exports
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if not settings.is_sqlite:
+        with engine.begin() as connection:
+            connection.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'minute_secretary'"))
+            connection.execute(text(
+                "ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS "
+                "attendance_status VARCHAR(20) NOT NULL DEFAULT 'present'"
+            ))
     # Ensure the schema exists before querying or seeding application data.
     Base.metadata.create_all(bind=engine)
         

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { apiRequest } from "@/lib/api";
@@ -29,12 +30,14 @@ const meetingDetailsSchema = z.object({
     z.object({
       name: z.string().min(2, "Name is required"),
       email: z.string().email("Enter a valid email").optional().or(z.literal("")),
-      role_title: z.string().optional()
+      role_title: z.string().optional(),
+      attendance_status: z.enum(["present", "absent", "apology", "invited"])
     })
   )
 });
 
 type MeetingDetailsForm = z.infer<typeof meetingDetailsSchema>;
+interface StaffOption { id: number; name: string; email: string; access_role: string; }
 
 export default function NewMeetingWizard() {
   const router = useRouter();
@@ -52,6 +55,11 @@ export default function NewMeetingWizard() {
   const [jobStatus, setJobStatus] = useState<string>("queued");
   const [jobProgress, setJobProgress] = useState(0);
   const [jobError, setJobError] = useState<string | null>(null);
+  const [selectedStaffId, setSelectedStaffId] = useState("");
+  const { data: staffOptions = [] } = useQuery<StaffOption[]>({
+    queryKey: ["staff-attendance-options"],
+    queryFn: () => apiRequest("/api/meetings/directory/staff-options"),
+  });
 
   const statusTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -64,7 +72,7 @@ export default function NewMeetingWizard() {
     resolver: zodResolver(meetingDetailsSchema),
     defaultValues: {
       date: new Date().toISOString().split("T")[0],
-      participants: [{ name: "", email: "", role_title: "" }]
+      participants: [{ name: "", email: "", role_title: "", attendance_status: "present" }]
     }
   });
 
@@ -295,11 +303,42 @@ export default function NewMeetingWizard() {
                   </h3>
                   <button
                     type="button"
-                    onClick={() => append({ name: "", email: "", role_title: "" })}
+                    onClick={() => append({ name: "", email: "", role_title: "Stakeholder", attendance_status: "present" })}
                     className="flex items-center space-x-1 text-xs text-blue-700 hover:text-blue-800 font-semibold border border-blue-200 hover:bg-blue-50 px-3 py-1 rounded"
                   >
                     <UserPlus size={14} />
-                    <span>Add Participant</span>
+                    <span>Add Stakeholder</span>
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-2 rounded border border-blue-100 bg-blue-50 p-3 md:flex-row">
+                  <select
+                    value={selectedStaffId}
+                    onChange={(event) => setSelectedStaffId(event.target.value)}
+                    className="flex-1 rounded border border-blue-200 bg-white px-3 py-2 text-xs text-gray-900"
+                  >
+                    <option value="">Select registered staff...</option>
+                    {staffOptions.map((staff) => (
+                      <option key={staff.id} value={staff.id}>{staff.name} — {staff.email}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const staff = staffOptions.find((option) => String(option.id) === selectedStaffId);
+                      if (!staff) return;
+                      append({
+                        name: staff.name,
+                        email: staff.email,
+                        role_title: staff.access_role === "minute_secretary" ? "Minute Secretary" : staff.access_role === "admin" ? "Administrator" : "Staff",
+                        attendance_status: "present",
+                      });
+                      setSelectedStaffId("");
+                    }}
+                    disabled={!selectedStaffId}
+                    className="rounded bg-blue-700 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                  >
+                    Add selected staff
                   </button>
                 </div>
 
@@ -316,6 +355,18 @@ export default function NewMeetingWizard() {
                         {errors.participants?.[index]?.name && (
                           <p className="mt-0.5 text-[10px] text-red-600">{errors.participants[index]?.name?.message}</p>
                         )}
+                      </div>
+
+                      <div className="w-full md:w-32">
+                        <select
+                          {...register(`participants.${index}.attendance_status` as const)}
+                          className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs text-gray-900 bg-white"
+                        >
+                          <option value="present">Present</option>
+                          <option value="absent">Absent</option>
+                          <option value="apology">Apology</option>
+                          <option value="invited">Invited</option>
+                        </select>
                       </div>
 
                       <div className="flex-1 w-full">

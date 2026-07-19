@@ -77,7 +77,7 @@ def update_transcript_segment(
     request: Request,
     segment_in: SegmentUpdate,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Edit a single transcript segment and record it in revision history and audit log."""
     transcript = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()
@@ -144,7 +144,7 @@ def update_full_transcript(
     request: Request,
     transcript_in: TranscriptFullUpdate,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_minutes_editor)
 ):
     """Overwrite transcript full text and archive a complete revision history."""
     transcript = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()

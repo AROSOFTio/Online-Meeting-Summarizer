@@ -8,7 +8,7 @@ interface User {
   id: number;
   email: string;
   full_name: string;
-  role: "admin" | "staff";
+  role: "admin" | "minute_secretary" | "staff";
   is_active: boolean;
 }
 

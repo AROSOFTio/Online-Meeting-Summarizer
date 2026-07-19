@@ -27,7 +27,7 @@ def get_dashboard_stats(
     recorded_hours = round(total_seconds / 3600.0, 2)
     
     # Active staff count
-    active_staff = db.query(User).filter(User.role == UserRole.staff, User.is_active == True).count()
+    active_staff = db.query(User).filter(User.role != UserRole.admin, User.is_active == True).count()
     
     # Storage usage bytes
     storage_bytes = db.query(func.sum(Recording.file_size_bytes)).scalar() or 0

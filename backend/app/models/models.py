@@ -9,11 +9,13 @@ meeting_participants = Table(
     "meeting_participants",
     Base.metadata,
     Column("meeting_id", Integer, ForeignKey("meetings.id", ondelete="CASCADE"), primary_key=True),
-    Column("participant_id", Integer, ForeignKey("participants.id", ondelete="CASCADE"), primary_key=True)
+    Column("participant_id", Integer, ForeignKey("participants.id", ondelete="CASCADE"), primary_key=True),
+    Column("attendance_status", String(20), nullable=False, default="present", server_default="present"),
 )
 
 class UserRole(str, enum.Enum):
     admin = "admin"
+    minute_secretary = "minute_secretary"
     staff = "staff"
 
 class User(Base):

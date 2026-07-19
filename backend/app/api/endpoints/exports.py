@@ -6,7 +6,7 @@ from fastapi.responses import FileResponse, Response
 from sqlalchemy.orm import Session
 
 from app.core import deps
-from app.models.models import Meeting, Transcript, Summary, Decision, ActionItem, User, UserRole, SystemSetting
+from app.models.models import Meeting, Transcript, Summary, Decision, ActionItem, User, UserRole, SystemSetting, meeting_participants
 from app.services.export import export_pdf, export_docx, export_txt
 from app.services.email import email_service
 from app.core.config import settings as app_settings
@@ -30,11 +30,16 @@ def _gather_export_data(meeting_id: int, db: Session):
     decisions = db.query(Decision).filter(Decision.meeting_id == meeting_id).all()
     action_items_rows = db.query(ActionItem).filter(ActionItem.meeting_id == meeting_id).all()
 
+    attendance_rows = db.execute(
+        meeting_participants.select().where(meeting_participants.c.meeting_id == meeting_id)
+    ).mappings().all()
+    attendance = {row["participant_id"]: row["attendance_status"] for row in attendance_rows}
     participants = [
         " — ".join(filter(None, [
             p.name,
             p.role_title,
             f"<{p.email}>" if p.email else None,
+            f"[{attendance.get(p.id, 'present').title()}]",
         ]))
         for p in meeting.participants
     ]
@@ -85,7 +90,9 @@ def export_meeting(
         _gather_export_data(meeting_id, db)
 
     # Authorisation
-    if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
+    if current_user.role == UserRole.staff and meeting.status.value != "completed":
+        raise HTTPException(status_code=403, detail="Staff readers can export completed minutes only")
+    if current_user.role not in {UserRole.admin, UserRole.staff} and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised to export this meeting")
 
     filename_base = meeting.title.replace(" ", "_").replace("/", "-")[:40]
@@ -154,7 +161,9 @@ def final_minutes_status(
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
+    if current_user.role == UserRole.staff and meeting.status.value != "completed":
+        raise HTTPException(status_code=403, detail="Staff readers can access completed minutes only")
+    if current_user.role not in {UserRole.admin, UserRole.staff} and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised")
     path = _final_pdf_path(meeting_id)
     return {
@@ -238,7 +247,9 @@ def download_final_minutes(
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-    if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
+    if current_user.role == UserRole.staff and meeting.status.value == "completed":
+        pass
+    elif current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         participant_emails = {p.email for p in meeting.participants if p.email}
         if current_user.email not in participant_emails:
             raise HTTPException(status_code=403, detail="Not authorised")

@@ -83,6 +83,13 @@ interface FinalMinutesStatus {
   finalized_at: number | null;
   download_url: string | null;
 }
+interface AttendanceItem {
+  id: number;
+  name: string;
+  email: string | null;
+  role_title: string | null;
+  attendance_status: "present" | "absent" | "apology" | "invited";
+}
 
 interface ActionItemData {
   id: number;
@@ -101,6 +108,7 @@ export default function MeetingWorkspacePage() {
   const hasValidMeetingId = Number.isInteger(meetingId) && meetingId > 0;
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const canEditMinutes = user?.role === "admin" || user?.role === "minute_secretary";
 
   const [activeTab, setActiveTab] = useState<"overview" | "recording" | "transcript" | "summary" | "actions">("overview");
   
@@ -223,6 +231,19 @@ export default function MeetingWorkspacePage() {
     queryKey: ["final-minutes", meetingId],
     queryFn: () => apiRequest(`/api/meetings/${meetingId}/final-minutes/status`),
     enabled: hasValidMeetingId,
+  });
+  const { data: attendance = [] } = useQuery<AttendanceItem[]>({
+    queryKey: ["meeting-attendance", meetingId],
+    queryFn: () => apiRequest(`/api/meetings/${meetingId}/attendance`),
+    enabled: hasValidMeetingId,
+  });
+  const attendanceMutation = useMutation({
+    mutationFn: (value: { participantId: number; attendance_status: AttendanceItem["attendance_status"] }) =>
+      apiRequest(`/api/meetings/${meetingId}/attendance/${value.participantId}`, {
+        method: "PUT",
+        body: JSON.stringify({ attendance_status: value.attendance_status }),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meeting-attendance", meetingId] }),
   });
 
   const generateSummaryMutation = useMutation({
@@ -354,7 +375,7 @@ export default function MeetingWorkspacePage() {
           </div>
           
           <div className="flex items-center space-x-3">
-            <button
+            {canEditMinutes && <button
               onClick={() => {
                 setMeetingDraft({
                   title: meeting.title,
@@ -366,8 +387,8 @@ export default function MeetingWorkspacePage() {
               className="inline-flex items-center gap-1.5 rounded border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
             >
               <Edit2 size={13} /> Edit
-            </button>
-            <button
+            </button>}
+            {canEditMinutes && <button
               onClick={() => {
                 if (window.confirm("Permanently delete this meeting, recording, transcript and minutes? This cannot be undone.")) {
                   deleteMeetingMutation.mutate();
@@ -377,7 +398,7 @@ export default function MeetingWorkspacePage() {
               className="inline-flex items-center gap-1.5 rounded border border-red-300 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-50"
             >
               <Trash2 size={13} /> Delete
-            </button>
+            </button>}
             <span
               className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
                 meeting.status === "completed"
@@ -470,15 +491,32 @@ export default function MeetingWorkspacePage() {
                   <Users size={20} className="text-gray-500" />
                   <span>Attendees List</span>
                 </h3>
-                {meeting.participants.length === 0 ? (
+                {attendance.length === 0 ? (
                   <p className="text-xs text-gray-500 italic">No attendees added to metadata.</p>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {meeting.participants.map((participant) => (
+                    {attendance.map((participant) => (
                       <div key={participant.id} className="p-3 bg-gray-50 rounded border border-gray-100 flex flex-col">
                         <span className="font-semibold text-sm text-gray-900">{participant.name}</span>
                         {participant.role_title && <span className="text-xs text-gray-500">{participant.role_title}</span>}
                         {participant.email && <span className="text-xs text-blue-700 mt-1">{participant.email}</span>}
+                        {canEditMinutes ? (
+                          <select
+                            value={participant.attendance_status}
+                            onChange={(event) => attendanceMutation.mutate({
+                              participantId: participant.id,
+                              attendance_status: event.target.value as AttendanceItem["attendance_status"],
+                            })}
+                            className="mt-2 rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900"
+                          >
+                            <option value="present">Present</option>
+                            <option value="absent">Absent</option>
+                            <option value="apology">Apology</option>
+                            <option value="invited">Invited</option>
+                          </select>
+                        ) : (
+                          <span className="mt-2 text-xs font-medium capitalize text-gray-600">{participant.attendance_status}</span>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -635,13 +673,13 @@ export default function MeetingWorkspacePage() {
                         ) : (
                           <div className="flex-1 flex justify-between items-start group gap-4">
                             <p className="text-sm text-gray-800 leading-relaxed">{segment.text}</p>
-                            <button
+                            {canEditMinutes && <button
                               onClick={() => handleEditClick(segment)}
                               className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-blue-700 transition-opacity rounded"
                               title="Edit Segment"
                             >
                               <Edit2 size={14} />
-                            </button>
+                            </button>}
                           </div>
                         )}
                       </div>
@@ -698,7 +736,7 @@ export default function MeetingWorkspacePage() {
                         <span>Download Final Copy</span>
                       </a>
                     )}
-                    {summaryData && (
+                    {summaryData && canEditMinutes && (
                       <button
                         onClick={() => {
                           if (window.confirm("Delete the generated minutes? The meeting and transcript will be kept.")) {
@@ -711,14 +749,14 @@ export default function MeetingWorkspacePage() {
                         <span>Delete minutes</span>
                       </button>
                     )}
-                    <button
+                    {canEditMinutes && <button
                       onClick={() => generateSummaryMutation.mutate()}
                       disabled={generateSummaryMutation.isPending}
                       className="flex items-center space-x-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded text-xs font-semibold"
                     >
                       <Sparkles size={13} />
                       <span>{generateSummaryMutation.isPending ? "Generating..." : summaryData ? "Re-generate Minutes" : "Generate Minutes"}</span>
-                    </button>
+                    </button>}
                   </div>
                 </div>
               )}
@@ -742,7 +780,7 @@ export default function MeetingWorkspacePage() {
                   <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
                     <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
                       <h3 className="font-semibold text-sm text-gray-900">Executive Summary</h3>
-                      {!editingSummary && (
+                      {!editingSummary && canEditMinutes && (
                         <button
                           onClick={() => { setEditingSummary(true); setSummaryDraft(summaryData.text); }}
                           className="flex items-center space-x-1 text-xs text-gray-500 hover:text-blue-700"
@@ -821,13 +859,13 @@ export default function MeetingWorkspacePage() {
                             placeholder="Type decision..."
                             className="flex-1 px-3 py-1.5 border border-gray-300 rounded text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500"
                           />
-                          <button
+                          {canEditMinutes && <button
                             onClick={() => { if (newDecision.trim()) addDecisionMutation.mutate(newDecision.trim()); }}
                             disabled={addDecisionMutation.isPending || !newDecision.trim()}
                             className="px-3 py-1.5 bg-blue-700 text-white text-xs rounded font-semibold hover:bg-blue-800"
                           >
                             Add
-                          </button>
+                          </button>}
                         </div>
                       )}
                       {summaryData.decisions?.length === 0 && (
@@ -930,12 +968,12 @@ export default function MeetingWorkspacePage() {
                             </select>
                           </td>
                           <td className="px-4 py-3">
-                            <button
+                            {canEditMinutes && <button
                               onClick={() => deleteActionMutation.mutate(item.id)}
                               className="text-gray-300 hover:text-red-500 transition-colors"
                             >
                               <Trash2 size={13} />
-                            </button>
+                            </button>}
                           </td>
                         </tr>
                       ))}
