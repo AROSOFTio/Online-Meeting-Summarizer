@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -37,11 +37,12 @@ export default function SettingsPage() {
     queryFn: () => apiRequest("/api/settings/"),
   });
 
-  // Populate form from query data once fetched (state-driven, no effect/ref)
-  if (data && !formLoaded) {
-    setFormValues(data);
-    setFormLoaded(true);
-  }
+  useEffect(() => {
+    if (data && !formLoaded) {
+      setFormValues(data);
+      setFormLoaded(true);
+    }
+  }, [data, formLoaded]);
 
   const saveMutation = useMutation({
     mutationFn: (values: SettingsData) =>

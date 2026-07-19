@@ -9,6 +9,7 @@ import {
   PlusCircle,
   Calendar,
   CheckSquare,
+  Mic,
   Users,
   Settings,
   LogOut,
@@ -31,6 +32,7 @@ export default function Sidebar() {
   const navigationItems = [
     { name: "Overview", path: "/dashboard", icon: LayoutDashboard, adminOnly: false },
     { name: "New Meeting", path: "/meetings/new", icon: PlusCircle, adminOnly: false },
+    { name: "Live Recorder", path: "/meetings/record", icon: Mic, adminOnly: false },
     { name: "Meetings", path: "/meetings", icon: Calendar, adminOnly: false },
     { name: "Action Items", path: "/action-items", icon: CheckSquare, adminOnly: false },
     { name: "Staff", path: "/staff", icon: Users, adminOnly: true },

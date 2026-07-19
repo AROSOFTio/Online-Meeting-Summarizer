@@ -91,6 +91,7 @@ type ActionItemUpdate = Partial<Pick<ActionItemData, "priority" | "deadline" | "
 export default function MeetingWorkspacePage() {
   const { id } = useParams();
   const meetingId = parseInt(id as string);
+  const hasValidMeetingId = Number.isInteger(meetingId) && meetingId > 0;
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -111,7 +112,8 @@ export default function MeetingWorkspacePage() {
   // Fetch meeting details
   const { data: meeting, isLoading: isMeetingLoading, isError: isMeetingError, error: meetingError } = useQuery<MeetingDetail>({
     queryKey: ["meeting-detail", meetingId],
-    queryFn: () => apiRequest(`/api/meetings/${meetingId}`)
+    queryFn: () => apiRequest(`/api/meetings/${meetingId}`),
+    enabled: hasValidMeetingId
   });
 
   const pollInterval = meeting?.status === "processing" ? 2000 : false;

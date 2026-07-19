@@ -14,7 +14,18 @@ export default function PwaInstallPrompt() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw.js");
+      void navigator.serviceWorker.register("/sw.js").then((registration) => {
+        void registration.update();
+        if (registration.waiting) registration.waiting.postMessage("SKIP_WAITING");
+        registration.addEventListener("updatefound", () => {
+          const worker = registration.installing;
+          worker?.addEventListener("statechange", () => {
+            if (worker.state === "installed" && navigator.serviceWorker.controller) {
+              worker.postMessage("SKIP_WAITING");
+            }
+          });
+        });
+      });
     }
     const handlePrompt = (event: Event) => {
       event.preventDefault();
