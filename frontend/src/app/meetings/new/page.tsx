@@ -44,9 +44,9 @@ export default function NewMeetingWizard() {
   // Media states
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [meetingData, setMeetingData] = useState<MeetingDetailsForm | null>(null);
   
   // Job status tracking states
-  const [meetingId, setMeetingId] = useState<number | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isUploading, setIsUploading] = useState(false);
   const [jobStatus, setJobStatus] = useState<string>("queued");
@@ -81,8 +81,7 @@ export default function NewMeetingWizard() {
   }, []);
 
   const handleDetailsSubmit = (data: MeetingDetailsForm) => {
-    // Save metadata locally to submit on final upload
-    (window as any)._meetingData = data;
+    setMeetingData(data);
     setStep(2);
   };
 
@@ -110,7 +109,7 @@ export default function NewMeetingWizard() {
   };
 
   const startProcessingPipeline = async () => {
-    const metadata = (window as any)._meetingData as MeetingDetailsForm;
+    const metadata = meetingData;
     if (!metadata) {
       alert("Meeting metadata missing. Please restart step 1.");
       setStep(1);
@@ -126,7 +125,7 @@ export default function NewMeetingWizard() {
         return;
       }
       fileToUpload = recordedBlob;
-      filename = `live_recording_${Date.now()}.webm`;
+      filename = `live_recording_${crypto.randomUUID()}.webm`;
     } else {
       if (!selectedFile) {
         alert("Please choose an audio/video file.");
@@ -156,7 +155,6 @@ export default function NewMeetingWizard() {
       });
 
       const newMeetingId = meetingRes.id;
-      setMeetingId(newMeetingId);
       setUploadProgress(40);
 
       // 2. Perform Streamed/Chunked Upload
@@ -189,10 +187,10 @@ export default function NewMeetingWizard() {
       // 4. Poll job status
       pollJobStatus(newMeetingId);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       setIsUploading(false);
       setJobStatus("failed");
-      setJobError(err.message || "Failed to create meeting and process audio");
+      setJobError(err instanceof Error ? err.message : "Failed to create meeting and process audio");
     }
   };
 

@@ -1,5 +1,6 @@
 import os
 import concurrent.futures
+from datetime import date
 from pathlib import Path
 from celery import Celery
 from sqlalchemy.orm import Session
@@ -135,16 +136,40 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             db.add(db_seg)
         db.commit()
 
-        # Step 4: Auto-generate TextRank summary + decisions + action item candidates
+        # Step 4: Prefer Gemini structured minutes; use local TextRank as a fallback.
         try:
             import json
             from app.services.summarizer import summarize, extract_decisions, extract_action_items, extract_key_points
+            from app.services.gemini import gemini_service
             from app.models.models import Summary, Decision, ActionItem
 
-            summary_text = summarize(full_text, sentence_count=6)
-            key_points = extract_key_points(full_text, count=5)
-            decision_texts = extract_decisions(full_text)
-            action_candidates = extract_action_items(full_text)
+            try:
+                if not gemini_service.enabled:
+                    raise RuntimeError("Gemini is not configured")
+                ai_minutes = gemini_service.summarize_transcript(full_text)
+                summary_text = ai_minutes["summary"]
+                key_points = ai_minutes["key_points"]
+                decision_texts = ai_minutes["decisions"]
+                action_candidates = [
+                    {
+                        "text": item["description"],
+                        "priority": item.get("priority", "medium"),
+                        "deadline": (
+                            date.fromisoformat(item["due_date"])
+                            if item.get("due_date")
+                            else None
+                        ),
+                    }
+                    for item in ai_minutes["action_items"]
+                ]
+                summary_provider = f"Gemini ({settings.GEMINI_MODEL})"
+            except Exception as gemini_err:
+                print(f"[WARNING] Gemini unavailable; using TextRank fallback: {gemini_err}")
+                summary_text = summarize(full_text, sentence_count=6)
+                key_points = extract_key_points(full_text, count=5)
+                decision_texts = extract_decisions(full_text)
+                action_candidates = extract_action_items(full_text)
+                summary_provider = "TextRank fallback"
 
             # Upsert Summary
             existing_summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
@@ -182,20 +207,39 @@ def transcribe_meeting(meeting_id: int, job_id: str):
                         summary_id=summary_row.id,
                         description=candidate["text"],
                         status="pending",
-                        priority="medium",
+                        priority=candidate.get("priority", "medium"),
+                        deadline=candidate.get("deadline"),
                     ))
 
             db.commit()
-            print(f"[SUCCESS] Auto-summary generated: {len(decision_texts)} decisions, {len(action_candidates)} action items.")
+            print(f"[SUCCESS] {summary_provider} summary generated: {len(decision_texts)} decisions, {len(action_candidates)} action items.")
 
         except Exception as sum_err:
             print(f"[WARNING] Auto-summarisation failed (non-fatal): {sum_err}")
+            summary_text = ""
 
         # Finalise
         job.status = JobStatus.completed
         job.progress = 100
         meeting.status = MeetingStatus.completed
         db.commit()
+
+        # Notify participants after all durable records have been committed.
+        try:
+            from app.services.email import email_service
+
+            recipients = [participant.email for participant in meeting.participants if participant.email]
+            if meeting.created_by and meeting.created_by.email:
+                recipients.append(meeting.created_by.email)
+            sent = email_service.send_meeting_complete(
+                recipients=recipients,
+                meeting_title=meeting.title,
+                meeting_id=meeting.id,
+                summary=summary_text or "The transcript and meeting minutes are now available.",
+            )
+            print(f"[SUCCESS] Sent meeting completion notification to {sent} recipient(s).")
+        except Exception as email_err:
+            print(f"[WARNING] Email notification failed (non-fatal): {email_err}")
 
         print(f"[SUCCESS] Meeting {meeting_id} transcribed successfully. Duration: {duration}s.")
 

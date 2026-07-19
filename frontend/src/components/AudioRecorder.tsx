@@ -13,16 +13,31 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
   const [isPaused, setIsPaused] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const dataArrayRef = useRef<Uint8Array | null>(null);
+  const dataArrayRef = useRef<Uint8Array<ArrayBuffer> | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const discardRequestedRef = useRef(false);
+
+  function cleanupAudio() {
+    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+    animationFrameRef.current = null;
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      void audioContextRef.current.close();
+    }
+    audioContextRef.current = null;
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+    }
+    streamRef.current = null;
+  }
 
   // Timer effect
   useEffect(() => {
@@ -49,14 +64,6 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
     };
   }, []);
 
-  const cleanupAudio = () => {
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    if (audioContextRef.current) audioContextRef.current.close();
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-    }
-  };
-
   const drawWaveform = () => {
     if (!canvasRef.current || !analyserRef.current || !dataArrayRef.current) return;
 
@@ -69,10 +76,10 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
     const bufferLength = analyser.frequencyBinCount;
 
     const draw = () => {
-      if (!isRecording) return;
+      if (mediaRecorderRef.current?.state === "inactive") return;
       animationFrameRef.current = requestAnimationFrame(draw);
 
-      analyser.getByteFrequencyData(dataArray as any);
+      analyser.getByteFrequencyData(dataArray);
 
       ctx.fillStyle = "#f9fafb";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -97,7 +104,9 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
 
   const startRecording = async () => {
     audioChunksRef.current = [];
+    discardRequestedRef.current = false;
     setAudioUrl(null);
+    setError(null);
     setSeconds(0);
 
     try {
@@ -105,8 +114,7 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
       streamRef.current = stream;
 
       // Audio levels visualizer configuration
-      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-      const audioCtx = new AudioContextClass();
+      const audioCtx = new AudioContext();
       audioContextRef.current = audioCtx;
 
       const source = audioCtx.createMediaStreamSource(stream);
@@ -117,7 +125,7 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
       analyserRef.current = analyser;
       
       const bufferLength = analyser.frequencyBinCount;
-      dataArrayRef.current = new Uint8Array(bufferLength);
+      dataArrayRef.current = new Uint8Array(new ArrayBuffer(bufferLength));
 
       // Initialize media recorder
       const options = { mimeType: "audio/webm" };
@@ -138,6 +146,11 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
       };
 
       mediaRecorder.onstop = () => {
+        if (discardRequestedRef.current) {
+          discardRequestedRef.current = false;
+          cleanupAudio();
+          return;
+        }
         const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType });
         const url = URL.createObjectURL(audioBlob);
         setAudioUrl(url);
@@ -152,9 +165,9 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
       // Delay slightly to ensure canvas is rendered
       setTimeout(drawWaveform, 100);
 
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("Error accessing microphone:", err);
-      alert("Microphone permission denied. Please allow microphone access to record.");
+      setError("Microphone access failed. Allow microphone permission and make sure no other application is using it.");
     }
   };
 
@@ -182,6 +195,7 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
   };
 
   const discardRecording = () => {
+    discardRequestedRef.current = true;
     cleanupAudio();
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
@@ -208,6 +222,12 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
           {formatTime(seconds)}
         </span>
       </div>
+
+      {error && (
+        <p role="alert" className="w-full max-w-md rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+          {error}
+        </p>
+      )}
 
       {/* Amplitude canvas */}
       {isRecording && (

@@ -1,0 +1,17 @@
+{
+  "name": "Starlight Online Meeting Summarizer",
+  "short_name": "Meetings",
+  "description": "Record, transcribe, summarize, and manage school meetings.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f3f4f6",
+  "theme_color": "#1d4ed8",
+  "icons": [
+    {
+      "src": "/app-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import React, { useState } from "react";
+import { useParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -9,7 +9,6 @@ import { apiRequest } from "@/lib/api";
 import {
   Calendar,
   Users,
-  Video,
   FileText,
   Play,
   Download,
@@ -21,14 +20,11 @@ import {
   FileSpreadsheet,
   CheckSquare,
   Sparkles,
-  Circle,
-  PlayCircle,
   CheckCircle,
   Lightbulb,
   Gavel,
   Trash2,
-  Plus,
-  User
+  Plus
 } from "lucide-react";
 
 interface MeetingDetail {
@@ -76,10 +72,25 @@ interface TranscriptData {
   }>;
 }
 
+interface SummaryData {
+  text: string;
+  key_points: string[];
+  decisions: Array<{ id: number; text: string }>;
+}
+
+interface ActionItemData {
+  id: number;
+  text: string;
+  priority: "low" | "medium" | "high";
+  deadline: string | null;
+  status: "pending" | "in_progress" | "completed";
+}
+
+type ActionItemUpdate = Partial<Pick<ActionItemData, "priority" | "deadline" | "status">>;
+
 export default function MeetingWorkspacePage() {
   const { id } = useParams();
   const meetingId = parseInt(id as string);
-  const router = useRouter();
   const queryClient = useQueryClient();
   const { user } = useAuth();
 
@@ -97,26 +108,16 @@ export default function MeetingWorkspacePage() {
   const [newDecision, setNewDecision] = useState("");
   const [showDecisionInput, setShowDecisionInput] = useState(false);
 
-  // Poll intervals for processing state
-  const [pollInterval, setPollInterval] = useState<number | false>(false);
-
   // Fetch meeting details
   const { data: meeting, isLoading: isMeetingLoading, isError: isMeetingError, error: meetingError } = useQuery<MeetingDetail>({
     queryKey: ["meeting-detail", meetingId],
     queryFn: () => apiRequest(`/api/meetings/${meetingId}`)
   });
 
-  // Start polling status if the meeting is in processing state
-  useEffect(() => {
-    if (meeting?.status === "processing") {
-      setPollInterval(2000);
-    } else {
-      setPollInterval(false);
-    }
-  }, [meeting?.status]);
+  const pollInterval = meeting?.status === "processing" ? 2000 : false;
 
   // Fetch transcript data (only if meeting completed)
-  const { data: transcript, isLoading: isTranscriptLoading, refetch: refetchTranscript } = useQuery<TranscriptData>({
+  const { data: transcript } = useQuery<TranscriptData>({
     queryKey: ["meeting-transcript", meetingId],
     queryFn: () => apiRequest(`/api/transcripts/${meetingId}`),
     enabled: meeting?.status === "completed",
@@ -149,8 +150,8 @@ export default function MeetingWorkspacePage() {
       setEditingSegmentId(null);
       setEditError(null);
     },
-    onError: (err: any) => {
-      setEditError(err.message || "Failed to update segment");
+    onError: (err: unknown) => {
+      setEditError(err instanceof Error ? err.message : "Failed to update segment");
     }
   });
 
@@ -163,7 +164,7 @@ export default function MeetingWorkspacePage() {
   });
 
   // ── Phase 3: Summary queries & mutations ──────────────────────────────
-  const { data: summaryData, isLoading: isSummaryLoading } = useQuery<any>({
+  const { data: summaryData, isLoading: isSummaryLoading } = useQuery<SummaryData>({
     queryKey: ["meeting-summary", meetingId],
     queryFn: () => apiRequest(`/api/summaries/${meetingId}`),
     enabled: meeting?.status === "completed" && activeTab === "summary",
@@ -207,7 +208,7 @@ export default function MeetingWorkspacePage() {
   });
 
   // ── Phase 3: Action items queries & mutations ──────────────────────────
-  const { data: actionItems, isLoading: isActionsLoading } = useQuery<any[]>({
+  const { data: actionItems, isLoading: isActionsLoading } = useQuery<ActionItemData[]>({
     queryKey: ["meeting-actions", meetingId],
     queryFn: () => apiRequest(`/api/action-items/?meeting_id=${meetingId}`),
     enabled: meeting?.status === "completed" && activeTab === "actions",
@@ -215,7 +216,7 @@ export default function MeetingWorkspacePage() {
   });
 
   const updateActionMutation = useMutation({
-    mutationFn: ({ id, body }: { id: number; body: any }) =>
+    mutationFn: ({ id, body }: { id: number; body: ActionItemUpdate }) =>
       apiRequest(`/api/action-items/${id}`, { method: "PUT", body: JSON.stringify(body) }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["meeting-actions", meetingId] })
   });
@@ -679,7 +680,7 @@ export default function MeetingWorkspacePage() {
                       {summaryData.decisions?.length === 0 && (
                         <p className="text-xs text-gray-400">No decisions extracted. Add one manually above.</p>
                       )}
-                      {summaryData.decisions?.map((d: any) => (
+                      {summaryData.decisions?.map((d) => (
                         <div key={d.id} className="flex items-start justify-between group py-2 border-b border-gray-50 last:border-0">
                           <div className="flex items-start space-x-2">
                             <CheckCircle size={14} className="text-green-600 mt-0.5 shrink-0" />
@@ -735,14 +736,17 @@ export default function MeetingWorkspacePage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {actionItems.map((item: any, idx: number) => (
+                      {actionItems.map((item, idx: number) => (
                         <tr key={item.id} className="hover:bg-gray-50/60 transition-colors">
                           <td className="px-4 py-3 text-gray-400 text-xs">{idx + 1}</td>
                           <td className="px-4 py-3 text-gray-900 text-sm leading-relaxed max-w-xs">{item.text}</td>
                           <td className="px-4 py-3">
                             <select
                               value={item.priority}
-                              onChange={e => updateActionMutation.mutate({ id: item.id, body: { priority: e.target.value } })}
+                              onChange={e => updateActionMutation.mutate({
+                                id: item.id,
+                                body: { priority: e.target.value as ActionItemData["priority"] }
+                              })}
                               className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none"
                             >
                               <option value="high">High</option>
@@ -761,7 +765,10 @@ export default function MeetingWorkspacePage() {
                           <td className="px-4 py-3">
                             <select
                               value={item.status}
-                              onChange={e => updateActionMutation.mutate({ id: item.id, body: { status: e.target.value } })}
+                              onChange={e => updateActionMutation.mutate({
+                                id: item.id,
+                                body: { status: e.target.value as ActionItemData["status"] }
+                              })}
                               className="text-xs border border-gray-200 rounded px-2 py-1 bg-white focus:outline-none"
                             >
                               <option value="pending">Pending</option>

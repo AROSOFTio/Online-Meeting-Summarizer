@@ -10,7 +10,6 @@ import {
   Search,
   PlusCircle,
   Calendar,
-  User,
   Users,
   Video,
   AlertTriangle,
@@ -41,7 +40,7 @@ export default function MeetingsDirectoryPage() {
   const [isArchivedFilter, setIsArchivedFilter] = useState(false);
 
   // Queries matching search and filters
-  const { data: meetings, isLoading, isError, error, refetch } = useQuery<MeetingItem[]>({
+  const { data: meetings, isLoading, isError, error } = useQuery<MeetingItem[]>({
     queryKey: ["meetings-list", searchTerm, statusFilter, isArchivedFilter],
     queryFn: () => {
       const params = new URLSearchParams();

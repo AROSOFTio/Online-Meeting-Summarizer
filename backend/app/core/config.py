@@ -25,6 +25,20 @@ class Settings(BaseSettings):
     RETENTION_PERIOD_DAYS: int = 365
     WHISPER_MODEL: str = "base"
 
+    # Gemini AI (preferred summarisation provider; TextRank remains a fallback)
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+
+    # SMTP notifications
+    SMTP_HOST: str = "mail.arofi.net"
+    SMTP_PORT: int = 465
+    SMTP_USERNAME: Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
+    SMTP_FROM_EMAIL: EmailStr = "no-reply@arofi.net"
+    SMTP_USE_SSL: bool = True
+    SMTP_USE_STARTTLS: bool = False
+    SMTP_VERIFY_TLS: bool = True
+
     # Storage Paths
     STORAGE_DIR: str = "storage"
     UPLOAD_DIR: str = "storage/recordings"

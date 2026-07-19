@@ -7,16 +7,10 @@ import { useAuth } from "@/context/AuthContext";
 import {
   LayoutDashboard,
   PlusCircle,
-  Mic,
   Calendar,
-  FileText,
-  BookOpen,
   CheckSquare,
-  BarChart2,
   Users,
-  ShieldAlert,
   Settings,
-  HelpCircle,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -37,16 +31,10 @@ export default function Sidebar() {
   const navigationItems = [
     { name: "Overview", path: "/dashboard", icon: LayoutDashboard, adminOnly: false },
     { name: "New Meeting", path: "/meetings/new", icon: PlusCircle, adminOnly: false },
-    { name: "Live Recorder", path: "/meetings/record", icon: Mic, adminOnly: false },
     { name: "Meetings", path: "/meetings", icon: Calendar, adminOnly: false },
-    { name: "Transcripts", path: "/transcripts", icon: FileText, adminOnly: false },
-    { name: "Summaries", path: "/summaries", icon: BookOpen, adminOnly: false },
     { name: "Action Items", path: "/action-items", icon: CheckSquare, adminOnly: false },
-    { name: "Reports", path: "/reports", icon: BarChart2, adminOnly: false },
     { name: "Staff", path: "/staff", icon: Users, adminOnly: true },
-    { name: "Audit Logs", path: "/audit-logs", icon: ShieldAlert, adminOnly: true },
     { name: "System Settings", path: "/settings", icon: Settings, adminOnly: true },
-    { name: "Help", path: "/help", icon: HelpCircle, adminOnly: false },
   ];
 
   const visibleItems = navigationItems.filter(item => !item.adminOnly || isAdmin);
@@ -88,8 +76,10 @@ export default function Sidebar() {
         {/* Sidebar Header */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-[#e5e7eb] bg-white">
           <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="w-9 h-9 bg-blue-700 text-white flex items-center justify-center rounded font-bold shrink-0">
-              S
+            <div className="w-9 h-9 bg-blue-50 text-blue-700 flex items-center justify-center rounded font-bold shrink-0 overflow-hidden">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/api/settings/logo" alt="" className="h-full w-full object-contain" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+              <span className="absolute">S</span>
             </div>
             {!isCollapsed && (
               <div className="flex flex-col">

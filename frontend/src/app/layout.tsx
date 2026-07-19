@@ -16,6 +16,12 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Online Meeting Summarizer - Starlight Secondary School",
   description: "Secure meeting recording, transcription, and minutes summarization for Starlight Secondary School",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: "Meeting Summarizer",
+    statusBarStyle: "default",
+  },
 };
 
 export default function RootLayout({
@@ -34,4 +40,3 @@ export default function RootLayout({
     </html>
   );
 }
-

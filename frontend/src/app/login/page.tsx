@@ -42,8 +42,10 @@ export default function LoginPage() {
     <div className="flex flex-col items-center justify-center min-h-screen bg-[#f3f4f6] px-4">
       <div className="w-full max-w-md bg-white border border-[#e5e7eb] rounded-lg shadow-sm p-8">
         <div className="flex flex-col items-center mb-6">
-          <div className="w-16 h-16 bg-blue-100 flex items-center justify-center rounded-full text-blue-700 font-bold text-2xl mb-3">
-            S
+          <div className="relative w-16 h-16 bg-blue-100 flex items-center justify-center rounded-full text-blue-700 font-bold text-2xl mb-3 overflow-hidden">
+            <span>S</span>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/api/settings/logo" alt="" className="absolute inset-0 h-full w-full object-contain bg-white" onError={(event) => { event.currentTarget.style.display = "none"; }} />
           </div>
           <h1 className="text-xl font-bold text-gray-900">STARLIGHT SECONDARY SCHOOL</h1>
           <p className="text-sm text-gray-500">Online Meeting Summarizer</p>

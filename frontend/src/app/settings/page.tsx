@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/context/AuthContext";
 import DashboardLayout from "@/components/DashboardLayout";
 import { apiRequest } from "@/lib/api";
-import { Save, RefreshCw } from "lucide-react";
+import { Save, RefreshCw, Upload } from "lucide-react";
 
 interface SettingsData {
   school_name: string;
@@ -30,6 +30,7 @@ export default function SettingsPage() {
   const [formLoaded, setFormLoaded] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
 
   const { data, isLoading, isError } = useQuery<SettingsData>({
     queryKey: ["system-settings"],
@@ -68,6 +69,30 @@ export default function SettingsPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     saveMutation.mutate(formValues);
+  };
+
+  const handleLogoUpload = async (file: File | undefined) => {
+    if (!file) return;
+    setLogoUploading(true);
+    setErrorMsg(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const result = await apiRequest("/api/settings/logo", {
+        method: "POST",
+        body: formData,
+      });
+      setFormValues((previous) => ({
+        ...previous,
+        school_logo_url: result.school_logo_url,
+      }));
+      await queryClient.invalidateQueries({ queryKey: ["system-settings"] });
+      setSuccessMsg("School logo uploaded successfully.");
+    } catch (error: unknown) {
+      setErrorMsg(error instanceof Error ? error.message : "Logo upload failed");
+    } finally {
+      setLogoUploading(false);
+    }
   };
 
   if (!user) return null;
@@ -129,14 +154,27 @@ export default function SettingsPage() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">School Logo URL</label>
-              <input
-                type="text"
-                value={formValues.school_logo_url}
-                onChange={(e) => handleChange("school_logo_url", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
-              />
-              <p className="mt-1 text-xs text-gray-500">Path or URL to the school logo image</p>
+              <label className="block text-sm font-medium text-gray-700 mb-2">School Logo</label>
+              <div className="flex items-center gap-4 rounded border border-gray-200 p-4">
+                <div className="h-16 w-16 overflow-hidden rounded bg-blue-50">
+                  {formValues.school_logo_url && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={formValues.school_logo_url} alt="School logo" className="h-full w-full object-contain" />
+                  )}
+                </div>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800">
+                  <Upload size={16} />
+                  <span>{logoUploading ? "Uploading..." : "Upload Logo"}</span>
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                    className="hidden"
+                    disabled={logoUploading}
+                    onChange={(event) => void handleLogoUpload(event.target.files?.[0])}
+                  />
+                </label>
+              </div>
+              <p className="mt-1 text-xs text-gray-500">PNG, JPEG, WebP, or SVG; maximum 5 MB.</p>
             </div>
 
             <div>
