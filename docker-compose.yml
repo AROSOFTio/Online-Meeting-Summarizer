@@ -27,6 +27,7 @@ services:
 
   backend:
     build: ./backend
+    image: online-meeting-summarizer-backend
     restart: unless-stopped
     depends_on:
       db:
@@ -46,7 +47,7 @@ services:
       - recordings:/workspace/storage
 
   worker:
-    build: ./backend
+    image: online-meeting-summarizer-backend
     restart: unless-stopped
     depends_on:
       db:
