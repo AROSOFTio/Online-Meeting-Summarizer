@@ -193,7 +193,7 @@ export default function SettingsPage() {
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">School Logo</label>
-              <div className="flex items-center gap-4 rounded border border-gray-200 p-4">
+              <div className="flex flex-col items-start gap-4 rounded border border-gray-200 p-4 sm:flex-row sm:items-center">
                 <div className="h-16 w-16 overflow-hidden rounded bg-blue-50">
                   {formValues.school_logo_url && (
                     // eslint-disable-next-line @next/next/no-img-element

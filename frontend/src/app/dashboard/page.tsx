@@ -79,24 +79,24 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-[#e5e7eb] pb-5 space-y-4 md:space-y-0">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="break-words text-xl font-bold text-gray-900 sm:text-2xl">
               Welcome back, {user.full_name}
             </h1>
             <p className="text-sm text-gray-500 mt-1">
               Starlight Secondary School &bull; Amuria District
             </p>
           </div>
-          {canEditMinutes && <div className="flex items-center space-x-3">
+          {canEditMinutes && <div className="grid w-full grid-cols-2 gap-3 sm:flex sm:w-auto sm:items-center">
             <Link
               href="/meetings/new"
-              className="flex items-center space-x-2 bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded text-sm font-medium transition-colors"
+              className="flex items-center justify-center gap-2 rounded bg-blue-700 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-800"
             >
               <PlusCircle size={16} />
               <span>New Meeting</span>
             </Link>
             <Link
               href="/meetings/record"
-              className="flex items-center space-x-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 px-4 py-2 rounded text-sm font-medium transition-colors"
+              className="flex items-center justify-center gap-2 rounded border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
             >
               <Mic size={16} />
               <span>Record Live</span>
@@ -187,7 +187,7 @@ export default function Dashboard() {
 
             {/* Jobs status row */}
             {(stats.pending_jobs > 0 || stats.failed_jobs > 0) && (
-              <div className="bg-white p-5 border border-[#e5e7eb] rounded-lg shadow-sm flex items-center justify-between">
+              <div className="flex flex-col gap-3 rounded-lg border border-[#e5e7eb] bg-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center space-x-3">
                   <AlertCircle className="text-blue-700" size={24} />
                   <div>
@@ -210,7 +210,7 @@ export default function Dashboard() {
             {/* Main dashboard content area */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {/* Recent meetings list */}
-              <div className="bg-white border border-[#e5e7eb] rounded-lg shadow-sm lg:col-span-2 p-6">
+              <div className="rounded-lg border border-[#e5e7eb] bg-white p-4 shadow-sm sm:p-6 lg:col-span-2">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-bold text-gray-900">Recent Meetings</h3>
                   <Link
@@ -228,15 +228,15 @@ export default function Dashboard() {
                 ) : (
                   <div className="divide-y divide-[#e5e7eb]">
                     {stats.recent_meetings.map(meeting => (
-                      <div key={meeting.id} className="py-3 flex items-center justify-between">
-                        <div>
-                          <h4 className="font-medium text-sm text-gray-900">{meeting.title}</h4>
+                      <div key={meeting.id} className="flex items-start justify-between gap-3 py-3">
+                        <div className="min-w-0">
+                          <h4 className="break-words text-sm font-medium text-gray-900">{meeting.title}</h4>
                           <p className="text-xs text-gray-500 mt-0.5">
                             Hosted by {meeting.owner} &bull; {new Date(meeting.date).toLocaleDateString()}
                           </p>
                         </div>
                         <span
-                          className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
+                          className={`shrink-0 text-xs px-2.5 py-1 rounded-full font-semibold border ${
                             meeting.status === "completed"
                               ? "bg-green-50 border-green-200 text-green-700"
                               : meeting.status === "failed"
@@ -298,4 +298,3 @@ export default function Dashboard() {
     </DashboardLayout>
   );
 }
-

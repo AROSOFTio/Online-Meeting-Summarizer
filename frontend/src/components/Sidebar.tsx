@@ -50,15 +50,16 @@ export default function Sidebar() {
     <>
       {/* Mobile Top Header */}
       <header className="lg:hidden h-16 bg-[#1e40af] text-white flex items-center justify-between px-4 z-40 fixed top-0 left-0 right-0">
-        <div className="flex items-center space-x-2">
+        <div className="flex min-w-0 items-center space-x-2">
           <div className="w-8 h-8 bg-white text-blue-700 flex items-center justify-center rounded font-bold">
             S
           </div>
-          <span className="font-semibold text-sm tracking-wide">STARLIGHT SUMMARIZER</span>
+          <span className="truncate text-xs font-semibold tracking-wide sm:text-sm">STARLIGHT SUMMARIZER</span>
         </div>
         <button
           onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="text-white hover:text-gray-200 focus:outline-none"
+          className="shrink-0 rounded p-2 text-white hover:bg-white/10 hover:text-gray-200 focus:outline-none"
+          aria-label={isMobileOpen ? "Close navigation menu" : "Open navigation menu"}
         >
           {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
@@ -75,7 +76,7 @@ export default function Sidebar() {
       {/* Sidebar Container */}
       <aside
         className={`fixed top-0 bottom-0 left-0 bg-white border-r border-[#e5e7eb] flex flex-col z-50 transition-all duration-300 lg:translate-x-0 ${
-          isMobileOpen ? "translate-x-0 w-64" : "-translate-x-full lg:block"
+          isMobileOpen ? "translate-x-0 w-[min(20rem,88vw)]" : "-translate-x-full lg:block"
         } ${sidebarWidth}`}
       >
         {/* Sidebar Header */}

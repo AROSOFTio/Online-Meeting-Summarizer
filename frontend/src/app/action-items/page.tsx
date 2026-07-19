@@ -97,7 +97,7 @@ export default function ActionItemsPage() {
         </div>
 
         {/* Summary counts */}
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
           {[
             { label: "Pending", count: pendingCount, icon: <Circle size={20} className="text-gray-500" />, color: "border-gray-200" },
             { label: "In Progress", count: inProgressCount, icon: <PlayCircle size={20} className="text-blue-600" />, color: "border-blue-200" },
@@ -114,7 +114,7 @@ export default function ActionItemsPage() {
         </div>
 
         {/* Filter bar */}
-        <div className="bg-white border border-gray-200 rounded-lg p-4 flex items-center gap-4 shadow-sm">
+        <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:flex-row sm:items-center sm:gap-4">
           <Filter size={16} className="text-gray-400 shrink-0" />
           <select
             value={statusFilter}
@@ -165,8 +165,8 @@ export default function ActionItemsPage() {
         )}
 
         {items && items.length > 0 && (
-          <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+            <table className="min-w-[860px] w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 bg-gray-50">
                   <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider w-8">#</th>

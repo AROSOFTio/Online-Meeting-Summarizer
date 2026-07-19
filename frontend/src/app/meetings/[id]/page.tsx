@@ -357,12 +357,12 @@ export default function MeetingWorkspacePage() {
 
   return (
     <DashboardLayout>
-      <div className="flex flex-col space-y-6">
+      <div className="flex min-w-0 flex-col space-y-4 sm:space-y-6">
         {/* Meeting Breadcrumb & Header */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-gray-200 pb-5 space-y-4 md:space-y-0">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">{meeting.title}</h1>
-            <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mt-1">
+            <h1 className="break-words text-xl font-bold text-gray-900 sm:text-2xl">{meeting.title}</h1>
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
               <span className="flex items-center space-x-1">
                 <Calendar size={14} />
                 <span>{formattedDate}</span>
@@ -374,7 +374,7 @@ export default function MeetingWorkspacePage() {
             </div>
           </div>
           
-          <div className="flex items-center space-x-3">
+          <div className="flex w-full flex-wrap items-center gap-2 md:w-auto">
             {canEditMinutes && <button
               onClick={() => {
                 setMeetingDraft({
@@ -418,7 +418,7 @@ export default function MeetingWorkspacePage() {
         {editingMeeting && (
           <form
             onSubmit={(event) => { event.preventDefault(); updateMeetingMutation.mutate(); }}
-            className="rounded-lg border border-blue-200 bg-white p-5 shadow-sm space-y-4"
+            className="space-y-4 rounded-lg border border-blue-200 bg-white p-4 shadow-sm sm:p-5"
           >
             <h2 className="font-semibold text-gray-900">Edit meeting details</h2>
             <div className="grid gap-4 md:grid-cols-2">
@@ -455,13 +455,13 @@ export default function MeetingWorkspacePage() {
         )}
 
         {/* Tab Headers */}
-        <div className="border-b border-gray-200">
-          <nav className="flex space-x-4">
+        <div className="-mx-3 overflow-x-auto border-b border-gray-200 px-3 sm:mx-0 sm:px-0">
+          <nav className="flex min-w-max gap-4">
             {(["overview", "recording", "transcript", "summary", "actions"] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`py-3 px-1 border-b-2 font-medium text-sm transition-colors uppercase tracking-wider ${
+                className={`whitespace-nowrap border-b-2 px-1 py-3 text-xs font-medium uppercase tracking-wider transition-colors sm:text-sm ${
                   activeTab === tab
                     ? "border-blue-700 text-blue-700"
                     : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
@@ -478,7 +478,7 @@ export default function MeetingWorkspacePage() {
           
           {/* OVERVIEW TAB */}
           {activeTab === "overview" && (
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-6">
+            <div className="space-y-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
               <div>
                 <h3 className="text-lg font-bold text-gray-900 mb-2">Description</h3>
                 <p className="text-sm text-gray-600 leading-relaxed bg-gray-50 p-4 rounded">
@@ -548,16 +548,16 @@ export default function MeetingWorkspacePage() {
 
           {/* RECORDING TAB */}
           {activeTab === "recording" && (
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-5">
+            <div className="space-y-5 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
               {!meeting.recording ? (
                 <div className="text-center py-10">
                   <p className="text-sm text-gray-500">No recording associated with this meeting.</p>
                 </div>
               ) : (
-                <div className="max-w-xl mx-auto border border-gray-200 rounded-lg p-6 space-y-4">
-                  <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                    <div>
-                      <h4 className="font-bold text-gray-900 text-sm">{meeting.recording.filename}</h4>
+                <div className="mx-auto max-w-xl space-y-4 rounded-lg border border-gray-200 p-4 sm:p-6">
+                  <div className="flex items-start justify-between gap-3 border-b border-gray-100 pb-3">
+                    <div className="min-w-0">
+                      <h4 className="break-all text-sm font-bold text-gray-900">{meeting.recording.filename}</h4>
                       <p className="text-xs text-gray-500 mt-0.5">
                         Duration: {formatDuration(meeting.recording.duration_seconds)} &bull; Size: {meeting.recording.file_size_bytes ? roundSize(meeting.recording.file_size_bytes) : "Unknown"}
                       </p>
@@ -593,7 +593,7 @@ export default function MeetingWorkspacePage() {
 
           {/* TRANSCRIPT TAB */}
           {activeTab === "transcript" && (
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-6">
+            <div className="space-y-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-6">
               {meeting.status === "processing" ? (
                 <div className="text-center py-16">
                   <RefreshCw className="animate-spin text-blue-700 mx-auto mb-3" size={32} />
@@ -671,11 +671,11 @@ export default function MeetingWorkspacePage() {
                             </div>
                           </div>
                         ) : (
-                          <div className="flex-1 flex justify-between items-start group gap-4">
-                            <p className="text-sm text-gray-800 leading-relaxed">{segment.text}</p>
+                          <div className="group flex min-w-0 flex-1 items-start justify-between gap-2 sm:gap-4">
+                            <p className="min-w-0 break-words text-sm leading-relaxed text-gray-800">{segment.text}</p>
                             {canEditMinutes && <button
                               onClick={() => handleEditClick(segment)}
-                              className="opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-blue-700 transition-opacity rounded"
+                              className="shrink-0 rounded p-2 text-gray-500 transition-opacity hover:text-blue-700 sm:opacity-0 sm:group-hover:opacity-100"
                               title="Edit Segment"
                             >
                               <Edit2 size={14} />
@@ -695,11 +695,11 @@ export default function MeetingWorkspacePage() {
             <div className="space-y-5">
               {/* Generate / Regenerate Button */}
               {meeting.status === "completed" && (
-                <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
-                  <p className="text-sm text-gray-600">
+                <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+                  <p className="text-sm leading-relaxed text-gray-600">
                     {summaryData ? "Professional minutes generated from the verified transcript." : "No minutes generated yet."}
                   </p>
-                  <div className="flex items-center space-x-2">
+                  <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:items-center">
                     {/* Export buttons */}
                     {summaryData && ["pdf", "docx"].map(fmt => (
                       <a
@@ -707,7 +707,7 @@ export default function MeetingWorkspacePage() {
                         href={`/api/meetings/${meetingId}/export?format=${fmt}`}
                         target="_blank"
                         rel="noreferrer"
-                        className="flex items-center space-x-1 px-3 py-1.5 border border-gray-300 text-gray-700 hover:bg-gray-50 rounded text-xs font-medium"
+                        className="flex min-h-10 items-center justify-center gap-1 rounded border border-gray-300 px-3 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
                       >
                         <Download size={12} />
                         <span>{fmt.toUpperCase()}</span>
@@ -721,7 +721,7 @@ export default function MeetingWorkspacePage() {
                           }
                         }}
                         disabled={finalizeMutation.isPending}
-                        className="flex items-center space-x-1 px-3 py-1.5 bg-green-700 text-white hover:bg-green-800 rounded text-xs font-semibold"
+                        className="flex min-h-10 items-center justify-center gap-1 rounded bg-green-700 px-3 py-2 text-xs font-semibold text-white hover:bg-green-800"
                       >
                         <CheckCircle size={12} />
                         <span>{finalizeMutation.isPending ? "Finalizing..." : "Finalize & Share"}</span>
@@ -730,7 +730,7 @@ export default function MeetingWorkspacePage() {
                     {finalMinutes?.is_final && (
                       <a
                         href={finalMinutes.download_url || `/api/meetings/${meetingId}/final-minutes`}
-                        className="flex items-center space-x-1 px-3 py-1.5 border border-green-300 text-green-700 hover:bg-green-50 rounded text-xs font-medium"
+                        className="flex min-h-10 items-center justify-center gap-1 rounded border border-green-300 px-3 py-2 text-xs font-medium text-green-700 hover:bg-green-50"
                       >
                         <Download size={12} />
                         <span>Download Final Copy</span>
@@ -743,7 +743,7 @@ export default function MeetingWorkspacePage() {
                             deleteMinutesMutation.mutate();
                           }
                         }}
-                        className="flex items-center space-x-1 px-3 py-1.5 border border-red-300 text-red-700 hover:bg-red-50 rounded text-xs font-medium"
+                        className="flex min-h-10 items-center justify-center gap-1 rounded border border-red-300 px-3 py-2 text-xs font-medium text-red-700 hover:bg-red-50"
                       >
                         <Trash2 size={12} />
                         <span>Delete minutes</span>
@@ -752,7 +752,7 @@ export default function MeetingWorkspacePage() {
                     {canEditMinutes && <button
                       onClick={() => generateSummaryMutation.mutate()}
                       disabled={generateSummaryMutation.isPending}
-                      className="flex items-center space-x-1.5 px-3 py-1.5 bg-blue-700 hover:bg-blue-800 text-white rounded text-xs font-semibold"
+                      className="col-span-2 flex min-h-10 items-center justify-center gap-1.5 rounded bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800 sm:col-span-1"
                     >
                       <Sparkles size={13} />
                       <span>{generateSummaryMutation.isPending ? "Generating..." : summaryData ? "Re-generate Minutes" : "Generate Minutes"}</span>
@@ -778,7 +778,7 @@ export default function MeetingWorkspacePage() {
                 <>
                   {/* Summary Text */}
                   <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
-                    <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+                    <div className="flex items-center justify-between gap-3 border-b border-gray-100 px-4 py-3 sm:px-5">
                       <h3 className="font-semibold text-sm text-gray-900">Executive Summary</h3>
                       {!editingSummary && canEditMinutes && (
                         <button
@@ -789,7 +789,7 @@ export default function MeetingWorkspacePage() {
                         </button>
                       )}
                     </div>
-                    <div className="p-5">
+                    <div className="p-4 sm:p-5">
                       {editingSummary ? (
                         <div className="space-y-3">
                           <textarea
@@ -827,9 +827,9 @@ export default function MeetingWorkspacePage() {
                         <Lightbulb size={14} className="text-yellow-500" />
                         <h3 className="font-semibold text-sm text-gray-900">Key Points</h3>
                       </div>
-                      <div className="p-5 flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 p-4 sm:p-5">
                         {summaryData.key_points.map((kp: string, i: number) => (
-                          <span key={i} className="px-3 py-1.5 bg-blue-50 text-blue-800 text-xs rounded-full border border-blue-100">{kp}</span>
+                          <span key={i} className="max-w-full break-words rounded-lg border border-blue-100 bg-blue-50 px-3 py-1.5 text-xs leading-relaxed text-blue-800">{kp}</span>
                         ))}
                       </div>
                     </div>
@@ -849,9 +849,9 @@ export default function MeetingWorkspacePage() {
                         <Plus size={12} /><span>Add</span>
                       </button>
                     </div>
-                    <div className="p-5 space-y-2">
+                    <div className="space-y-2 p-4 sm:p-5">
                       {showDecisionInput && (
-                        <div className="flex space-x-2 mb-3">
+                        <div className="mb-3 flex flex-col gap-2 sm:flex-row">
                           <input
                             type="text"
                             value={newDecision}
@@ -895,7 +895,7 @@ export default function MeetingWorkspacePage() {
           {/* ── ACTIONS TAB ─────────────────────────────────────────────── */}
           {activeTab === "actions" && (
             <div className="space-y-5">
-              <div className="flex items-center justify-between bg-white border border-gray-200 rounded-lg px-4 py-3 shadow-sm">
+              <div className="flex flex-col gap-2 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-sm sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm text-gray-600">Action items extracted from transcript. Click status to update inline.</p>
                 <a href="/action-items" className="text-xs text-blue-700 hover:underline font-medium">View all →</a>
               </div>
@@ -914,8 +914,8 @@ export default function MeetingWorkspacePage() {
               )}
 
               {actionItems && actionItems.length > 0 && (
-                <div className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-                  <table className="w-full text-sm">
+                <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
+                  <table className="min-w-[720px] w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-200 bg-gray-50">
                         <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">#</th>

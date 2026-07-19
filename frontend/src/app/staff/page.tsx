@@ -178,7 +178,7 @@ export default function StaffPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="min-w-[680px] w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50 border-b border-[#e5e7eb] text-xs font-semibold text-gray-500 uppercase">
                       <th className="p-4">Name</th>
@@ -318,7 +318,7 @@ export default function StaffPage() {
                 )}
               </div>
 
-              <div className="flex items-center space-x-3 pt-2">
+              <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center">
                 <button
                   type="submit"
                   disabled={createMutation.isPending || updateMutation.isPending}

@@ -215,7 +215,7 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
   };
 
   return (
-    <div className="border border-gray-200 rounded-lg p-6 bg-white flex flex-col items-center justify-center space-y-5">
+    <div className="flex flex-col items-center justify-center space-y-5 rounded-lg border border-gray-200 bg-white p-4 sm:p-6">
       <div className="flex items-center space-x-2">
         <div className={`w-3 h-3 rounded-full ${isRecording && !isPaused ? "bg-red-600 animate-pulse" : "bg-gray-400"}`} />
         <span className="text-lg font-bold text-gray-900 mono-font tracking-wide">
@@ -237,7 +237,7 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
       )}
 
       {/* Control buttons */}
-      <div className="flex items-center justify-center space-x-4">
+      <div className="flex w-full flex-col items-stretch justify-center gap-3 sm:w-auto sm:flex-row sm:items-center">
         {!isRecording ? (
           <button
             type="button"

@@ -238,8 +238,8 @@ export default function NewMeetingWizard() {
         </div>
 
         {/* Wizard Steps indicator */}
-        <div className="flex items-center justify-center py-4 bg-white border border-gray-200 rounded-lg max-w-4xl w-full mx-auto">
-          <div className="flex items-center space-x-8 text-sm font-medium">
+        <div className="mx-auto w-full max-w-4xl overflow-x-auto rounded-lg border border-gray-200 bg-white px-3 py-4">
+          <div className="mx-auto flex min-w-max items-center gap-4 text-xs font-medium sm:gap-8 sm:text-sm">
             <span className={`flex items-center space-x-2 ${step >= 1 ? "text-blue-700 font-bold" : "text-gray-400"}`}>
               <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs border-2 ${step >= 1 ? "border-blue-700 bg-blue-50" : "border-gray-300"}`}>1</span>
               <span>Details</span>
@@ -404,10 +404,10 @@ export default function NewMeetingWizard() {
                 </div>
               </div>
 
-              <div className="pt-2 flex justify-end">
+              <div className="flex justify-stretch pt-2 sm:justify-end">
                 <button
                   type="submit"
-                  className="bg-blue-700 hover:bg-blue-800 text-white font-medium py-2 px-6 rounded text-sm transition-colors"
+                  className="w-full rounded bg-blue-700 px-6 py-2 font-medium text-white transition-colors hover:bg-blue-800 sm:w-auto"
                 >
                   Continue to Audio Source
                 </button>
@@ -474,7 +474,7 @@ export default function NewMeetingWizard() {
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                     />
                     <Upload className="mx-auto text-gray-400 mb-2" size={36} />
-                    <span className="text-sm font-semibold text-gray-800">
+                    <span className="max-w-full break-all text-sm font-semibold text-gray-800">
                       {selectedFile ? selectedFile.name : "Choose audio or video file"}
                     </span>
                     <span className="block text-xs text-gray-500 mt-1">
@@ -484,7 +484,7 @@ export default function NewMeetingWizard() {
                 </div>
               )}
 
-              <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+              <div className="flex flex-col-reverse gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="button"
                   onClick={() => setStep(1)}
@@ -506,7 +506,7 @@ export default function NewMeetingWizard() {
           )}
 
           {step === 3 && (
-            <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-8 max-w-2xl mx-auto space-y-6">
+            <div className="mx-auto max-w-2xl space-y-6 rounded-lg border border-gray-200 bg-white p-4 shadow-sm sm:p-8">
               <h3 className="font-bold text-gray-900 text-lg text-center">Processing Meeting Pipeline</h3>
               
               {/* Stages List */}
@@ -581,7 +581,7 @@ export default function NewMeetingWizard() {
                     <p className="text-xs text-red-500 bg-red-50 border border-red-200 p-3 rounded mt-2 text-left">
                       {jobError || "An unexpected error occurred during audio processing."}
                     </p>
-                    <div className="mt-4 flex space-x-3 justify-center">
+                    <div className="mt-4 flex flex-col justify-center gap-3 sm:flex-row">
                       <button
                         onClick={() => setStep(2)}
                         className="bg-white border border-gray-300 text-gray-700 py-1.5 px-4 rounded text-xs hover:bg-gray-50 font-semibold"
