@@ -413,7 +413,7 @@ export default function MeetingWorkspacePage() {
 
                   {/* Private authorised play streaming audio */}
                   <audio
-                    src={`http://localhost:8000/api/recordings/${meeting.recording.id}/play`}
+                    src={`/api/recordings/${meeting.recording.id}/play`}
                     controls
                     className="w-full focus:outline-none"
                     controlsList="nodownload"
@@ -422,7 +422,7 @@ export default function MeetingWorkspacePage() {
                   {/* Authorised Download Option */}
                   <div className="pt-2">
                     <a
-                      href={`http://localhost:8000/api/recordings/${meeting.recording.id}/download`}
+                      href={`/api/recordings/${meeting.recording.id}/download`}
                       download
                       className="inline-flex items-center space-x-2 bg-blue-700 hover:bg-blue-800 text-white font-medium py-2 px-4 rounded text-xs transition-colors"
                     >
