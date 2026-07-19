@@ -74,7 +74,7 @@ export default function StaffPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: (data: { id: number; values: StaffFormValues }) =>
+    mutationFn: (data: { id: number; values: Partial<StaffFormValues> }) =>
       apiRequest(`/api/staff/${data.id}`, {
         method: "PUT",
         body: JSON.stringify(data.values)
@@ -104,8 +104,9 @@ export default function StaffPage() {
   const onSubmit = (data: StaffFormValues) => {
     setFormError(null);
     if (editingUser) {
-      // For updates, password is optional. If left blank, delete it from the payload
-      const payload = { ...data };
+      // Account status is managed only by the explicit Active/Inactive control.
+      // Editing a name, role, email, or password must never change activation.
+      const { is_active: _isActive, ...payload } = data;
       if (!payload.password) {
         delete payload.password;
       }
@@ -201,6 +202,12 @@ export default function StaffPage() {
                           <button
                             onClick={() => {
                               if (staff.id !== currentUser.id) {
+                                if (
+                                  staff.is_active &&
+                                  !window.confirm(`Deactivate ${staff.full_name}? They will no longer be able to sign in.`)
+                                ) {
+                                  return;
+                                }
                                 toggleStatusMutation.mutate(staff);
                               }
                             }}
