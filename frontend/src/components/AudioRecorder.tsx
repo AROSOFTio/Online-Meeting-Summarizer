@@ -72,7 +72,7 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
       if (!isRecording) return;
       animationFrameRef.current = requestAnimationFrame(draw);
 
-      analyser.getByteFrequencyData(dataArray);
+      analyser.getByteFrequencyData(dataArray as any);
 
       ctx.fillStyle = "#f9fafb";
       ctx.fillRect(0, 0, canvas.width, canvas.height);

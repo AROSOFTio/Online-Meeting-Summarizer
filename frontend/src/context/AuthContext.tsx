@@ -33,7 +33,6 @@ async function fetchCurrentUser(): Promise<User | null> {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
-  const [initialized, setInitialized] = useState(false);
   const router = useRouter();
 
   const checkAuth = useCallback(async () => {
@@ -43,15 +42,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(data);
     } finally {
       setIsLoading(false);
-      setInitialized(true);
     }
   }, []);
 
-  // Initialize auth on first render via a promise (no useEffect, no ref)
-  if (!initialized && isLoading) {
-    // Trigger the async check; React will re-render when state updates
+  React.useEffect(() => {
     checkAuth();
-  }
+  }, [checkAuth]);
 
   const login = async (email: string, password: string) => {
     const formData = new URLSearchParams();
