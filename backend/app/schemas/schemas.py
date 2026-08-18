@@ -83,6 +83,18 @@ class ParticipantOut(ParticipantBase):
         from_attributes = True
 
 
+class RecordingOut(BaseModel):
+    id: int
+    meeting_id: int
+    filename: str
+    duration_seconds: Optional[float] = None
+    file_size_bytes: Optional[int] = None
+    mime_type: Optional[str] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
 class MeetingBase(BaseModel):
     title: str
     description: Optional[str] = None
@@ -109,6 +121,7 @@ class MeetingOut(MeetingBase):
     created_at: datetime
     updated_at: datetime
     participants: List[ParticipantOut] = Field(default_factory=list)
+    recording: Optional[RecordingOut] = None
     class Config:
         from_attributes = True
 
