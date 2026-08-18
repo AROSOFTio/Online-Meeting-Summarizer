@@ -29,7 +29,8 @@ export default function Sidebar() {
     { name: "Staff", path: "/staff", icon: Users, show: isAdmin },
     { name: "System Settings", path: "/settings", icon: Settings, show: isAdmin },
   ].filter((item) => item.show);
-  const width = collapsed ? "w-20" : "w-64";
+  const desktopWidth = collapsed ? "lg:w-20" : "lg:w-64";
+  const spacerWidth = collapsed ? "lg:w-20" : "lg:w-64";
 
   return <>
     <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between bg-blue-800 px-4 text-white lg:hidden">
@@ -40,7 +41,7 @@ export default function Sidebar() {
       <button onClick={() => setMobileOpen((value) => !value)} className="rounded p-2 hover:bg-white/10" aria-label="Toggle navigation">{mobileOpen ? <X size={24}/> : <Menu size={24}/>}</button>
     </header>
     {mobileOpen && <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMobileOpen(false)} />}
-    <aside className={`fixed bottom-0 left-0 top-0 z-50 flex flex-col border-r border-gray-200 bg-white transition-all duration-300 lg:translate-x-0 ${mobileOpen ? "translate-x-0 w-[min(20rem,88vw)]" : `-translate-x-full lg:${width}`} ${width}`}>
+    <aside className={`fixed bottom-0 left-0 top-0 z-50 flex w-[min(20rem,88vw)] flex-col border-r border-gray-200 bg-white transition-all duration-300 lg:translate-x-0 ${desktopWidth} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
       <div className="flex h-16 items-center justify-between border-b border-gray-200 px-3">
         <div className="flex min-w-0 items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/logo.svg" alt="Starlight S.S" className="h-11 w-11 shrink-0 object-contain" />
@@ -55,6 +56,6 @@ export default function Sidebar() {
       })}</nav>
       <div className="border-t border-gray-200 bg-gray-50 p-3"><div className="flex items-center justify-between gap-2">{!collapsed && <div className="min-w-0"><div className="truncate text-sm font-semibold text-gray-900">{user.full_name}</div><div className="truncate text-xs capitalize text-gray-500">{user.role.replace("_", " ")}</div></div>}<button onClick={() => logout()} title="Log out" className="rounded p-2 text-gray-500 hover:bg-gray-200 hover:text-red-600"><LogOut size={18}/></button></div></div>
     </aside>
-    <div className={`hidden shrink-0 transition-all duration-300 lg:block ${width}`} />
+    <div className={`hidden shrink-0 transition-all duration-300 lg:block ${spacerWidth}`} />
   </>;
 }
