@@ -3,214 +3,66 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@/context/AuthContext";
+import { AlertTriangle, Calendar, Mail, Mic, PlusCircle, RefreshCw, Search, Users, Video } from "lucide-react";
+
 import DashboardLayout from "@/components/DashboardLayout";
+import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
-import {
-  Search,
-  PlusCircle,
-  Calendar,
-  Users,
-  Video,
-  AlertTriangle,
-  RefreshCw,
-  Clock
-} from "lucide-react";
 
 interface MeetingItem {
   id: number;
   title: string;
   description: string | null;
   date: string;
-  owner_id: number;
   status: "draft" | "processing" | "completed" | "failed";
   is_archived: boolean;
-  created_at: string;
-  participants: Array<{
-    id: number;
-    name: string;
-    email: string | null;
-  }>;
+  participants: Array<{ id: number; name: string; email: string | null }>;
 }
 
 export default function MeetingsDirectoryPage() {
   const { user } = useAuth();
+  const canEdit = user?.role === "admin" || user?.role === "minute_secretary";
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
-  const [isArchivedFilter, setIsArchivedFilter] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
 
-  // Queries matching search and filters
-  const { data: meetings, isLoading, isError, error } = useQuery<MeetingItem[]>({
-    queryKey: ["meetings-list", searchTerm, statusFilter, isArchivedFilter],
+  const { data: meetings = [], isLoading, isError, error, refetch } = useQuery<MeetingItem[]>({
+    queryKey: ["meetings-list", searchTerm, statusFilter, showArchived],
     queryFn: () => {
-      const params = new URLSearchParams();
-      if (searchTerm) params.append("search", searchTerm);
-      if (statusFilter) params.append("status", statusFilter);
-      params.append("is_archived", isArchivedFilter ? "true" : "false");
+      const params = new URLSearchParams({ is_archived: String(showArchived) });
+      if (searchTerm) params.set("search", searchTerm);
+      if (statusFilter) params.set("status", statusFilter);
       return apiRequest(`/api/meetings/?${params.toString()}`);
-    }
+    },
   });
 
-  if (!user) return null;
+  return <DashboardLayout><div className="space-y-6">
+    <div className="flex flex-col gap-4 border-b border-gray-200 pb-5 md:flex-row md:items-center md:justify-between">
+      <div><h1 className="text-2xl font-bold text-gray-900">Meeting Directory</h1><p className="mt-1 text-sm text-gray-500">Real meeting records, attendance, recordings, transcripts and minutes.</p></div>
+      {canEdit && <div className="flex flex-col gap-2 sm:flex-row"><Link href="/create-meeting" className="inline-flex items-center justify-center gap-2 rounded border border-blue-200 bg-white px-4 py-2 text-sm font-semibold text-blue-700"><Mail size={16}/>Schedule & Invite</Link><Link href="/meetings/new" className="inline-flex items-center justify-center gap-2 rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white"><Mic size={16}/>Record / Upload</Link></div>}
+    </div>
 
-  return (
-    <DashboardLayout>
-      <div className="flex flex-col space-y-6">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between border-b border-gray-200 pb-5 space-y-4 md:space-y-0">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Meeting Directory</h1>
-            <p className="text-sm text-gray-500 mt-1">Search, view, and manage all Starlight Secondary School meetings</p>
-          </div>
-          <Link
-            href="/meetings/new"
-            className="flex items-center justify-center space-x-2 bg-blue-700 hover:bg-blue-800 text-white px-4 py-2 rounded text-sm font-medium transition-colors self-start md:self-auto"
-          >
-            <PlusCircle size={16} />
-            <span>New Meeting</span>
-          </Link>
+    <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-white p-4 md:flex-row md:items-center">
+      <div className="relative flex-1"><Search className="absolute left-3 top-2.5 text-gray-400" size={18}/><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search title, attendee or transcript..." className="w-full rounded border border-gray-300 py-2 pl-10 pr-3 text-sm text-gray-900" /></div>
+      <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900"><option value="">All statuses</option><option value="draft">Draft</option><option value="processing">Processing</option><option value="completed">Completed</option><option value="failed">Failed</option></select>
+      <label className="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />Archived</label>
+      <button onClick={() => refetch()} className="rounded border border-gray-300 p-2 text-gray-600"><RefreshCw size={16}/></button>
+    </div>
+
+    {isLoading && <div className="rounded-lg border border-gray-200 bg-white py-16 text-center"><RefreshCw className="mx-auto animate-spin text-blue-700"/><p className="mt-3 text-sm text-gray-500">Loading meetings...</p></div>}
+    {isError && <div className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertTriangle size={18}/>{error?.message || "Could not load meetings"}</div>}
+
+    {!isLoading && !isError && meetings.length === 0 && <div className="rounded-lg border border-gray-200 bg-white py-16 text-center"><Video className="mx-auto mb-3 text-gray-300" size={42}/><h2 className="font-bold text-gray-900">No meetings found</h2><p className="mt-1 text-sm text-gray-500">Create a meeting or change the filters.</p>{canEdit && <Link href="/create-meeting" className="mt-4 inline-flex items-center gap-2 rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white"><PlusCircle size={16}/>Create Meeting</Link>}</div>}
+
+    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+      {meetings.map((meeting) => <article key={meeting.id} className="flex flex-col justify-between rounded-lg border border-gray-200 bg-white shadow-sm">
+        <div className="space-y-4 p-5">
+          <div className="flex items-start justify-between gap-3"><h2 className="line-clamp-2 font-bold text-gray-950">{meeting.title}</h2><span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${meeting.status === "completed" ? "border-green-200 bg-green-50 text-green-700" : meeting.status === "failed" ? "border-red-200 bg-red-50 text-red-700" : meeting.status === "processing" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-gray-200 bg-gray-50 text-gray-600"}`}>{meeting.status}</span></div>
+          <p className="line-clamp-3 text-xs leading-5 text-gray-500">{meeting.description || "No description provided."}</p>
+          <div className="space-y-2 text-xs text-gray-600"><div className="flex items-center gap-2"><Calendar size={14} className="text-gray-400"/>{new Date(meeting.date).toLocaleDateString()}</div><div className="flex items-center gap-2"><Users size={14} className="text-gray-400"/>{meeting.participants.length} participant{meeting.participants.length === 1 ? "" : "s"}</div></div>
         </div>
-
-        {/* Filter bar */}
-        <div className="bg-white p-4 border border-gray-200 rounded-lg shadow-sm flex flex-col md:flex-row md:items-center gap-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-            <input
-              type="text"
-              placeholder="Search title, host, attendee, or transcript content..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
-            />
-          </div>
-
-          <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center md:w-auto">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full rounded border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-1 focus:ring-blue-500 sm:w-auto"
-            >
-              <option value="">All Statuses</option>
-              <option value="draft">Draft (No recording)</option>
-              <option value="processing">Processing (AI active)</option>
-              <option value="completed">Completed</option>
-              <option value="failed">Failed</option>
-            </select>
-
-            <label className="flex items-center space-x-2 text-sm text-gray-700 font-medium select-none cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isArchivedFilter}
-                onChange={(e) => setIsArchivedFilter(e.target.checked)}
-                className="rounded border-gray-300 text-blue-700 focus:ring-blue-500"
-              />
-              <span>Show Archived</span>
-            </label>
-          </div>
-        </div>
-
-        {/* Loading state */}
-        {isLoading && (
-          <div className="flex flex-col items-center justify-center py-20 bg-white border border-gray-200 rounded-lg">
-            <RefreshCw className="animate-spin text-blue-700 mb-3" size={24} />
-            <p className="text-gray-500 text-sm font-medium">Retrieving meeting logs...</p>
-          </div>
-        )}
-
-        {/* Error state */}
-        {isError && (
-          <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex items-center space-x-2">
-            <AlertTriangle size={18} />
-            <span>Failed to load meetings: {error?.message || "Internal server error"}</span>
-          </div>
-        )}
-
-        {/* Meeting grid */}
-        {meetings && (
-          <>
-            {meetings.length === 0 ? (
-              <div className="text-center py-20 bg-white border border-gray-200 rounded-lg">
-                <Video className="mx-auto text-gray-300 mb-3" size={40} />
-                <h3 className="font-bold text-gray-900 text-base">No meetings found</h3>
-                <p className="text-gray-500 text-sm mt-1 max-w-md mx-auto">
-                  Try adjusting your search terms or create a new meeting to begin transcription.
-                </p>
-                <Link
-                  href="/meetings/new"
-                  className="inline-flex items-center space-x-2 bg-blue-700 text-white py-1.5 px-4 rounded text-sm font-medium mt-4 hover:bg-blue-800"
-                >
-                  <PlusCircle size={16} />
-                  <span>New Meeting</span>
-                </Link>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-                {meetings.map((meeting) => (
-                  <div
-                    key={meeting.id}
-                    className="bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md transition-shadow flex flex-col justify-between"
-                  >
-                    <div className="p-5 space-y-4">
-                      {/* Card Top Title & Status */}
-                      <div className="flex items-start justify-between">
-                        <h3 className="font-bold text-gray-950 text-base line-clamp-2" title={meeting.title}>
-                          {meeting.title}
-                        </h3>
-                        <span
-                          className={`text-[10px] uppercase font-semibold px-2 py-0.5 rounded-full border shrink-0 ${
-                            meeting.status === "completed"
-                              ? "bg-green-50 border-green-200 text-green-700"
-                              : meeting.status === "failed"
-                              ? "bg-red-50 border-red-200 text-red-700"
-                              : meeting.status === "processing"
-                              ? "bg-blue-50 border-blue-200 text-blue-700 animate-pulse"
-                              : "bg-gray-100 border-gray-200 text-gray-600"
-                          }`}
-                        >
-                          {meeting.status}
-                        </span>
-                      </div>
-
-                      {/* Description */}
-                      <p className="text-gray-500 text-xs line-clamp-3">
-                        {meeting.description || "No description provided."}
-                      </p>
-
-                      {/* Card Metadata */}
-                      <div className="space-y-1.5 text-xs text-gray-600 pt-2">
-                        <div className="flex items-center space-x-2">
-                          <Calendar size={14} className="text-gray-400" />
-                          <span>{new Date(meeting.date).toLocaleDateString()}</span>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <Users size={14} className="text-gray-400" />
-                          <span>{meeting.participants.length} Attendee{meeting.participants.length !== 1 ? "s" : ""}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Card Footer Actions */}
-                    <div className="bg-gray-50 px-5 py-3 border-t border-gray-100 rounded-b-lg flex items-center justify-between">
-                      <Link
-                        href={`/meetings/${meeting.id}`}
-                        className="text-xs font-bold text-blue-700 hover:text-blue-800 hover:underline"
-                      >
-                        View Workspace
-                      </Link>
-                      {meeting.status === "processing" && (
-                        <div className="flex items-center space-x-1.5 text-[10px] text-blue-600 font-semibold uppercase animate-pulse">
-                          <Clock size={12} />
-                          <span>Processing</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </DashboardLayout>
-  );
+        <div className="grid grid-cols-1 gap-2 border-t border-gray-100 bg-gray-50 p-3 sm:grid-cols-2"><Link href={`/meetings/${meeting.id}`} className="rounded border border-gray-300 bg-white px-3 py-2 text-center text-xs font-bold text-blue-700">Open Workspace</Link>{canEdit && <Link href={`/meetings/${meeting.id}/invite`} className="rounded bg-blue-700 px-3 py-2 text-center text-xs font-bold text-white">Invite Participants</Link>}</div>
+      </article>)}
+    </div>
+  </div></DashboardLayout>;
 }
