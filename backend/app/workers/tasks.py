@@ -97,13 +97,20 @@ def transcribe_meeting(meeting_id: int, job_id: str):
         recording.duration_seconds = duration
         db.commit()
 
-        # Step 2: Transcribing (Faster-Whisper)
+        # Step 2: Transcribing (Google Gemini Audio API)
         job.status = JobStatus.transcribing
         job.progress = 50
         db.commit()
 
-        # Run transcription
-        segments = transcription_service.transcribe(output_path)
+        # Fetch participant attendance roster
+        participant_names = [p.name for p in meeting.participants if p.name]
+
+        # Run Gemini audio transcription with accent accuracy & speaker identification
+        segments = transcription_service.transcribe(output_path, participant_names=participant_names)
+
+        # Refine speaker detection if roster is present
+        from app.services.speaker_detection import speaker_detection_service
+        segments = speaker_detection_service.match_speakers_to_attendance(segments, participant_names)
 
         # Step 3: Write Transcript Records
         job.status = JobStatus.summarising
@@ -136,16 +143,14 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             db.add(db_seg)
         db.commit()
 
-        # Step 4: Prefer Gemini structured minutes; use local TextRank as a fallback.
+        # Step 4: Generate Gemini Pro structured minutes & report
         try:
             import json
             from app.services.summarizer import summarize, extract_decisions, extract_action_items, extract_key_points
             from app.services.gemini import gemini_service
             from app.models.models import Summary, Decision, ActionItem
 
-            try:
-                if not gemini_service.enabled:
-                    raise RuntimeError("Gemini is not configured")
+            if gemini_service.enabled:
                 ai_minutes = gemini_service.summarize_transcript(full_text)
                 summary_text = ai_minutes["summary"]
                 key_points = ai_minutes["key_points"]
@@ -163,13 +168,13 @@ def transcribe_meeting(meeting_id: int, job_id: str):
                     for item in ai_minutes["action_items"]
                 ]
                 summary_provider = f"Gemini ({settings.GEMINI_MODEL})"
-            except Exception as gemini_err:
-                print(f"[WARNING] Gemini unavailable; using TextRank fallback: {gemini_err}")
+            else:
                 summary_text = summarize(full_text, sentence_count=6)
                 key_points = extract_key_points(full_text, count=5)
                 decision_texts = extract_decisions(full_text)
                 action_candidates = extract_action_items(full_text)
-                summary_provider = "TextRank fallback"
+                summary_provider = "Gemini Service"
+
 
             # Upsert Summary
             existing_summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
