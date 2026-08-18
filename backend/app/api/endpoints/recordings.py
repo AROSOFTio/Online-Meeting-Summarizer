@@ -1,16 +1,29 @@
 import os
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Request
-from fastapi.responses import FileResponse
-from sqlalchemy.orm import Session
+import uuid
 from pathlib import Path
 
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
+
 from app.core import deps
-from app.core.config import settings
 from app.core.audit import log_action
-from app.models.models import Meeting, Recording, User, UserRole, Participant
+from app.core.config import settings
+from app.models.models import Meeting, MeetingStatus, Recording, User, UserRole
 from app.services.audio import validate_media_file
 
 router = APIRouter()
+
+
+def _can_read(meeting: Meeting, user: User) -> bool:
+    if user.role in {UserRole.admin, UserRole.minute_secretary}:
+        return True
+    if user.role == UserRole.staff and meeting.status == MeetingStatus.completed:
+        return True
+    if meeting.owner_id == user.id:
+        return True
+    return user.email in {p.email for p in meeting.participants if p.email}
+
 
 @router.post("/upload/{meeting_id}")
 async def upload_recording(
@@ -18,158 +31,80 @@ async def upload_recording(
     request: Request,
     file: UploadFile = File(...),
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_minutes_editor)
+    current_user: User = Depends(deps.get_minutes_editor),
 ):
-    """
-    Streamed upload of audio recordings.
-    Validates MIME type, extension, and file size before saving.
-    """
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-
-    # Authorisation check
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to upload files for this meeting"
-        )
+        raise HTTPException(status_code=403, detail="You do not have permission to upload files for this meeting")
 
-    # We read file size from Content-Length or seek
     file.file.seek(0, os.SEEK_END)
     file_size = file.file.tell()
-    file.file.seek(0) # Reset pointer
+    file.file.seek(0)
+    valid, error = validate_media_file(file.filename or "", file_size, file.content_type)
+    if not valid:
+        raise HTTPException(status_code=400, detail=error)
 
-    # Run validation
-    is_valid, err_msg = validate_media_file(file.filename or "", file_size, file.content_type)
-    if not is_valid:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=err_msg)
-
-    # Ensure upload directory exists
     os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-
-    # Assemble unique filepath
-    file_ext = Path(file.filename or "").suffix.lower()
-    saved_filename = f"raw_{meeting_id}_{uuid_str()}{file_ext}"
-    saved_filepath = os.path.join(settings.UPLOAD_DIR, saved_filename)
-
-    # Secure streamed save to disk to prevent memory bloating
+    extension = Path(file.filename or "").suffix.lower()
+    saved_path = os.path.join(settings.UPLOAD_DIR, f"raw_{meeting_id}_{str(uuid.uuid4())[:8]}{extension}")
     try:
-        with open(saved_filepath, "wb") as buffer:
-            # Read in 1MB chunks
+        with open(saved_path, "wb") as output:
             while True:
                 chunk = await file.read(1024 * 1024)
                 if not chunk:
                     break
-                buffer.write(chunk)
-    except Exception as e:
-        if os.path.exists(saved_filepath):
-            os.remove(saved_filepath)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to write recording to disk: {str(e)}"
-        )
+                output.write(chunk)
+    except Exception as exc:
+        if os.path.exists(saved_path):
+            os.remove(saved_path)
+        raise HTTPException(status_code=500, detail=f"Failed to write recording: {exc}") from exc
 
-    # Remove existing recording if replacing
-    existing_rec = db.query(Recording).filter(Recording.meeting_id == meeting_id).first()
-    if existing_rec:
-        if os.path.exists(existing_rec.filepath):
-            try:
-                os.remove(existing_rec.filepath)
-            except Exception:
-                pass
-        db.delete(existing_rec)
-        db.commit()
-
-    # Save to database
+    existing = db.query(Recording).filter(Recording.meeting_id == meeting_id).first()
+    old_path = existing.filepath if existing else None
+    if existing:
+        db.delete(existing)
+        db.flush()
     recording = Recording(
         meeting_id=meeting_id,
         filename=file.filename or "recording",
-        filepath=saved_filepath,
+        filepath=saved_path,
         file_size_bytes=file_size,
         mime_type=file.content_type,
-        uploaded_by_id=current_user.id
+        uploaded_by_id=current_user.id,
     )
     db.add(recording)
+    meeting.status = MeetingStatus.draft
     db.commit()
     db.refresh(recording)
+    if old_path and old_path != saved_path and os.path.exists(old_path):
+        try:
+            os.remove(old_path)
+        except OSError:
+            pass
+    log_action(db, action="upload_recording", details=f"Uploaded {recording.filename} for meeting {meeting_id}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
+    return {"id": recording.id, "meeting_id": recording.meeting_id, "filename": recording.filename, "file_size_bytes": recording.file_size_bytes, "mime_type": recording.mime_type}
 
-    log_action(
-        db,
-        action="upload_recording",
-        details=f"Uploaded recording file {recording.filename} for meeting ID {meeting_id}",
-        user_id=current_user.id,
-        user_email=current_user.email,
-        ip_address=request.client.host if request.client else None
-    )
 
-    return {
-        "id": recording.id,
-        "meeting_id": recording.meeting_id,
-        "filename": recording.filename,
-        "file_size_bytes": recording.file_size_bytes,
-        "mime_type": recording.mime_type
-    }
+def _recording_or_404(recording_id: int, db: Session, user: User) -> Recording:
+    recording = db.query(Recording).filter(Recording.id == recording_id).first()
+    if not recording:
+        raise HTTPException(status_code=404, detail="Recording not found")
+    if not _can_read(recording.meeting, user):
+        raise HTTPException(status_code=403, detail="You are not authorised to access this recording")
+    if not os.path.exists(recording.filepath):
+        raise HTTPException(status_code=404, detail="Physical audio file is missing from storage")
+    return recording
+
 
 @router.get("/{recording_id}/download")
-def download_recording(
-    recording_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
-):
-    """Secure direct file download endpoint verifying user permissions."""
-    recording = db.query(Recording).filter(Recording.id == recording_id).first()
-    if not recording:
-        raise HTTPException(status_code=404, detail="Recording not found")
+def download_recording(recording_id: int, db: Session = Depends(deps.get_db), current_user: User = Depends(deps.get_current_user)):
+    recording = _recording_or_404(recording_id, db, current_user)
+    return FileResponse(path=recording.filepath, media_type=recording.mime_type or "application/octet-stream", filename=recording.filename)
 
-    meeting = recording.meeting
-    # Authorisation check
-    if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
-        participant_emails = [p.email for p in meeting.participants if p.email]
-        if current_user.email not in participant_emails:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not authorised to download this file"
-            )
-
-    if not os.path.exists(recording.filepath):
-        raise HTTPException(status_code=404, detail="Physical audio file missing on storage disk")
-
-    return FileResponse(
-        path=recording.filepath,
-        media_type=recording.mime_type,
-        filename=recording.filename
-    )
 
 @router.get("/{recording_id}/play")
-def play_recording(
-    recording_id: int,
-    db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
-):
-    """Streaming audio playback endpoint verifying user permissions."""
-    recording = db.query(Recording).filter(Recording.id == recording_id).first()
-    if not recording:
-        raise HTTPException(status_code=404, detail="Recording not found")
-
-    meeting = recording.meeting
-    # Authorisation check
-    if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
-        participant_emails = [p.email for p in meeting.participants if p.email]
-        if current_user.email not in participant_emails:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="You are not authorised to stream this file"
-            )
-
-    if not os.path.exists(recording.filepath):
-        raise HTTPException(status_code=404, detail="Physical audio file missing on storage disk")
-
-    return FileResponse(
-        path=recording.filepath,
-        media_type=recording.mime_type
-    )
-
-def uuid_str() -> str:
-    import uuid
-    return str(uuid.uuid4())[:8]
+def play_recording(recording_id: int, db: Session = Depends(deps.get_db), current_user: User = Depends(deps.get_current_user)):
+    recording = _recording_or_404(recording_id, db, current_user)
+    return FileResponse(path=recording.filepath, media_type=recording.mime_type or "application/octet-stream")
