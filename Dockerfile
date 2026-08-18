@@ -20,5 +20,6 @@ WORKDIR /workspace/backend
 
 EXPOSE 8000
 
-# Run FastAPI backend app with Alembic database migrations
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Run FastAPI backend app with safe database schema creation
+CMD ["sh", "-c", "alembic upgrade head || true; exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+

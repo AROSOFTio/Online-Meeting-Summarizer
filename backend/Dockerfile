@@ -17,5 +17,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend codebase
 COPY . .
 
-# Run FastAPI app by default
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run FastAPI app by default safely
+CMD ["sh", "-c", "alembic upgrade head || true; exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+

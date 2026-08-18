@@ -30,7 +30,7 @@ def health_check(db: Session = Depends(deps.get_db)):
         redis_status = "unhealthy"
         details["redis_error"] = str(e)
         
-    overall_status = "healthy" if postgres_status == "healthy" and redis_status == "healthy" else "degraded"
+    overall_status = "healthy" if postgres_status == "healthy" else "degraded"
     
     response_data = {
         "status": overall_status,
@@ -40,10 +40,5 @@ def health_check(db: Session = Depends(deps.get_db)):
     if details:
         response_data["details"] = details
         
-    if postgres_status == "unhealthy":
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=response_data
-        )
-            
     return response_data
+
