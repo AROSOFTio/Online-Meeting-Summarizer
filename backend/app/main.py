@@ -9,19 +9,36 @@ from app.models.models import User, UserRole
 from app.core.security import get_password_hash
 from app.api.endpoints import auth, staff, settings as settings_router, health, stats, meetings, recordings, transcripts, summaries, action_items, exports
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Always create the base schema before applying compatibility patches.
+    # On a fresh PostgreSQL database the enum/table below may not exist yet;
+    # attempting ALTER TYPE/TABLE first would terminate Uvicorn during startup.
+    Base.metadata.create_all(bind=engine)
+
     if not settings.is_sqlite:
         with engine.begin() as connection:
-            connection.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'minute_secretary'"))
-            connection.execute(text(
-                "ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS "
-                "attendance_status VARCHAR(20) NOT NULL DEFAULT 'present'"
-            ))
-    # Ensure the schema exists before querying or seeding application data.
-    Base.metadata.create_all(bind=engine)
-        
-    # Seed default administrator account if database is empty
+            userrole_exists = connection.execute(
+                text("SELECT to_regtype('userrole') IS NOT NULL")
+            ).scalar()
+            if userrole_exists:
+                connection.execute(
+                    text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'minute_secretary'")
+                )
+
+            participants_table_exists = connection.execute(
+                text("SELECT to_regclass('public.meeting_participants') IS NOT NULL")
+            ).scalar()
+            if participants_table_exists:
+                connection.execute(
+                    text(
+                        "ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS "
+                        "attendance_status VARCHAR(20) NOT NULL DEFAULT 'present'"
+                    )
+                )
+
+    # Seed default administrator account if database is empty.
     db = SessionLocal()
     try:
         admin_email = settings.ADMIN_EMAIL
@@ -33,22 +50,24 @@ async def lifespan(app: FastAPI):
                 hashed_password=hashed_pwd,
                 full_name="Starlight Administrator",
                 role=UserRole.admin,
-                is_active=True
+                is_active=True,
             )
             db.add(new_admin)
             db.commit()
             print(f"Seeded default administrator: {admin_email}")
     finally:
         db.close()
+
     yield
     # Shutdown actions (if any)
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url="/api/openapi.json",
     docs_url="/api/docs",
     redoc_url="/api/redoc",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # CORS Middleware configurations
