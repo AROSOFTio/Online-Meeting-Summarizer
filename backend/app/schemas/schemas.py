@@ -1,25 +1,30 @@
-from pydantic import BaseModel, EmailStr
-from typing import Optional, List
-from datetime import datetime, date
-from app.models.models import UserRole, MeetingStatus, JobStatus
+from datetime import datetime
+from typing import List, Optional
 
-# Token schemas
+from pydantic import BaseModel, EmailStr, Field
+
+from app.models.models import JobStatus, MeetingStatus, UserRole
+
+
 class Token(BaseModel):
     access_token: str
     token_type: str
 
+
 class TokenPayload(BaseModel):
     sub: Optional[str] = None
 
-# User schemas
+
 class UserBase(BaseModel):
     email: EmailStr
     full_name: str
     role: UserRole
     is_active: bool = True
 
+
 class UserCreate(UserBase):
     password: str
+
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None
@@ -28,26 +33,26 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = None
 
+
 class UserOut(UserBase):
     id: int
     created_at: datetime
     updated_at: datetime
-
     class Config:
         from_attributes = True
 
-# Settings schemas
+
 class SettingItem(BaseModel):
     key: str
     value: str
-
     class Config:
         from_attributes = True
+
 
 class SettingUpdate(BaseModel):
     value: str
 
-# Audit Log Schema
+
 class AuditLogOut(BaseModel):
     id: int
     user_id: Optional[int]
@@ -56,35 +61,49 @@ class AuditLogOut(BaseModel):
     details: Optional[str]
     ip_address: Optional[str]
     created_at: datetime
-
     class Config:
         from_attributes = True
 
-# Participant schemas
+
 class ParticipantBase(BaseModel):
     name: str
     email: Optional[str] = None
     role_title: Optional[str] = None
     attendance_status: str = "present"
 
+
 class ParticipantCreate(ParticipantBase):
     pass
+
 
 class ParticipantOut(ParticipantBase):
     id: int
     created_at: datetime
-
     class Config:
         from_attributes = True
 
-# Meeting schemas
+
+class RecordingOut(BaseModel):
+    id: int
+    meeting_id: int
+    filename: str
+    duration_seconds: Optional[float] = None
+    file_size_bytes: Optional[int] = None
+    mime_type: Optional[str] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+
 class MeetingBase(BaseModel):
     title: str
     description: Optional[str] = None
     date: datetime
 
+
 class MeetingCreate(MeetingBase):
-    participants: List[ParticipantCreate] = []
+    participants: List[ParticipantCreate] = Field(default_factory=list)
+
 
 class MeetingUpdate(BaseModel):
     title: Optional[str] = None
@@ -93,6 +112,7 @@ class MeetingUpdate(BaseModel):
     is_archived: Optional[bool] = None
     status: Optional[MeetingStatus] = None
 
+
 class MeetingOut(MeetingBase):
     id: int
     owner_id: int
@@ -100,12 +120,23 @@ class MeetingOut(MeetingBase):
     is_archived: bool
     created_at: datetime
     updated_at: datetime
-    participants: List[ParticipantOut] = []
-
+    participants: List[ParticipantOut] = Field(default_factory=list)
+    recording: Optional[RecordingOut] = None
     class Config:
         from_attributes = True
 
-# Processing Job schema
+
+class InvitationCreate(BaseModel):
+    emails: List[EmailStr] = Field(default_factory=list)
+    send_email: bool = True
+
+
+class InvitationJoin(BaseModel):
+    full_name: str = Field(min_length=2, max_length=255)
+    email: Optional[EmailStr] = None
+    role_title: str = Field(default="Member", min_length=2, max_length=255)
+
+
 class ProcessingJobOut(BaseModel):
     id: str
     meeting_id: int
@@ -114,40 +145,39 @@ class ProcessingJobOut(BaseModel):
     progress: int
     created_at: datetime
     updated_at: datetime
-
     class Config:
         from_attributes = True
 
-# Summary schemas
+
 class SummaryOut(BaseModel):
     id: int
     meeting_id: int
     text: str
-    key_points: List[str] = []
+    key_points: List[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime
-
     class Config:
         from_attributes = True
+
 
 class SummaryUpdate(BaseModel):
     text: Optional[str] = None
     key_points: Optional[List[str]] = None
 
-# Decision schemas
+
 class DecisionOut(BaseModel):
     id: int
     meeting_id: int
     text: str
     created_at: datetime
-
     class Config:
         from_attributes = True
+
 
 class DecisionCreate(BaseModel):
     text: str
 
-# ActionItem schemas
+
 class ActionItemBase(BaseModel):
     text: str
     assignee_id: Optional[int] = None
@@ -155,8 +185,10 @@ class ActionItemBase(BaseModel):
     deadline: Optional[str] = None
     status: Optional[str] = "pending"
 
+
 class ActionItemCreate(ActionItemBase):
     meeting_id: int
+
 
 class ActionItemUpdate(BaseModel):
     text: Optional[str] = None
@@ -165,12 +197,12 @@ class ActionItemUpdate(BaseModel):
     deadline: Optional[str] = None
     status: Optional[str] = None
 
+
 class ActionItemOut(ActionItemBase):
     id: int
     meeting_id: int
     assignee_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
-
     class Config:
         from_attributes = True

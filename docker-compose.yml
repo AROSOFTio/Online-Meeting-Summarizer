@@ -1,4 +1,3 @@
-
 services:
   db:
     image: postgres:16-alpine
@@ -27,7 +26,7 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    command: ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    command: ["sh", "-c", "alembic upgrade head || true; exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     depends_on:
       db:
         condition: service_healthy
@@ -39,14 +38,29 @@ services:
       SECRET_KEY: ${SECRET_KEY:-supersecretkeydefaultforstarlightsecondaryschool2026!}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@starlightsecondaryschool.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Starlight2026!}
-      SCHOOL_NAME: Starlight Secondary School
-      TIMEZONE: Africa/Kampala
+      SCHOOL_NAME: ${SCHOOL_NAME:-Starlight Secondary School}
+      TIMEZONE: ${TIMEZONE:-Africa/Kampala}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://oms.arosoftlabs.com}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@arofi.net}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-true}
+      SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-false}
+      SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-true}
     expose:
       - "8000"
     volumes:
       - recordings:/workspace/storage
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5).read()"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 20s
 
   worker:
     build: ./backend
@@ -60,8 +74,19 @@ services:
       DATABASE_URL: postgresql://starlight:${DB_PASSWORD:-StarlightDB2026!}@db:5432/meeting_summarizer
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-supersecretkeydefaultforstarlightsecondaryschool2026!}
+      SCHOOL_NAME: ${SCHOOL_NAME:-Starlight Secondary School}
+      TIMEZONE: ${TIMEZONE:-Africa/Kampala}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://oms.arosoftlabs.com}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-465}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@arofi.net}
+      SMTP_USE_SSL: ${SMTP_USE_SSL:-true}
+      SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-false}
+      SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-true}
     volumes:
       - recordings:/workspace/storage
     command: ["celery", "-A", "app.workers.tasks", "worker", "--loglevel=info", "--concurrency=2"]
@@ -75,8 +100,13 @@ services:
       - backend
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://oms.arosoftlabs.com}
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 20s
+      timeout: 8s
+      retries: 5
+      start_period: 30s
 
 volumes:
   pgdata:
   recordings:
-

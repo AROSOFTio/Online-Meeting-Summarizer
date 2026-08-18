@@ -1,84 +1,59 @@
-from typing import List, Dict, Any, Optional
-import httpx
 import json
+from typing import Any, Dict, List
+
+from google.genai import types
+
 from app.core.config import settings
+from app.services.gemini_client import get_gemini_client, resolve_gemini_model
+
 
 class SpeakerDetectionService:
-    """
-    Detects and attributes speaker names based on participant attendance rosters.
-    """
-    def __init__(self):
-        self.endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+    """Conservative attendee-name refinement for transcript speaker labels."""
 
     def match_speakers_to_attendance(
-        self, 
-        transcript_segments: List[Dict[str, Any]], 
-        attendance_roster: List[str]
+        self,
+        transcript_segments: List[Dict[str, Any]],
+        attendance_roster: List[str],
     ) -> List[Dict[str, Any]]:
-        """
-        Takes raw transcript segments and attendance roster, using Gemini to refine speaker turn assignments.
-        """
-        if not attendance_roster or not transcript_segments:
-            return transcript_segments
-
-        if not settings.GEMINI_API_KEY:
-            # Fallback assignment if no key
-            for seg in transcript_segments:
-                if not seg.get("speaker") or seg.get("speaker") in ["Speaker 1", "Unknown"]:
-                    seg["speaker"] = attendance_roster[0] if attendance_roster else "Speaker 1"
+        if not attendance_roster or not transcript_segments or not settings.GEMINI_API_KEY:
             return transcript_segments
 
         prompt = (
-            f"You are a meeting assistant. Here is a list of confirmed meeting attendees: {attendance_roster}.\n"
-            "Below is a set of transcribed speech segments. Match each speaker label to one of the attendee names "
-            "based on vocal self-introductions, direct addressing, or contextual turn-taking.\n\n"
-            f"Segments:\n{json.dumps(transcript_segments, indent=2)}\n\n"
-            "Return JSON matching the schema: array of segments with start, end, text, speaker (mapped name)."
+            "Map speaker labels to confirmed attendee names only where the segment text supports the "
+            "identity through a self-introduction, direct address, or strong contextual evidence. "
+            "Do not guess. Keep an existing generic Speaker N label when uncertain.\n"
+            f"Confirmed attendees: {attendance_roster}\n"
+            f"Segments: {json.dumps(transcript_segments, ensure_ascii=False)}"
         )
-
         schema = {
-            "type": "ARRAY",
+            "type": "array",
             "items": {
-                "type": "OBJECT",
+                "type": "object",
                 "properties": {
-                    "start": {"type": "NUMBER"},
-                    "end": {"type": "NUMBER"},
-                    "text": {"type": "STRING"},
-                    "speaker": {"type": "STRING"}
+                    "start": {"type": "number"},
+                    "end": {"type": "number"},
+                    "text": {"type": "string"},
+                    "speaker": {"type": "string"},
                 },
-                "required": ["start", "end", "text", "speaker"]
-            }
+                "required": ["start", "end", "text", "speaker"],
+                "additionalProperties": False,
+            },
         }
-
-        payload = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "responseSchema": schema,
-                "temperature": 0.1
-            }
-        }
-
         try:
-            url = self.endpoint.format(model=settings.GEMINI_MODEL)
-            with httpx.Client(timeout=60) as client:
-                response = client.post(
-                    url,
-                    headers={
-                        "x-goog-api-key": settings.GEMINI_API_KEY,
-                        "Content-Type": "application/json"
-                    },
-                    json=payload
-                )
-                response.raise_for_status()
-
-            data = response.json()
-            parts = data["candidates"][0]["content"]["parts"]
-            raw_text = "".join(part.get("text", "") for part in parts)
-            refined_segments = json.loads(raw_text)
-            return refined_segments
-        except Exception as e:
-            print(f"[WARNING] Speaker detection refinement error: {e}")
+            response = get_gemini_client().models.generate_content(
+                model=resolve_gemini_model(),
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_json_schema=schema,
+                    temperature=0.0,
+                ),
+            )
+            result = json.loads(response.text or "[]")
+            return result if isinstance(result, list) and result else transcript_segments
+        except Exception as exc:
+            print(f"[WARNING] Speaker-name refinement skipped: {exc}")
             return transcript_segments
+
 
 speaker_detection_service = SpeakerDetectionService()

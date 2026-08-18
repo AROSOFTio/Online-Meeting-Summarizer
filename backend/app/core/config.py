@@ -1,7 +1,9 @@
 from pathlib import Path
 from typing import Optional
+
 from pydantic import EmailStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
 
 class Settings(BaseSettings):
     # App Settings
@@ -9,6 +11,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "supersecretkeydefaultforstarlightsecondaryschool2026!"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
+    PUBLIC_APP_URL: str = "https://oms.arosoftlabs.com"
 
     # Database & Redis Settings
     DATABASE_URL: str = "sqlite:///./meeting_summarizer.db"
@@ -20,18 +23,19 @@ class Settings(BaseSettings):
 
     # School & System Settings Defaults
     SCHOOL_NAME: str = "Starlight Secondary School"
-    SCHOOL_LOGO_URL: str = "/images/logo.png"
+    SCHOOL_LOGO_URL: str = "/api/settings/logo"
     TIMEZONE: str = "Africa/Kampala"
     RETENTION_PERIOD_DAYS: int = 365
     WHISPER_MODEL: str = "tiny"
 
     # Gemini AI API Configuration
     GEMINI_API_KEY: Optional[str] = None
-    GEMINI_MODEL: str = "gemini-1.5-flash"
-
+    # The old Gemini 1.5 model family was retired. Keep this current default in
+    # one place so transcription, diarisation and minutes generation agree.
+    GEMINI_MODEL: str = "gemini-3.6-flash"
 
     # SMTP notifications
-    SMTP_HOST: str = "mail.arofi.net"
+    SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 465
     SMTP_USERNAME: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
@@ -54,20 +58,24 @@ class Settings(BaseSettings):
     def assemble_db_connection(cls, v: Optional[str]) -> str:
         if not v:
             return "sqlite:///./meeting_summarizer.db"
-        # SQLAlchemy 2.0 requires postgresql:// instead of postgres://
         if v.startswith("postgres://"):
             return v.replace("postgres://", "postgresql://", 1)
         return v
 
+    @field_validator("PUBLIC_APP_URL", mode="before")
+    @classmethod
+    def normalise_public_url(cls, v: Optional[str]) -> str:
+        return (v or "https://oms.arosoftlabs.com").rstrip("/")
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        extra="ignore"
+        extra="ignore",
     )
+
 
 settings = Settings()
 
-# Ensure directories exist
 Path(settings.STORAGE_DIR).mkdir(parents=True, exist_ok=True)
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 Path(settings.EXPORT_DIR).mkdir(parents=True, exist_ok=True)

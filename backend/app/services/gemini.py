@@ -1,14 +1,13 @@
 import json
 from typing import Any
 
-import httpx
+from google.genai import types
 
 from app.core.config import settings
+from app.services.gemini_client import get_gemini_client, resolve_gemini_model
 
 
 class GeminiService:
-    endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-
     @property
     def enabled(self) -> bool:
         return bool(settings.GEMINI_API_KEY)
@@ -16,70 +15,52 @@ class GeminiService:
     def summarize_transcript(self, transcript: str) -> dict[str, Any]:
         if not self.enabled:
             raise RuntimeError("GEMINI_API_KEY is not configured")
+        if not transcript.strip():
+            raise RuntimeError("Cannot summarize an empty transcript")
 
         prompt = (
-            "Act as a professional minute secretary. Prepare formal, publication-ready meeting "
-            "minutes using only facts stated in the transcript. Write the summary in clear, "
-            "grammatically correct past tense, recording the main agenda discussions, resolutions "
-            "and conclusions in logical order. Do not invent names, dates, attendance or decisions. "
-            "Return a polished summary, up to 10 key points, explicit decisions, "
-            "and action items. Each action item must contain description, assignee (empty "
-            "string when unknown), priority (low, medium, or high), and due_date (ISO date "
-            "or empty string). Transcript:\n\n"
-            f"{transcript}"
+            "Act as a professional minute secretary for Starlight Secondary School. Prepare formal, "
+            "publication-ready meeting minutes using only facts stated in the transcript. Write in "
+            "clear past tense and keep discussions, resolutions and conclusions in logical order. "
+            "Never invent names, dates, attendance, decisions or deadlines. Return a polished "
+            "summary, up to 10 key points, explicit decisions, and action items. Each action item "
+            "must include description, assignee (empty when unknown), priority (low, medium or high), "
+            "and due_date (ISO date or empty).\n\nTRANSCRIPT:\n" + transcript
         )
         schema = {
-            "type": "OBJECT",
+            "type": "object",
             "properties": {
-                "summary": {"type": "STRING"},
-                "key_points": {"type": "ARRAY", "items": {"type": "STRING"}},
-                "decisions": {"type": "ARRAY", "items": {"type": "STRING"}},
+                "summary": {"type": "string"},
+                "key_points": {"type": "array", "items": {"type": "string"}},
+                "decisions": {"type": "array", "items": {"type": "string"}},
                 "action_items": {
-                    "type": "ARRAY",
+                    "type": "array",
                     "items": {
-                        "type": "OBJECT",
+                        "type": "object",
                         "properties": {
-                            "description": {"type": "STRING"},
-                            "assignee": {"type": "STRING"},
-                            "priority": {
-                                "type": "STRING",
-                                "enum": ["low", "medium", "high"],
-                            },
-                            "due_date": {"type": "STRING"},
+                            "description": {"type": "string"},
+                            "assignee": {"type": "string"},
+                            "priority": {"type": "string", "enum": ["low", "medium", "high"]},
+                            "due_date": {"type": "string"},
                         },
                         "required": ["description", "assignee", "priority", "due_date"],
+                        "additionalProperties": False,
                     },
                 },
             },
             "required": ["summary", "key_points", "decisions", "action_items"],
+            "additionalProperties": False,
         }
-        payload = {
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-            "generationConfig": {
-                "responseMimeType": "application/json",
-                "responseSchema": schema,
-                "temperature": 0.2,
-            },
-        }
-        url = self.endpoint.format(model=settings.GEMINI_MODEL)
-        with httpx.Client(timeout=90) as client:
-            response = client.post(
-                url,
-                headers={
-                    "x-goog-api-key": settings.GEMINI_API_KEY or "",
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-            )
-            response.raise_for_status()
-
-        data = response.json()
-        candidates = data.get("candidates") or []
-        if not candidates:
-            raise RuntimeError("Gemini returned no summary candidate")
-        parts = candidates[0].get("content", {}).get("parts", [])
-        text = "".join(part.get("text", "") for part in parts)
-        result = json.loads(text)
+        response = get_gemini_client().models.generate_content(
+            model=resolve_gemini_model(),
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_json_schema=schema,
+                temperature=0.2,
+            ),
+        )
+        result = json.loads((response.text or "").strip())
         if not result.get("summary"):
             raise RuntimeError("Gemini returned an empty summary")
         return result
