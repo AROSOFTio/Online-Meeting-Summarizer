@@ -1,65 +1,48 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from app.core.config import settings
-from app.core.database import Base, engine, SessionLocal
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-from app.models.models import User, UserRole
+
+from app.api.endpoints import action_items, auth, exports, health, meetings, recordings, settings as settings_router, staff, stats, summaries, transcripts
+from app.core.config import settings
+from app.core.database import Base, SessionLocal, engine
 from app.core.security import get_password_hash
-from app.api.endpoints import auth, staff, settings as settings_router, health, stats, meetings, recordings, transcripts, summaries, action_items, exports
+from app.models.models import User, UserRole
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Always create the base schema before applying compatibility patches.
-    # On a fresh PostgreSQL database the enum/table below may not exist yet;
-    # attempting ALTER TYPE/TABLE first would terminate Uvicorn during startup.
+    # Create every currently declared table (including invitations) before
+    # applying compatibility patches to older production databases.
     Base.metadata.create_all(bind=engine)
 
     if not settings.is_sqlite:
         with engine.begin() as connection:
-            userrole_exists = connection.execute(
-                text("SELECT to_regtype('userrole') IS NOT NULL")
-            ).scalar()
-            if userrole_exists:
-                connection.execute(
-                    text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'minute_secretary'")
-                )
+            if connection.execute(text("SELECT to_regtype('userrole') IS NOT NULL")).scalar():
+                connection.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'minute_secretary'"))
+            if connection.execute(text("SELECT to_regclass('public.meeting_participants') IS NOT NULL")).scalar():
+                connection.execute(text(
+                    "ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS "
+                    "attendance_status VARCHAR(20) NOT NULL DEFAULT 'present'"
+                ))
 
-            participants_table_exists = connection.execute(
-                text("SELECT to_regclass('public.meeting_participants') IS NOT NULL")
-            ).scalar()
-            if participants_table_exists:
-                connection.execute(
-                    text(
-                        "ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS "
-                        "attendance_status VARCHAR(20) NOT NULL DEFAULT 'present'"
-                    )
-                )
-
-    # Seed default administrator account if database is empty.
     db = SessionLocal()
     try:
-        admin_email = settings.ADMIN_EMAIL
-        admin = db.query(User).filter(User.email == admin_email).first()
+        admin = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
         if not admin:
-            hashed_pwd = get_password_hash(settings.ADMIN_PASSWORD)
-            new_admin = User(
-                email=admin_email,
-                hashed_password=hashed_pwd,
+            db.add(User(
+                email=settings.ADMIN_EMAIL,
+                hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
                 full_name="Starlight Administrator",
                 role=UserRole.admin,
                 is_active=True,
-            )
-            db.add(new_admin)
+            ))
             db.commit()
-            print(f"Seeded default administrator: {admin_email}")
+            print(f"Seeded default administrator: {settings.ADMIN_EMAIL}")
     finally:
         db.close()
-
     yield
-    # Shutdown actions (if any)
 
 
 app = FastAPI(
@@ -70,17 +53,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS Middleware configurations
+# Production is same-origin through the Next.js proxy. Keep the public origin
+# explicit so credentialed requests are also valid during direct API testing.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[settings.PUBLIC_APP_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# Mount endpoints
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(staff.router, prefix="/api/staff", tags=["Staff Management"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
