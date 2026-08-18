@@ -43,8 +43,8 @@ services:
       TIMEZONE: Africa/Kampala
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     volumes:
       - recordings:/workspace/storage
 
@@ -69,8 +69,8 @@ services:
   frontend:
     build: ./frontend
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    expose:
+      - "3000"
     depends_on:
       - backend
     environment:
