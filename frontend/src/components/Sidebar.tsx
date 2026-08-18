@@ -3,166 +3,58 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/context/AuthContext";
 import {
-  LayoutDashboard,
-  PlusCircle,
-  Calendar,
-  CheckSquare,
-  Mic,
-  Users,
-  Settings,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-  Menu,
-  X
+  Calendar, CheckSquare, ChevronLeft, ChevronRight, LayoutDashboard, LogOut,
+  Menu, Mic, PlusCircle, Settings, Users, X,
 } from "lucide-react";
+
+import { useAuth } from "@/context/AuthContext";
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
-
+  const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
   if (!user) return null;
 
   const isAdmin = user.role === "admin";
-  const canEditMinutes = isAdmin || user.role === "minute_secretary";
+  const canEdit = isAdmin || user.role === "minute_secretary";
+  const items = [
+    { name: "Overview", path: "/dashboard", icon: LayoutDashboard, show: true },
+    { name: "Schedule & Invite", path: "/create-meeting", icon: PlusCircle, show: canEdit },
+    { name: "Record / Upload", path: "/meetings/new", icon: Mic, show: canEdit },
+    { name: "Join Meeting", path: "/join-meeting", icon: Users, show: true },
+    { name: "Meetings", path: "/meetings", icon: Calendar, show: true },
+    { name: "Action Items", path: "/action-items", icon: CheckSquare, show: true },
+    { name: "Staff", path: "/staff", icon: Users, show: isAdmin },
+    { name: "System Settings", path: "/settings", icon: Settings, show: isAdmin },
+  ].filter((item) => item.show);
+  const width = collapsed ? "w-20" : "w-64";
 
-  const navigationItems = [
-    { name: "Overview", path: "/dashboard", icon: LayoutDashboard, adminOnly: false },
-    { name: "Create Meeting", path: "/create-meeting", icon: PlusCircle, editorOnly: true, adminOnly: false },
-    { name: "Join Meeting", path: "/join-meeting", icon: Users, adminOnly: false },
-    { name: "Meeting Room", path: "/meeting", icon: Mic, adminOnly: false },
-    { name: "Meeting Minutes Report", path: "/report", icon: Calendar, adminOnly: false },
-    { name: "Meetings List", path: "/meetings", icon: Calendar, adminOnly: false },
-    { name: "Action Items", path: "/action-items", icon: CheckSquare, adminOnly: false },
-    { name: "Staff", path: "/staff", icon: Users, adminOnly: true },
-    { name: "System Settings", path: "/settings", icon: Settings, adminOnly: true },
-  ];
-
-
-  const visibleItems = navigationItems.filter(item =>
-    (!item.adminOnly || isAdmin) && (!("editorOnly" in item) || !item.editorOnly || canEditMinutes)
-  );
-
-  const sidebarWidth = isCollapsed ? "w-20" : "w-64";
-
-  return (
-    <>
-      {/* Mobile Top Header */}
-      <header className="lg:hidden h-16 bg-[#1e40af] text-white flex items-center justify-between px-4 z-40 fixed top-0 left-0 right-0">
-        <div className="flex min-w-0 items-center space-x-2">
-          <div className="w-8 h-8 bg-white text-blue-700 flex items-center justify-center rounded font-bold">
-            S
-          </div>
-          <span className="truncate text-xs font-semibold tracking-wide sm:text-sm">STARLIGHT SUMMARIZER</span>
+  return <>
+    <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between bg-blue-800 px-4 text-white lg:hidden">
+      <div className="flex min-w-0 items-center gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/logo.svg" alt="Starlight S.S" className="h-10 w-10 rounded bg-white object-contain p-0.5" />
+        <div className="min-w-0"><div className="truncate text-xs font-bold">STARLIGHT S.S</div><div className="text-[9px] tracking-widest text-blue-100">RISE AND SHINE</div></div>
+      </div>
+      <button onClick={() => setMobileOpen((value) => !value)} className="rounded p-2 hover:bg-white/10" aria-label="Toggle navigation">{mobileOpen ? <X size={24}/> : <Menu size={24}/>}</button>
+    </header>
+    {mobileOpen && <div className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => setMobileOpen(false)} />}
+    <aside className={`fixed bottom-0 left-0 top-0 z-50 flex flex-col border-r border-gray-200 bg-white transition-all duration-300 lg:translate-x-0 ${mobileOpen ? "translate-x-0 w-[min(20rem,88vw)]" : `-translate-x-full lg:${width}`} ${width}`}>
+      <div className="flex h-16 items-center justify-between border-b border-gray-200 px-3">
+        <div className="flex min-w-0 items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/logo.svg" alt="Starlight S.S" className="h-11 w-11 shrink-0 object-contain" />
+          {!collapsed && <div className="min-w-0"><div className="truncate text-xs font-extrabold text-blue-900">STARLIGHT S.S</div><div className="text-[9px] font-semibold tracking-[0.14em] text-gray-500">MEETING SUMMARIZER</div></div>}
         </div>
-        <button
-          onClick={() => setIsMobileOpen(!isMobileOpen)}
-          className="shrink-0 rounded p-2 text-white hover:bg-white/10 hover:text-gray-200 focus:outline-none"
-          aria-label={isMobileOpen ? "Close navigation menu" : "Open navigation menu"}
-        >
-          {isMobileOpen ? <X size={24} /> : <Menu size={24} />}
-        </button>
-      </header>
-
-      {/* Mobile Drawer Backdrop */}
-      {isMobileOpen && (
-        <div
-          className="lg:hidden fixed inset-0 bg-black/50 z-40"
-          onClick={() => setIsMobileOpen(false)}
-        />
-      )}
-
-      {/* Sidebar Container */}
-      <aside
-        className={`fixed top-0 bottom-0 left-0 bg-white border-r border-[#e5e7eb] flex flex-col z-50 transition-all duration-300 lg:translate-x-0 ${
-          isMobileOpen ? "translate-x-0 w-[min(20rem,88vw)]" : "-translate-x-full lg:block"
-        } ${sidebarWidth}`}
-      >
-        {/* Sidebar Header */}
-        <div className="h-16 flex items-center justify-between px-4 border-b border-[#e5e7eb] bg-white">
-          <div className="flex items-center space-x-3 overflow-hidden">
-            <div className="w-9 h-9 bg-blue-50 text-blue-700 flex items-center justify-center rounded font-bold shrink-0 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/api/settings/logo" alt="" className="h-full w-full object-contain" onError={(event) => { event.currentTarget.style.display = "none"; }} />
-              <span className="absolute">S</span>
-            </div>
-            {!isCollapsed && (
-              <div className="flex flex-col">
-                <span className="font-bold text-xs text-gray-900 leading-none">STARLIGHT SEC</span>
-                <span className="text-[10px] text-gray-500 font-medium">SUMMARIZER</span>
-              </div>
-            )}
-          </div>
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className="hidden lg:flex p-1 rounded hover:bg-gray-100 text-gray-500 hover:text-gray-700 focus:outline-none"
-          >
-            {isCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
-          </button>
-        </div>
-
-        {/* Navigation Items */}
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {visibleItems.map(item => {
-            const isActive = pathname === item.path;
-            const Icon = item.icon;
-
-            return (
-              <Link
-                key={item.path}
-                href={item.path}
-                onClick={() => setIsMobileOpen(false)}
-                className={`group flex items-center space-x-3 px-3 py-2.5 rounded text-sm font-medium transition-colors relative ${
-                  isActive
-                    ? "bg-blue-50 text-blue-700"
-                    : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                }`}
-                title={isCollapsed ? item.name : undefined}
-              >
-                <Icon size={18} className={isActive ? "text-blue-700" : "text-gray-400 group-hover:text-gray-600"} />
-                {!isCollapsed && <span>{item.name}</span>}
-
-                {/* Collapsed Tooltip */}
-                {isCollapsed && (
-                  <div className="absolute left-16 scale-0 rounded bg-gray-900 p-2 text-xs font-semibold text-white shadow-md transition-all duration-100 group-hover:scale-100 z-50 whitespace-nowrap">
-                    {item.name}
-                  </div>
-                )}
-              </Link>
-            );
-          })}
-        </nav>
-
-        {/* User Info & Logout */}
-        <div className="p-3 border-t border-[#e5e7eb] bg-gray-50 shrink-0">
-          <div className="flex items-center justify-between">
-            {!isCollapsed && (
-              <div className="flex flex-col min-w-0 pr-2">
-                <span className="text-sm font-semibold text-gray-900 truncate">
-                  {user.full_name}
-                </span>
-                <span className="text-xs text-gray-500 capitalize truncate">
-                  {user.role}
-                </span>
-              </div>
-            )}
-            <button
-              onClick={() => logout()}
-              className="p-2 rounded hover:bg-gray-200 text-gray-500 hover:text-red-600 transition-colors focus:outline-none"
-              title="Logout"
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
-        </div>
-      </aside>
-      
-      {/* Spacer to push content right on desktop */}
-      <div className={`hidden lg:block shrink-0 transition-all duration-300 ${sidebarWidth}`} />
-    </>
-  );
+        <button onClick={() => setCollapsed((value) => !value)} className="hidden rounded p-1 text-gray-500 hover:bg-gray-100 lg:block">{collapsed ? <ChevronRight size={18}/> : <ChevronLeft size={18}/>}</button>
+      </div>
+      <nav className="flex-1 space-y-1 overflow-y-auto p-3">{items.map((item) => {
+        const active = pathname === item.path || (item.path === "/meetings" && pathname.startsWith("/meetings/"));
+        const Icon = item.icon;
+        return <Link key={item.path} href={item.path} onClick={() => setMobileOpen(false)} title={collapsed ? item.name : undefined} className={`flex items-center gap-3 rounded px-3 py-2.5 text-sm font-medium ${active ? "bg-blue-50 text-blue-800" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"}`}><Icon size={18}/>{!collapsed && <span>{item.name}</span>}</Link>;
+      })}</nav>
+      <div className="border-t border-gray-200 bg-gray-50 p-3"><div className="flex items-center justify-between gap-2">{!collapsed && <div className="min-w-0"><div className="truncate text-sm font-semibold text-gray-900">{user.full_name}</div><div className="truncate text-xs capitalize text-gray-500">{user.role.replace("_", " ")}</div></div>}<button onClick={() => logout()} title="Log out" className="rounded p-2 text-gray-500 hover:bg-gray-200 hover:text-red-600"><LogOut size={18}/></button></div></div>
+    </aside>
+    <div className={`hidden shrink-0 transition-all duration-300 lg:block ${width}`} />
+  </>;
 }
