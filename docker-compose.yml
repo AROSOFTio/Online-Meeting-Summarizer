@@ -77,8 +77,16 @@ services:
       - backend
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://oms.arosoftlabs.com}
-
+    labels:
+      - "coolify.managed=true"
+      - "coolify.port=3000"
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`oms.arosoftlabs.com`)"
+      - "traefik.http.routers.frontend.entrypoints=websecure"
+      - "traefik.http.routers.frontend.tls=true"
+      - "traefik.http.services.frontend.loadbalancer.server.port=3000"
 
 volumes:
   pgdata:
   recordings:
+
