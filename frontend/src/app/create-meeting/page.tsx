@@ -23,9 +23,10 @@ export default function CreateMeetingPage() {
   const handleCreateMeeting = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title) return;
-    const code = Math.random().toString(36).substring(2, 8);
-    const link = `https://starlightsecondaryschool.com/join/${code}`;
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://oms.arosoftlabs.com";
+    const link = `${origin}/join/${code}`;
     setGeneratedLink(link);
+
   };
 
   return (
