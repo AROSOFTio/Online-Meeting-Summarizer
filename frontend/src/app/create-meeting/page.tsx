@@ -6,7 +6,7 @@ import { Link as LinkIcon, Plus, Users, Calendar, ArrowRight } from "lucide-reac
 import { useRouter } from "next/navigation";
 
 export default function CreateMeetingPage() {
-  const router = Router();
+  const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [participantInput, setParticipantInput] = useState("");
@@ -24,9 +24,9 @@ export default function CreateMeetingPage() {
     e.preventDefault();
     if (!title) return;
     const origin = typeof window !== "undefined" ? window.location.origin : "https://oms.arosoftlabs.com";
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     const link = `${origin}/join/${code}`;
     setGeneratedLink(link);
-
   };
 
   return (
@@ -137,6 +137,3 @@ export default function CreateMeetingPage() {
   );
 }
 
-function Router() {
-  return useRouter();
-}

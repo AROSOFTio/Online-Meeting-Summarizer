@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
+import React, { Suspense } from "react";
 import { DashboardLayout } from "@/components/DashboardLayout";
 import { MeetingRoom } from "@/components/MeetingRoom";
 import { useSearchParams } from "next/navigation";
 
-export default function MeetingPage() {
+function MeetingContent() {
   const searchParams = useSearchParams();
   const code = searchParams.get("code") || "starlight-main";
   const name = searchParams.get("name") || "Session Organizer";
@@ -17,14 +17,22 @@ export default function MeetingPage() {
   ];
 
   return (
+    <MeetingRoom
+      meetingId={1}
+      meetingTitle="Starlight Secondary School Board Meeting"
+      joinCode={code}
+      initialParticipants={participants}
+    />
+  );
+}
+
+export default function MeetingPage() {
+  return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto space-y-6">
-        <MeetingRoom
-          meetingId={1}
-          meetingTitle="Starlight Secondary School Board Meeting"
-          joinCode={code}
-          initialParticipants={participants}
-        />
+        <Suspense fallback={<div className="text-slate-400 text-sm">Loading meeting room...</div>}>
+          <MeetingContent />
+        </Suspense>
       </div>
     </DashboardLayout>
   );
