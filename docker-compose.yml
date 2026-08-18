@@ -39,11 +39,12 @@ services:
       DATABASE_URL: postgresql://starlight:${DB_PASSWORD:-StarlightDB2026!}@db:5432/meeting_summarizer
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-supersecretkeydefaultforstarlightsecondaryschool2026!}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@starlight.sc.ug}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@starlightsecondaryschool.com}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Starlight2026!}
       SCHOOL_NAME: Starlight Secondary School
       TIMEZONE: Africa/Kampala
-      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
     volumes:
       - recordings:/workspace/storage
 
@@ -59,7 +60,9 @@ services:
       DATABASE_URL: postgresql://starlight:${DB_PASSWORD:-StarlightDB2026!}@db:5432/meeting_summarizer
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-supersecretkeydefaultforstarlightsecondaryschool2026!}
-      WHISPER_MODEL: ${WHISPER_MODEL:-base}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-1.5-flash}
+
     volumes:
       - recordings:/workspace/storage
     command: ["celery", "-A", "app.workers.tasks", "worker", "--loglevel=info", "--concurrency=2"]
