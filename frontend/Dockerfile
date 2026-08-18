@@ -23,6 +23,7 @@ ENV NODE_ENV=production
 COPY --from=base /app/.next ./.next
 COPY --from=base /app/node_modules ./node_modules
 COPY --from=base /app/package.json ./package.json
+COPY --from=base /app/next.config.ts ./next.config.ts
 COPY --from=base /app/public ./public
 
 EXPOSE 3000
