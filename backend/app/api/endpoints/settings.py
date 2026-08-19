@@ -15,11 +15,7 @@ from app.models.models import SystemSetting, User
 router = APIRouter()
 LOGO_SETTING_KEY = "school_logo_file"
 BUNDLED_LOGO = Path(__file__).resolve().parents[2] / "static" / "starlight-logo.jpg"
-ALLOWED_LOGO_TYPES = {
-    "image/png": ".png",
-    "image/jpeg": ".jpg",
-    "image/webp": ".webp",
-}
+ALLOWED_LOGO_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
 
 DEFAULT_SETTINGS = {
     "school_name": "Starlight Secondary School",
@@ -32,7 +28,6 @@ DEFAULT_SETTINGS = {
     "organization_registration": "",
     "timezone": "Africa/Kampala",
     "retention_period_days": "365",
-    "whisper_model": "disabled-gemini-transcription",
 }
 
 
@@ -51,10 +46,7 @@ def get_db_setting(db: Session, key: str) -> str:
 
 @router.get("", include_in_schema=False)
 @router.get("/")
-def get_settings(
-    db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user),
-):
+def get_settings(db: Session = Depends(deps.get_db), current_user: User = Depends(deps.get_current_user)):
     return {key: get_db_setting(db, key) for key in DEFAULT_SETTINGS}
 
 
@@ -123,12 +115,5 @@ def update_settings(
             db.add(SystemSetting(key=key, value=value))
         changed.append(key)
     db.commit()
-    log_action(
-        db,
-        action="update_settings",
-        details=f"Admin updated settings: {changed}",
-        user_id=current_user.id,
-        user_email=current_user.email,
-        ip_address=request.client.host if request.client else None,
-    )
+    log_action(db, action="update_settings", details=f"Admin updated settings: {changed}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return {key: get_db_setting(db, key) for key in DEFAULT_SETTINGS}
