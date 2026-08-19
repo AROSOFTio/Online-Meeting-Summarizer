@@ -9,12 +9,12 @@ const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"]
 
 export const metadata: Metadata = {
   title: "Starlight S.S Meeting Summarizer",
-  description: "Secure meeting recording, transcription, attendance and official minutes for Starlight Secondary School.",
+  description: "Meeting recording, attendance, transcription and official minutes for Starlight Secondary School.",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/starlight-logo.jpg", type: "image/jpeg" }],
-    shortcut: "/starlight-logo.jpg",
-    apple: "/starlight-logo.jpg",
+    icon: [{ url: "/app-icon.svg", type: "image/svg+xml" }],
+    shortcut: "/app-icon.svg",
+    apple: "/app-icon.svg",
   },
   appleWebApp: {
     capable: true,
