@@ -1,61 +1,50 @@
 # Phase Status Tracking
 
-This file tracks the status of each development phase, including their respective acceptance criteria.
-
----
-
 ## Phase 1: Foundation, Security and Data Model
 **Status: Completed**
 
-### Acceptance Criteria Checklist
-- [x] The entire stack starts cleanly
-- [x] Migrations run on an empty database
-- [x] Administrator can log in
-- [x] Administrator can create, edit and deactivate staff
-- [x] Staff cannot access administrator APIs or pages
-- [x] Database and Redis health are reported accurately
-- [x] Secrets are absent from source control
-- [x] All Phase 1 tests, linting and type checks pass
+- Authentication and role enforcement
+- PostgreSQL/SQLite data model and startup compatibility
+- Staff administration
+- Health checks and environment-based secrets
 
----
-
-## Phase 2: Meetings, Recording and Real Transcription
+## Phase 2: Meetings, Recording and AI Transcription
 **Status: Completed**
 
-### Acceptance Criteria Checklist
-- [x] A user can record microphone audio and save it
-- [x] A user can upload every supported format
-- [x] The worker converts and transcribes real audio
-- [x] Transcription progress updates without refreshing
-- [x] Transcript timestamps are stored
-- [x] Users can edit and save the transcript
-- [x] Unauthorised users cannot access another meeting
-- [x] Worker restart does not corrupt completed records
-- [x] All Phase 2 tests pass
+- Browser recording and supported media uploads
+- FFmpeg conversion/normalisation
+- Redis/Celery background processing
+- Google Gemini transcription with timestamps/speaker turns
+- Editable transcript and revision/audit trail
+- Retry without duplicate meetings
 
----
-
-## Phase 3: Summaries, Action Items, Exports and Complete UI
+## Phase 3: Minutes, Invitations, Actions and Exports
 **Status: Completed**
 
-### Acceptance Criteria Checklist
-- [x] TextRank extractive summarizer runs on completed transcripts (no LLM, no hallucinations)
-- [x] Key decisions auto-extracted using keyword matching
-- [x] Action item candidates auto-extracted with deadline hints
-- [x] Summary is manually editable via API (with audit log)
-- [x] Decisions can be added and deleted manually
-- [x] Action items can be created, updated (status/priority/deadline/assignee), and deleted
-- [x] Action items tracker page shows all items across all meetings with filters
-- [x] PDF export generates a styled, multi-section document (title, attendees, summary, decisions, action items, transcript)
-- [x] DOCX export generates a properly formatted Word document
-- [x] TXT export generates plain-text meeting minutes
-- [x] Summary and Actions tabs in meeting workspace are wired to real API data
-- [x] Auto-summarization triggers in background after transcription completes
-- [x] All 30 Phase 3 tests pass (TextRank unit, export unit, summaries API, action items API)
-- [x] Committed and pushed to GitHub (commit 39ced6d)
-- [x] Deployed to production server (95.111.234.34)
+- Gemini structured minutes with deterministic TextRank fallback
+- Decisions and editable action items
+- Responsible-person pick-or-type workflow
+- Email invitations and WhatsApp/general meeting links
+- Public attendance registration
+- PDF/DOCX/TXT exports with official Starlight branding
+- Separate transcript appendix page
+- Meeting/action filters and workspace
 
----
+## Phase 4: Hardening, Operations and Documentation
+**Status: Completed**
 
-## Phase 4: Hardening, Full Verification and Documentation
-**Status: Pending**
+- [x] Removed obsolete Whisper/Faster-Whisper configuration and UI
+- [x] Settings shows actual Gemini model/key readiness rather than a fake local model selector
+- [x] SMTP/database/queue readiness displayed to administrators
+- [x] Notification indicator for completed/failed jobs and open tasks
+- [x] Administrator audit activity view
+- [x] Validated PostgreSQL/SQLite backup creation and download
+- [x] Offline validated restore command
+- [x] Recording retention cleanup restricted to archived meetings
+- [x] Complete administrator/staff user manual
+- [x] Requirements matrix aligned with current production architecture
+- [x] PostgreSQL client tools included in the backend image for backup/restore
+- [x] Tests updated/added for Settings and system operations
+
+### Deployment verification
+After each production deployment, perform the smoke-test sequence in `docs/user_manual.md`: login, create/invite meeting, public join, short media processing, transcript/minutes review, export, notification, backup and Settings status checks.
