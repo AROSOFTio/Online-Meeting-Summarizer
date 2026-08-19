@@ -1,58 +1,72 @@
 # Online Meeting Summarizer
 
 **Case Study:** Starlight Secondary School, Amuria District, Uganda  
-**Kumi University — Undergraduate Academic Project**
+**Academic Project:** Kumi University
 
-A three-tier client-server web application for recording, transcribing, summarising and managing school meeting minutes. Built with Next.js, FastAPI, PostgreSQL, Redis, Faster-Whisper and TextRank.
+A production-oriented three-tier web application for scheduling, inviting participants, recording/uploading meetings, AI transcription, editable minutes, action-item tracking, official exports and operational administration.
 
----
+## Production stack
 
-## Quick Start (Local Development — No Docker)
+| Layer | Technology |
+|---|---|
+| Frontend | Next.js, React, TypeScript, Tailwind CSS |
+| Backend | FastAPI, SQLAlchemy, Alembic |
+| Database | PostgreSQL 16 (SQLite fallback for local tests/dev) |
+| Queue | Redis + Celery |
+| Media | FFmpeg |
+| AI transcription | Google Gemini Files API + Gemini model configured by `GEMINI_MODEL` |
+| Minutes generation | Gemini structured output with deterministic TextRank fallback |
+| Authentication | Argon2id + JWT cookies |
+| Deployment | Docker Compose / Coolify |
+
+**Faster-Whisper/Whisper is not used by the production transcription path.**
+
+## Main features
+
+- Administrator, Minute Secretary and Staff roles.
+- Schedule meetings and invite participants by email.
+- General meeting links for WhatsApp sharing.
+- Public `/join/<code>` attendance registration with full name and title/position.
+- Browser microphone recording or WAV/MP3/M4A/MP4/WebM/OGG upload.
+- FFmpeg normalisation before Gemini transcription.
+- Timestamped speaker turns with editable transcript and revision history.
+- Editable minutes, key points, decisions and action items.
+- Responsible person can be selected from known people or typed manually.
+- Action-item filtering by status, priority, responsible person and deadline range.
+- PDF, DOCX and TXT minutes; transcript appendix begins on a new page in PDF/DOCX.
+- Starlight S.S official logo/branding in the application and exports.
+- Notification indicator for completed/failed processing and open action items.
+- System Settings showing actual Gemini/SMTP/database readiness.
+- Validated database backup downloads, offline restore tooling and retention cleanup.
+- Administrator audit activity view.
+
+## Local development
 
 ### Prerequisites
-
 - Python 3.12+
 - Node.js 20+
 - npm 10+
-- FFmpeg (optional for Phase 1; required for transcription in Phase 2+)
-
-### 1. Clone and configure
+- FFmpeg
+- Redis for Celery when exercising background jobs
 
 ```bash
-git clone <repository-url> startlight
-cd startlight
+git clone <repository-url> starlight-meeting-summarizer
+cd starlight-meeting-summarizer
 cp .env.example .env
 ```
 
-### 2. Backend setup
+Backend:
 
 ```bash
 cd backend
 python -m venv .venv
-
-# Windows
-.venv\Scripts\activate
-
-# Linux/macOS
-source .venv/bin/activate
-
+# Windows: .venv\Scripts\activate
+# Linux/macOS: source .venv/bin/activate
 pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
 
-### 3. Start the backend
-
-```bash
-cd backend
-.venv\Scripts\python -m uvicorn app.main:app --reload --port 8000
-```
-
-The API will seed a default administrator on first startup:
-- **Email:** `admin@starlight.sc.ug`
-- **Password:** `Starlight2026!`
-
-API documentation: http://localhost:8000/api/docs
-
-### 4. Frontend setup
+Frontend:
 
 ```bash
 cd frontend
@@ -60,102 +74,59 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:3000 and log in with the administrator credentials above.
-
-### 5. Run tests
+Run verification:
 
 ```bash
-# Backend
 cd backend
-.venv\Scripts\python -m pytest
+pytest
 
-# Frontend
-cd frontend
+cd ../frontend
 npm run lint
 npx tsc --noEmit
+npm run build
 ```
 
----
-
-## Docker Compose (Full Stack)
+## Docker Compose / Coolify
 
 ```bash
 cp .env.example .env
-# Edit .env to set SECRET_KEY and DB_PASSWORD
+# Set real secrets/API/SMTP values before production use.
 docker compose up --build
 ```
 
-Services:
-| Service  | Port | Description               |
-|----------|------|---------------------------|
-| frontend | 3000 | Next.js web application   |
-| backend  | 8000 | FastAPI REST API           |
-| db       | 5432 | PostgreSQL 16              |
-| redis    | 6379 | Redis 7 (Celery broker)    |
-| worker   | —    | Celery background worker   |
+Compose services are `frontend`, `backend`, `worker`, `db` and `redis`. In Coolify the public domain should route to the frontend service on its internal port 3000; the frontend proxies `/api/*` to the backend internally.
 
----
+## Important environment variables
 
-## Project Structure
+- `DATABASE_URL`, `DB_PASSWORD`, `REDIS_URL`
+- `SECRET_KEY`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`
+- `PUBLIC_APP_URL`, `NEXT_PUBLIC_API_URL`, `TIMEZONE`
+- `GEMINI_API_KEY`, `GEMINI_MODEL`
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`
 
-```
-startlight/
-├── backend/              # Python FastAPI application
-│   ├── app/
-│   │   ├── api/endpoints/ # REST endpoints
-│   │   ├── core/          # Config, security, database, audit
-│   │   ├── models/        # SQLAlchemy ORM models
-│   │   ├── schemas/       # Pydantic request/response schemas
-│   │   └── workers/       # Celery background tasks
-│   ├── migrations/        # Alembic database migrations
-│   ├── tests/             # Pytest test suites
-│   ├── requirements.txt
-│   └── Dockerfile
-├── frontend/             # Next.js TypeScript application
-│   ├── src/
-│   │   ├── app/           # App Router pages
-│   │   ├── components/    # Shared UI components
-│   │   ├── context/       # React contexts (Auth)
-│   │   └── lib/           # API client utilities
-│   ├── package.json
-│   └── Dockerfile
-├── docker-compose.yml
-├── .env.example
-├── PHASE_STATUS.md
-├── REQUIREMENTS_TRACEABILITY.md
-└── README.md
+Never commit real production credentials.
+
+## Backup and restore
+
+Administrators can create/download validated backups from **System Settings & Operations**. PostgreSQL uses `pg_dump` custom format. Restore is intentionally offline:
+
+```bash
+cd backend
+python scripts/restore_backup.py storage/backups/<backup-file> --yes
 ```
 
----
+Stop backend and worker services before restoring production.
 
-## Default Administrator
+## Documentation
 
-On first startup the system creates an administrator account using environment variables:
+- `docs/user_manual.md` — administrator and staff user manual
+- `REQUIREMENTS_TRACEABILITY.md` — implementation traceability
+- `PHASE_STATUS.md` — development/hardening status
 
-| Variable       | Default                  |
-|---------------|--------------------------|
-| ADMIN_EMAIL    | admin@starlight.sc.ug    |
-| ADMIN_PASSWORD | Starlight2026!           |
+## API documentation
 
-**Change these in production.**
-
----
-
-## Technology Stack
-
-| Layer         | Technology                                  |
-|--------------|---------------------------------------------|
-| Frontend     | Next.js, TypeScript, Tailwind CSS, Recharts |
-| Backend      | FastAPI, SQLAlchemy 2, Alembic              |
-| Database     | PostgreSQL 16 (SQLite fallback for dev)     |
-| Queue        | Redis + Celery                              |
-| Transcription| Faster-Whisper + FFmpeg                     |
-| Summarisation| TextRank (networkx + scikit-learn)           |
-| Auth         | Argon2id + JWT cookies                      |
-| Testing      | Pytest, Vitest, Playwright                  |
-
----
+When the backend is running, OpenAPI docs are available at `/api/docs`.
 
 ## License
 
-This project is an academic submission for Kumi University. All rights reserved.
+Academic project. All rights reserved.
