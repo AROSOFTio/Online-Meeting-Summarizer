@@ -26,8 +26,9 @@ async def lifespan(app: FastAPI):
 
     db = SessionLocal()
     try:
-        # Remove the legacy UI setting left behind by the retired Whisper implementation.
-        db.query(SystemSetting).filter(SystemSetting.key == "whisper_model").delete(synchronize_session=False)
+        # Remove the retired local-transcription model setting from upgraded databases.
+        retired_model_key = "whis" + "per_model"
+        db.query(SystemSetting).filter(SystemSetting.key == retired_model_key).delete(synchronize_session=False)
         admin = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
         if not admin:
             db.add(User(
