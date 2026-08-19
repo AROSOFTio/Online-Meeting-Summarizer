@@ -14,6 +14,7 @@ interface MeetingItem {
   title: string;
   description: string | null;
   date: string;
+  owner_id: number;
   status: "draft" | "processing" | "completed" | "failed";
   is_archived: boolean;
   participants: Array<{ id: number; name: string; email: string | null }>;
@@ -28,7 +29,8 @@ const statusLabel: Record<MeetingItem["status"], string> = {
 
 export default function MeetingsDirectoryPage() {
   const { user } = useAuth();
-  const canEdit = user?.role === "admin" || user?.role === "minute_secretary";
+  const isAdmin = user?.role === "admin";
+  const canCreate = isAdmin || user?.role === "minute_secretary";
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [showArchived, setShowArchived] = useState(false);
@@ -48,7 +50,7 @@ export default function MeetingsDirectoryPage() {
       <div className="space-y-6">
         <header className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
           <div><h1 className="text-2xl font-extrabold text-slate-950">Meetings</h1><p className="mt-1 text-sm text-slate-500">Create, start and review meetings from one place.</p></div>
-          {canEdit && <Link href="/create-meeting" className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-700 px-5 py-3 text-sm font-extrabold text-white hover:bg-blue-800"><PlusCircle size={17}/>New Meeting</Link>}
+          {canCreate && <Link href="/create-meeting" className="inline-flex items-center justify-center gap-2 rounded-lg bg-blue-700 px-5 py-3 text-sm font-extrabold text-white hover:bg-blue-800"><PlusCircle size={17}/>New Meeting</Link>}
         </header>
 
         <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 md:flex-row md:items-center">
@@ -61,11 +63,13 @@ export default function MeetingsDirectoryPage() {
         {isLoading && <div className="rounded-xl border border-slate-200 bg-white py-16 text-center"><RefreshCw className="mx-auto animate-spin text-blue-700"/><p className="mt-3 text-sm text-slate-500">Loading meetings...</p></div>}
         {isError && <div className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700"><AlertTriangle size={18}/>{error?.message || "Could not load meetings"}</div>}
 
-        {!isLoading && !isError && meetings.length === 0 && <div className="rounded-xl border border-slate-200 bg-white py-16 text-center"><Video className="mx-auto mb-3 text-slate-300" size={42}/><h2 className="font-bold text-slate-900">No meetings yet</h2>{canEdit && <Link href="/create-meeting" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-3 text-sm font-bold text-white"><PlusCircle size={16}/>Create Your First Meeting</Link>}</div>}
+        {!isLoading && !isError && meetings.length === 0 && <div className="rounded-xl border border-slate-200 bg-white py-16 text-center"><Video className="mx-auto mb-3 text-slate-300" size={42}/><h2 className="font-bold text-slate-900">No meetings yet</h2>{canCreate && <Link href="/create-meeting" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-3 text-sm font-bold text-white"><PlusCircle size={16}/>Create Your First Meeting</Link>}</div>}
 
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {meetings.map((meeting) => {
             const badge = meeting.status === "completed" ? "border-green-200 bg-green-50 text-green-700" : meeting.status === "failed" ? "border-red-200 bg-red-50 text-red-700" : meeting.status === "processing" ? "border-blue-200 bg-blue-50 text-blue-700" : "border-amber-200 bg-amber-50 text-amber-700";
+            const canManage = Boolean(user && (isAdmin || meeting.owner_id === user.id));
+            const canStart = canManage && meeting.status === "draft";
             return <article key={meeting.id} className="flex flex-col justify-between rounded-xl border border-slate-200 bg-white shadow-sm">
               <div className="space-y-4 p-5">
                 <div className="flex items-start justify-between gap-3"><h2 className="line-clamp-2 font-extrabold text-slate-950">{meeting.title}</h2><span className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${badge}`}>{statusLabel[meeting.status]}</span></div>
@@ -73,8 +77,8 @@ export default function MeetingsDirectoryPage() {
                 <div className="space-y-2 text-xs text-slate-600"><div className="flex items-center gap-2"><Calendar size={14} className="text-slate-400"/>{new Date(meeting.date).toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})}</div><div className="flex items-center gap-2"><Users size={14} className="text-slate-400"/>{meeting.participants.length} participant{meeting.participants.length === 1 ? "" : "s"}</div></div>
               </div>
               <div className="space-y-2 border-t border-slate-100 bg-slate-50 p-3">
-                {canEdit && meeting.status === "draft" ? <Link href={`/meetings/${meeting.id}/live`} className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-3 py-3 text-sm font-extrabold text-white hover:bg-blue-800"><Play size={16} fill="currentColor"/>Start Meeting</Link> : <Link href={`/meetings/${meeting.id}`} className="block rounded-lg bg-blue-700 px-3 py-3 text-center text-sm font-extrabold text-white">Open Meeting</Link>}
-                <div className="grid grid-cols-2 gap-2"><Link href={`/meetings/${meeting.id}`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700">Details</Link>{canEdit ? <Link href={`/meetings/${meeting.id}/invite`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700">Invite People</Link> : <span />}</div>
+                {canStart ? <Link href={`/meetings/${meeting.id}/live`} className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-3 py-3 text-sm font-extrabold text-white hover:bg-blue-800"><Play size={16} fill="currentColor"/>Start Meeting</Link> : <Link href={`/meetings/${meeting.id}`} className="block rounded-lg bg-blue-700 px-3 py-3 text-center text-sm font-extrabold text-white">Open Meeting</Link>}
+                <div className={`grid gap-2 ${canManage ? "grid-cols-2" : "grid-cols-1"}`}><Link href={`/meetings/${meeting.id}`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700">Details</Link>{canManage && <Link href={`/meetings/${meeting.id}/invite`} className="rounded-lg border border-slate-300 bg-white px-3 py-2 text-center text-xs font-bold text-slate-700">Invite People</Link>}</div>
               </div>
             </article>;
           })}
