@@ -39,30 +39,13 @@ class TranscriptionService:
             cleaned = cleaned.removesuffix("```").strip()
         return json.loads(cleaned)
 
-    def transcribe(
-        self,
-        audio_path: str,
-        participant_names: Optional[List[str]] = None,
-    ) -> List[Dict[str, Any]]:
-        if (
-            os.getenv("MOCK_TRANSCRIPTION", "false").lower() == "true"
-            or os.getenv("MOCK_WHISPER", "false").lower() == "true"
-        ):
+    def transcribe(self, audio_path: str, participant_names: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        if os.getenv("MOCK_TRANSCRIPTION", "false").lower() == "true":
             spk1 = participant_names[0] if participant_names else "Speaker 1"
             spk2 = participant_names[1] if participant_names and len(participant_names) > 1 else spk1
             return [
-                {
-                    "start": 0.0,
-                    "end": 4.5,
-                    "text": "Welcome everyone to the Starlight Secondary School meeting.",
-                    "speaker": spk1,
-                },
-                {
-                    "start": 4.5,
-                    "end": 10.0,
-                    "text": "We are reviewing today's agenda and action items.",
-                    "speaker": spk2,
-                },
+                {"start": 0.0, "end": 4.5, "text": "Welcome everyone to the Starlight Secondary School meeting.", "speaker": spk1},
+                {"start": 4.5, "end": 10.0, "text": "We are reviewing today's agenda and action items.", "speaker": spk2},
             ]
 
         if not os.path.isfile(audio_path):
@@ -132,8 +115,7 @@ class TranscriptionService:
             message = str(exc)
             if "404" in message or "NOT_FOUND" in message.upper():
                 raise RuntimeError(
-                    f"Gemini model '{model}' is unavailable. The application now defaults to a "
-                    "current model; redeploy and remove any stale GEMINI_MODEL override in Coolify."
+                    f"Gemini model '{model}' is unavailable. Redeploy and remove any stale GEMINI_MODEL override in Coolify."
                 ) from exc
             raise RuntimeError(f"Gemini audio transcription failed: {message}") from exc
         finally:
