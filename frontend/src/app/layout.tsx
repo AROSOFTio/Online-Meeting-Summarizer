@@ -12,9 +12,9 @@ export const metadata: Metadata = {
   description: "Meeting recording, attendance, transcription and official minutes for Starlight Secondary School.",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/app-icon.svg", type: "image/svg+xml" }],
-    shortcut: "/app-icon.svg",
-    apple: "/app-icon.svg",
+    icon: [{ url: "/app-icon.jpg?v=5", type: "image/jpeg" }],
+    shortcut: "/app-icon.jpg?v=5",
+    apple: "/app-icon.jpg?v=5",
   },
   appleWebApp: {
     capable: true,
