@@ -24,6 +24,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg postgresql-client
       - name: Install Python dependencies
         run: pip install -r requirements.txt
+      - name: Reject legacy transcription-provider references
+        run: python scripts/audit_legacy_transcription_refs.py
       - name: Run backend test suite
         env:
           TESTING: 'true'
