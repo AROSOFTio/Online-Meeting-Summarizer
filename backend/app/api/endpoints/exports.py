@@ -15,12 +15,15 @@ from app.core.audit import log_action
 router = APIRouter()
 
 
+def _enum_value(value):
+    return getattr(value, "value", str(value))
+
+
 def _final_pdf_path(meeting_id: int) -> Path:
     return Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf"
 
 
 def _gather_export_data(meeting_id: int, db: Session):
-    """Collect all data needed for export from the database."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
@@ -37,7 +40,7 @@ def _gather_export_data(meeting_id: int, db: Session):
     participants = [
         {
             "name": p.name,
-            "role": p.role_title or "Stakeholder",
+            "role": p.role_title or "Member",
             "email": p.email or "",
             "status": attendance.get(p.id, "present").title(),
         }
@@ -49,10 +52,10 @@ def _gather_export_data(meeting_id: int, db: Session):
     action_items = [
         {
             "text": a.description,
-            "assignee_name": a.assignee.full_name if a.assignee else None,
+            "assignee_name": a.assignee.full_name if a.assignee else (a.responsible_name or None),
             "deadline": str(a.deadline) if a.deadline else None,
-            "status": str(a.status),
-            "priority": str(a.priority),
+            "status": _enum_value(a.status),
+            "priority": _enum_value(a.priority),
         }
         for a in action_items_rows
     ]
@@ -80,16 +83,10 @@ def export_meeting(
     meeting_id: int,
     format: str = Query(default="pdf", pattern="^(pdf|docx|txt)$"),
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_current_user),
 ):
-    """
-    Generate and stream complete meeting minutes as PDF, DOCX, or TXT.
-    Only the meeting owner and admins may export.
-    """
-    meeting, participants, summary_text, decisions, action_items, transcript_text, organization = \
-        _gather_export_data(meeting_id, db)
+    meeting, participants, summary_text, decisions, action_items, transcript_text, organization = _gather_export_data(meeting_id, db)
 
-    # Authorisation
     if current_user.role == UserRole.staff and meeting.status.value != "completed":
         raise HTTPException(status_code=403, detail="Staff readers can export completed minutes only")
     if current_user.role not in {UserRole.admin, UserRole.staff} and meeting.owner_id != current_user.id:
@@ -112,10 +109,10 @@ def export_meeting(
         return Response(
             content=data,
             media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'}
+            headers={"Content-Disposition": f'attachment; filename="{filename_base}.pdf"'},
         )
 
-    elif format == "docx":
+    if format == "docx":
         data = export_docx(
             meeting_title=meeting.title,
             meeting_date=meeting.date,
@@ -130,26 +127,25 @@ def export_meeting(
         return Response(
             content=data,
             media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.docx"'}
+            headers={"Content-Disposition": f'attachment; filename="{filename_base}.docx"'},
         )
 
-    else:  # txt
-        data = export_txt(
-            meeting_title=meeting.title,
-            meeting_date=meeting.date,
-            participants=participants,
-            summary_text=summary_text,
-            decisions=decisions,
-            action_items=action_items,
-            transcript_text=transcript_text,
-            organization=organization,
-            meeting_description=meeting.description or "",
-        )
-        return Response(
-            content=data,
-            media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{filename_base}.txt"'}
-        )
+    data = export_txt(
+        meeting_title=meeting.title,
+        meeting_date=meeting.date,
+        participants=participants,
+        summary_text=summary_text,
+        decisions=decisions,
+        action_items=action_items,
+        transcript_text=transcript_text,
+        organization=organization,
+        meeting_description=meeting.description or "",
+    )
+    return Response(
+        content=data,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename_base}.txt"'},
+    )
 
 
 @router.get("/{meeting_id}/final-minutes/status")
@@ -181,8 +177,7 @@ def finalize_and_share_minutes(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_admin_user),
 ):
-    meeting, participants, summary_text, decisions, action_items, transcript_text, organization = \
-        _gather_export_data(meeting_id, db)
+    meeting, participants, summary_text, decisions, action_items, transcript_text, organization = _gather_export_data(meeting_id, db)
     if not summary_text:
         raise HTTPException(status_code=400, detail="Generate and review the minutes before finalizing")
     pdf_data = export_pdf(

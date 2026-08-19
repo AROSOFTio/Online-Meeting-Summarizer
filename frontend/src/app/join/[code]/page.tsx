@@ -78,7 +78,7 @@ export default function PublicJoinPage() {
       <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b-4 border-blue-800 bg-white px-6 py-6 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Starlight Secondary School" className="mx-auto h-28 w-28 object-contain" />
+          <img src="/starlight-logo.jpg" alt="Starlight Secondary School" className="mx-auto h-32 w-32 object-contain" />
           <h1 className="mt-2 text-xl font-extrabold text-blue-900">STARLIGHT SECONDARY SCHOOL</h1>
           <p className="text-xs font-semibold tracking-[0.2em] text-blue-700">RISE AND SHINE</p>
         </div>

@@ -22,7 +22,7 @@ export default function JoinMeetingPage() {
       <div className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-7 shadow-sm">
         <div className="mb-6 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.svg" alt="Starlight Secondary School" className="mx-auto mb-3 h-24 w-24 object-contain" />
+          <img src="/starlight-logo.jpg" alt="Starlight Secondary School" className="mx-auto mb-3 h-28 w-28 object-contain" />
           <h1 className="text-xl font-bold text-slate-900">Join a Starlight Meeting</h1>
           <p className="mt-1 text-sm text-slate-500">Paste the invitation link or enter the meeting code.</p>
         </div>

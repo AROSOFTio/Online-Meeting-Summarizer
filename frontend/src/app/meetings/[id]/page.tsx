@@ -19,7 +19,8 @@ interface Attendance { id:number; name:string; email:string|null; role_title:str
 interface Segment { id:number; start_time:number; end_time:number; text:string; speaker:string|null; }
 interface Transcript { id:number; content:string; segments:Segment[]; revisions:Array<{id:number;editor:string;reason:string;created_at:string}>; }
 interface Summary { id:number; text:string; key_points:string[]; decisions:Array<{id:number;text:string}>; }
-interface ActionItem { id:number; text:string; assignee_name:string|null; priority:"low"|"medium"|"high"; deadline:string|null; status:"pending"|"in_progress"|"completed"; }
+interface ActionItem { id:number; text:string; assignee_name:string|null; responsible_name?:string|null; priority:"low"|"medium"|"high"; deadline:string|null; status:"pending"|"in_progress"|"completed"; }
+type ActionUpdateBody = { status?: ActionItem["status"]; responsible_name?: string | null; };
 
 type Tab = "overview" | "recording" | "transcript" | "minutes" | "actions";
 
@@ -58,13 +59,20 @@ export default function MeetingWorkspacePage() {
   const segmentMutation = useMutation({ mutationFn:(value:{id:number;text:string;speaker:string})=>apiRequest(`/api/transcripts/${meetingId}/segments/${value.id}`,{method:"PUT",body:JSON.stringify({text:value.text,speaker:value.speaker})}), onSuccess:()=>{setEditingSegment(null);queryClient.invalidateQueries({queryKey:["transcript",meetingId]});} });
   const summaryMutation = useMutation({ mutationFn:(text:string)=>apiRequest(`/api/summaries/${meetingId}`,{method:"PUT",body:JSON.stringify({text})}), onSuccess:()=>{setEditingSummary(false);queryClient.invalidateQueries({queryKey:["summary",meetingId]});} });
   const regenerateMutation = useMutation({ mutationFn:()=>apiRequest(`/api/summaries/${meetingId}/generate`,{method:"POST"}), onSuccess:()=>{queryClient.invalidateQueries({queryKey:["summary",meetingId]});queryClient.invalidateQueries({queryKey:["actions",meetingId]});} });
-  const actionMutation = useMutation({ mutationFn:(value:{id:number;status:ActionItem["status"]})=>apiRequest(`/api/action-items/${value.id}`,{method:"PUT",body:JSON.stringify({status:value.status})}), onSuccess:()=>queryClient.invalidateQueries({queryKey:["actions",meetingId]}) });
+  const actionMutation = useMutation({
+    mutationFn:(value:{id:number;body:ActionUpdateBody})=>apiRequest(`/api/action-items/${value.id}`,{method:"PUT",body:JSON.stringify(value.body)}),
+    onSuccess:()=>queryClient.invalidateQueries({queryKey:["actions",meetingId]}),
+  });
   const finalizeMutation = useMutation({ mutationFn:()=>apiRequest(`/api/meetings/${meetingId}/finalize?share=true`,{method:"POST"}), onSuccess:(data)=>window.alert(data.delivery_error ? `Final minutes saved. Email delivery warning: ${data.delivery_error}` : `Final minutes saved and sent to ${data.delivered} participant(s).`) });
 
   if (meetingQuery.isLoading) return <DashboardLayout><div className="rounded-lg border border-gray-200 bg-white py-20 text-center"><RefreshCw className="mx-auto animate-spin text-blue-700"/><p className="mt-3 text-sm text-gray-500">Loading meeting workspace...</p></div></DashboardLayout>;
   if (meetingQuery.isError || !meeting) return <DashboardLayout><div className="rounded-lg border border-red-200 bg-red-50 p-5 text-sm text-red-700">Could not load meeting: {meetingQuery.error?.message || "Meeting not found"}</div></DashboardLayout>;
 
   const tabs: Array<[Tab,string]> = [["overview","Overview"],["recording","Recording"],["transcript","Transcript"],["minutes","Minutes"],["actions","Action Items"]];
+  const responsibleSuggestions = Array.from(new Set([
+    ...meeting.participants.map((participant) => participant.name).filter(Boolean),
+    ...(user?.full_name ? [user.full_name] : []),
+  ])).sort((a, b) => a.localeCompare(b));
 
   return <DashboardLayout><div className="space-y-5">
     <div className="flex flex-col gap-4 border-b border-gray-200 pb-5 md:flex-row md:items-start md:justify-between">
@@ -85,6 +93,20 @@ export default function MeetingWorkspacePage() {
 
     {tab === "minutes" && <section className="space-y-5 rounded-lg border border-gray-200 bg-white p-5 shadow-sm"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><h2 className="flex items-center gap-2 font-bold text-gray-900"><FileText size={18}/>Official Meeting Minutes</h2>{canEdit && <div className="flex flex-wrap gap-2"><button onClick={()=>regenerateMutation.mutate()} disabled={regenerateMutation.isPending} className="inline-flex items-center gap-1 rounded border border-blue-200 px-3 py-2 text-xs font-semibold text-blue-700"><Sparkles size={14}/>Regenerate</button>{summaryQuery.data && <button onClick={()=>{setSummaryDraft(summaryQuery.data!.text);setEditingSummary(true);}} className="rounded border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700">Edit Minutes</button>}{isAdmin && summaryQuery.data && <button onClick={()=>finalizeMutation.mutate()} disabled={finalizeMutation.isPending} className="rounded bg-blue-700 px-3 py-2 text-xs font-semibold text-white">Finalize & Email PDF</button>}</div>}</div>{summaryQuery.isError && <div className="rounded bg-gray-50 p-6 text-center text-sm text-gray-500">Minutes are not available yet. {canEdit && "Use Regenerate after the transcript is complete."}</div>}{summaryQuery.data && (editingSummary ? <div className="space-y-2"><textarea value={summaryDraft} onChange={(event)=>setSummaryDraft(event.target.value)} rows={14} className="w-full rounded border border-gray-300 p-3 text-sm leading-6 text-gray-900"/><div className="flex gap-2"><button onClick={()=>summaryMutation.mutate(summaryDraft)} className="rounded bg-blue-700 px-4 py-2 text-xs font-semibold text-white">Save Minutes</button><button onClick={()=>setEditingSummary(false)} className="rounded border border-gray-300 px-4 py-2 text-xs">Cancel</button></div></div> : <><div className="whitespace-pre-wrap text-sm leading-7 text-gray-700">{summaryQuery.data.text}</div>{summaryQuery.data.key_points.length>0 && <div><h3 className="mb-2 font-bold text-gray-900">Key Points</h3><ul className="list-disc space-y-1 pl-5 text-sm text-gray-700">{summaryQuery.data.key_points.map((point,index)=><li key={index}>{point}</li>)}</ul></div>}{summaryQuery.data.decisions.length>0 && <div><h3 className="mb-2 font-bold text-gray-900">Resolutions / Decisions</h3><ol className="list-decimal space-y-1 pl-5 text-sm text-gray-700">{summaryQuery.data.decisions.map((decision)=><li key={decision.id}>{decision.text}</li>)}</ol></div>}</>)}</section>}
 
-    {tab === "actions" && <section className="space-y-3 rounded-lg border border-gray-200 bg-white p-5 shadow-sm"><h2 className="font-bold text-gray-900">Action Items</h2>{actionsQuery.isError && <p className="text-sm text-gray-500">Action items are unavailable for this meeting.</p>}{(actionsQuery.data||[]).map((item)=><div key={item.id} className="grid gap-3 rounded border border-gray-200 p-3 sm:grid-cols-[1fr_auto]"><div><div className="text-sm font-medium text-gray-900">{item.text}</div><div className="mt-1 text-xs text-gray-500">Responsible: {item.assignee_name || "Unassigned"} · Priority: {item.priority} · Due: {item.deadline || "Not specified"}</div></div>{canEdit ? <select value={item.status} onChange={(event)=>actionMutation.mutate({id:item.id,status:event.target.value as ActionItem["status"]})} className="rounded border border-gray-300 bg-white px-2 py-1 text-xs text-gray-900"><option value="pending">Pending</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select> : <span className="text-xs font-semibold capitalize text-gray-600">{item.status.replace("_"," ")}</span>}</div>)}{actionsQuery.data?.length===0 && <div className="py-8 text-center text-sm text-gray-500"><CheckCircle className="mx-auto mb-2 text-gray-300"/>No action items recorded.</div>}</section>}
+    {tab === "actions" && <section className="space-y-4 rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+      <div><h2 className="font-bold text-gray-900">Action Items</h2><p className="mt-1 text-xs text-gray-500">Responsible person can be picked from meeting participants or typed manually.</p></div>
+      <datalist id="responsible-person-options">{responsibleSuggestions.map((name)=><option key={name} value={name} />)}</datalist>
+      {actionsQuery.isError && <p className="text-sm text-gray-500">Action items are unavailable for this meeting.</p>}
+      {(actionsQuery.data||[]).map((item)=><div key={item.id} className="grid gap-4 rounded border border-gray-200 p-4 lg:grid-cols-[1fr_240px_150px] lg:items-end">
+        <div><div className="text-sm font-medium text-gray-900">{item.text}</div><div className="mt-1 text-xs text-gray-500">Priority: {item.priority} · Due: {item.deadline || "Not specified"}</div></div>
+        {canEdit ? <label className="text-xs font-semibold text-gray-600">Responsible person
+          <input key={`${item.id}-${item.assignee_name || ""}`} list="responsible-person-options" defaultValue={item.assignee_name || ""} onBlur={(event)=>actionMutation.mutate({id:item.id,body:{responsible_name:event.currentTarget.value.trim() || null}})} placeholder="Pick or type a name" className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-xs font-normal text-gray-900" />
+        </label> : <div className="text-xs text-gray-600"><span className="font-semibold">Responsible:</span> {item.assignee_name || "Unassigned"}</div>}
+        {canEdit ? <label className="text-xs font-semibold text-gray-600">Status
+          <select value={item.status} onChange={(event)=>actionMutation.mutate({id:item.id,body:{status:event.target.value as ActionItem["status"]}})} className="mt-1 w-full rounded border border-gray-300 bg-white px-2 py-2 text-xs font-normal text-gray-900"><option value="pending">Pending</option><option value="in_progress">In progress</option><option value="completed">Completed</option></select>
+        </label> : <span className="text-xs font-semibold capitalize text-gray-600">{item.status.replace("_"," ")}</span>}
+      </div>)}
+      {actionsQuery.data?.length===0 && <div className="py-8 text-center text-sm text-gray-500"><CheckCircle className="mx-auto mb-2 text-gray-300"/>No action items recorded.</div>}
+    </section>}
   </div></DashboardLayout>;
 }

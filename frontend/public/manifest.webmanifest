@@ -8,10 +8,10 @@
   "theme_color": "#173ea5",
   "icons": [
     {
-      "src": "/logo.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/starlight-logo.jpg",
+      "sizes": "452x452",
+      "type": "image/jpeg",
+      "purpose": "any"
     }
   ]
 }

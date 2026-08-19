@@ -181,6 +181,7 @@ class DecisionCreate(BaseModel):
 class ActionItemBase(BaseModel):
     text: str
     assignee_id: Optional[int] = None
+    responsible_name: Optional[str] = None
     priority: Optional[str] = "medium"
     deadline: Optional[str] = None
     status: Optional[str] = "pending"
@@ -193,6 +194,7 @@ class ActionItemCreate(ActionItemBase):
 class ActionItemUpdate(BaseModel):
     text: Optional[str] = None
     assignee_id: Optional[int] = None
+    responsible_name: Optional[str] = None
     priority: Optional[str] = None
     deadline: Optional[str] = None
     status: Optional[str] = None

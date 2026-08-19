@@ -1,15 +1,11 @@
 import json
 from pathlib import Path
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
-from typing import List
 
 from app.core import deps
 from app.core.audit import log_action
-from app.models.models import (
-    Meeting, Transcript, Summary, Decision, ActionItem,
-    MeetingStatus, User, UserRole
-)
+from app.models.models import Meeting, Transcript, Summary, Decision, ActionItem, MeetingStatus, User, UserRole
 from app.services.summarizer import summarize, extract_decisions, extract_action_items, extract_key_points
 from app.services.gemini import gemini_service
 from app.core.config import settings as app_settings
@@ -22,26 +18,21 @@ def generate_summary(
     meeting_id: int,
     request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_minutes_editor)
+    current_user: User = Depends(deps.get_minutes_editor),
 ):
-    """Generate professional minutes with Gemini, falling back to local TextRank."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
-
     if meeting.status != MeetingStatus.completed:
         raise HTTPException(status_code=400, detail="Meeting transcript is not yet complete")
 
     transcript = db.query(Transcript).filter(Transcript.meeting_id == meeting_id).first()
     if not transcript or not transcript.content:
         raise HTTPException(status_code=404, detail="No transcript content found")
-
-    # Authorisation
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised")
 
     text = transcript.content
-
     provider = "TextRank fallback"
     if gemini_service.enabled:
         try:
@@ -71,7 +62,6 @@ def generate_summary(
         decision_texts = extract_decisions(text)
         action_candidates = extract_action_items(text)
 
-    # Upsert Summary row
     existing = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
     if existing:
         existing.summary_text = summary_text
@@ -81,52 +71,47 @@ def generate_summary(
         summary = Summary(
             meeting_id=meeting_id,
             summary_text=summary_text,
-            key_points_json=json.dumps(key_points)
+            key_points_json=json.dumps(key_points),
         )
         db.add(summary)
     db.commit()
     db.refresh(summary)
 
-    # Delete old decisions and recreate (idempotent re-run)
     db.query(Decision).filter(
         Decision.meeting_id == meeting_id,
-        Decision.summary_id == summary.id
+        Decision.summary_id == summary.id,
     ).delete()
     db.commit()
 
     for d_text in decision_texts:
-        d = Decision(meeting_id=meeting_id, summary_id=summary.id, text=d_text)
-        db.add(d)
+        db.add(Decision(meeting_id=meeting_id, summary_id=summary.id, text=d_text))
 
-    # Create action item candidates (only if no existing ones to avoid duplicates on re-run)
     existing_actions = db.query(ActionItem).filter(
         ActionItem.meeting_id == meeting_id,
-        ActionItem.summary_id == summary.id
+        ActionItem.summary_id == summary.id,
     ).count()
 
     if existing_actions == 0:
         for candidate in action_candidates:
-            a = ActionItem(
+            responsible = str(candidate.get("assignee") or "").strip() or None
+            db.add(ActionItem(
                 meeting_id=meeting_id,
                 summary_id=summary.id,
                 description=candidate["text"],
+                responsible_name=responsible,
                 status="pending",
                 priority=candidate.get("priority", "medium"),
-            )
-            db.add(a)
+            ))
 
     db.commit()
-
     log_action(
         db,
         action="generate_summary",
-        details=f"Generated {provider} minutes for meeting {meeting_id}. "
-                f"{len(decision_texts)} decisions, {len(action_candidates)} action candidates.",
+        details=f"Generated {provider} minutes for meeting {meeting_id}. {len(decision_texts)} decisions, {len(action_candidates)} action candidates.",
         user_id=current_user.id,
         user_email=current_user.email,
-        ip_address=request.client.host if request.client else None
+        ip_address=request.client.host if request.client else None,
     )
-
     return {
         "summary_id": summary.id,
         "text": summary.summary_text,
@@ -141,20 +126,16 @@ def generate_summary(
 def get_summary(
     meeting_id: int,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user)
+    current_user: User = Depends(deps.get_current_user),
 ):
-    """Fetch current summary, key points, and decisions for a meeting."""
     summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
     if not summary:
         raise HTTPException(status_code=404, detail="No summary found. Generate one first.")
-
     decisions = db.query(Decision).filter(Decision.meeting_id == meeting_id).all()
-
     try:
         key_points = json.loads(summary.key_points_json or "[]")
     except Exception:
         key_points = []
-
     return {
         "id": summary.id,
         "meeting_id": summary.meeting_id,
@@ -172,34 +153,28 @@ def update_summary(
     request: Request,
     body: dict,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_minutes_editor)
+    current_user: User = Depends(deps.get_minutes_editor),
 ):
-    """Manually edit summary text or key points."""
     summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
     if not summary:
         raise HTTPException(status_code=404, detail="Summary not found")
-
     meeting = summary.meeting
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised")
-
     if "text" in body:
         summary.summary_text = body["text"]
     if "key_points" in body:
         summary.key_points_json = json.dumps(body["key_points"])
-
     db.commit()
     db.refresh(summary)
-
     log_action(
         db,
         action="edit_summary",
         details=f"Manually edited summary for meeting {meeting_id}",
         user_id=current_user.id,
         user_email=current_user.email,
-        ip_address=request.client.host if request.client else None
+        ip_address=request.client.host if request.client else None,
     )
-
     return {"detail": "Summary updated"}
 
 
@@ -210,7 +185,6 @@ def delete_summary(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_minutes_editor),
 ):
-    """Permanently delete generated minutes while preserving the meeting and transcript."""
     summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
     if not summary:
         raise HTTPException(status_code=404, detail="Summary not found")
@@ -225,8 +199,11 @@ def delete_summary(
     db.commit()
     (Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf").unlink(missing_ok=True)
     log_action(
-        db, action="delete_minutes", details=f"Deleted minutes for meeting {meeting_id}",
-        user_id=current_user.id, user_email=current_user.email,
+        db,
+        action="delete_minutes",
+        details=f"Deleted minutes for meeting {meeting_id}",
+        user_id=current_user.id,
+        user_email=current_user.email,
         ip_address=request.client.host if request.client else None,
     )
     return {"detail": "Minutes deleted"}
@@ -238,35 +215,34 @@ def add_decision(
     request: Request,
     body: dict,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_minutes_editor)
+    current_user: User = Depends(deps.get_minutes_editor),
 ):
-    """Manually add a decision to a meeting."""
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised")
-
-    text = body.get("text", "").strip()
-    if not text:
+    text_value = body.get("text", "").strip()
+    if not text_value:
         raise HTTPException(status_code=400, detail="Decision text is required")
-
     summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
-    d = Decision(
+    decision = Decision(
         meeting_id=meeting_id,
         summary_id=summary.id if summary else None,
-        text=text
+        text=text_value,
     )
-    db.add(d)
+    db.add(decision)
     db.commit()
-    db.refresh(d)
-
-    log_action(db, action="add_decision",
-               details=f"Added decision to meeting {meeting_id}",
-               user_id=current_user.id, user_email=current_user.email,
-               ip_address=request.client.host if request.client else None)
-
-    return {"id": d.id, "text": d.text}
+    db.refresh(decision)
+    log_action(
+        db,
+        action="add_decision",
+        details=f"Added decision to meeting {meeting_id}",
+        user_id=current_user.id,
+        user_email=current_user.email,
+        ip_address=request.client.host if request.client else None,
+    )
+    return {"id": decision.id, "text": decision.text}
 
 
 @router.delete("/{meeting_id}/decisions/{decision_id}")
@@ -275,20 +251,17 @@ def delete_decision(
     decision_id: int,
     request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_minutes_editor)
+    current_user: User = Depends(deps.get_minutes_editor),
 ):
-    """Delete a decision."""
     decision = db.query(Decision).filter(
         Decision.id == decision_id,
-        Decision.meeting_id == meeting_id
+        Decision.meeting_id == meeting_id,
     ).first()
     if not decision:
         raise HTTPException(status_code=404, detail="Decision not found")
-
     meeting = decision.meeting
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised")
-
     db.delete(decision)
     db.commit()
     return {"detail": "Decision deleted"}

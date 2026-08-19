@@ -14,12 +14,11 @@ from app.models.models import SystemSetting, User
 
 router = APIRouter()
 LOGO_SETTING_KEY = "school_logo_file"
-BUNDLED_LOGO = Path(__file__).resolve().parents[2] / "static" / "starlight-logo.svg"
+BUNDLED_LOGO = Path(__file__).resolve().parents[2] / "static" / "starlight-logo.jpg"
 ALLOWED_LOGO_TYPES = {
     "image/png": ".png",
     "image/jpeg": ".jpg",
     "image/webp": ".webp",
-    "image/svg+xml": ".svg",
 }
 
 DEFAULT_SETTINGS = {
@@ -67,7 +66,7 @@ async def upload_logo(
 ):
     extension = ALLOWED_LOGO_TYPES.get(file.content_type or "")
     if not extension:
-        raise HTTPException(status_code=400, detail="Logo must be PNG, JPEG, WebP, or SVG")
+        raise HTTPException(status_code=400, detail="Logo must be PNG, JPEG, or WebP")
     content = await file.read(5 * 1024 * 1024 + 1)
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Logo must be 5 MB or smaller")
@@ -98,10 +97,10 @@ async def upload_logo(
 @router.get("/logo")
 def get_logo(db: Session = Depends(deps.get_db)):
     custom = db.query(SystemSetting).filter(SystemSetting.key == LOGO_SETTING_KEY).first()
-    if custom and os.path.isfile(custom.value):
+    if custom and os.path.isfile(custom.value) and not custom.value.lower().endswith(".svg"):
         return FileResponse(custom.value)
     if BUNDLED_LOGO.is_file():
-        return FileResponse(BUNDLED_LOGO, media_type="image/svg+xml")
+        return FileResponse(BUNDLED_LOGO, media_type="image/jpeg")
     raise HTTPException(status_code=404, detail="School logo is not available")
 
 

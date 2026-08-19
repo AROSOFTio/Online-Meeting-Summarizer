@@ -6,7 +6,9 @@ from html import escape
 from pathlib import Path
 from typing import Any, List, Optional
 
-BUNDLED_LOGO = Path(__file__).resolve().parents[1] / "static" / "starlight-logo.svg"
+# This is the exact Starlight S.S logo supplied for the project.  Do not
+# replace it with a generated/recreated crest.
+BUNDLED_LOGO = Path(__file__).resolve().parents[1] / "static" / "starlight-logo.jpg"
 
 
 def _format_date(value: Any) -> str:
@@ -22,8 +24,12 @@ def _format_date(value: Any) -> str:
 
 def _org(organization: Optional[dict]) -> dict:
     data = organization or {}
-    logo_path = data.get("logo_path") or ""
-    if not logo_path or not os.path.isfile(logo_path):
+    configured_logo = data.get("logo_path") or ""
+    # Keep a manually uploaded raster logo if one exists, but never fall back
+    # to the old recreated SVG crest. The bundled JPG is the real school logo.
+    if configured_logo and os.path.isfile(configured_logo) and not configured_logo.lower().endswith(".svg"):
+        logo_path = configured_logo
+    else:
         logo_path = str(BUNDLED_LOGO) if BUNDLED_LOGO.is_file() else ""
     return {
         "name": data.get("name") or "Starlight Secondary School",
@@ -105,23 +111,13 @@ def export_txt(
         )
     if not action_items:
         lines.append("No action items recorded.")
-    lines.extend(["", "APPENDIX: FULL TRANSCRIPT", transcript_text or "No transcript available."])
+    lines.extend(["", "--- APPENDIX: FULL TRANSCRIPT (NEW PAGE IN PDF/DOCX) ---", transcript_text or "No transcript available."])
     return "\n".join(lines).encode("utf-8")
 
 
 def _pdf_logo(path: str, width: float, height: float):
     from reportlab.platypus import Image
     if not path or not os.path.isfile(path):
-        return None
-    if path.lower().endswith(".svg"):
-        from svglib.svglib import svg2rlg
-        drawing = svg2rlg(path)
-        if drawing and drawing.width and drawing.height:
-            scale = min(width / drawing.width, height / drawing.height)
-            drawing.scale(scale, scale)
-            drawing.width *= scale
-            drawing.height *= scale
-            return drawing
         return None
     return Image(path, width=width, height=height, kind="proportional")
 
@@ -141,7 +137,7 @@ def export_pdf(
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.lib.units import cm
-    from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import HRFlowable, PageBreak, Paragraph, SimpleDocTemplate, Table, TableStyle
 
     org = _org(organization)
     buffer = io.BytesIO()
@@ -253,36 +249,18 @@ def export_pdf(
     else:
         story.append(Paragraph("No action items recorded.", body))
 
-    story.extend([Spacer(1, 0.25 * cm), Paragraph("Appendix: Full Transcript", heading)])
+    # The transcript appendix must never crowd the official minutes. Start it
+    # on a completely new page.
+    story.append(PageBreak())
+    story.append(Paragraph("Appendix: Full Transcript", heading))
     for paragraph in (transcript_text or "No transcript available.").splitlines():
         if paragraph.strip():
             story.append(Paragraph(escape(paragraph.strip()), small))
 
     def branded_page(canvas, document):
         canvas.saveState()
-        # Faint crest watermark behind the minutes on every page.
-        if org["logo_path"] and os.path.isfile(org["logo_path"]):
-            try:
-                if org["logo_path"].lower().endswith(".svg"):
-                    from reportlab.graphics import renderPDF
-                    from svglib.svglib import svg2rlg
-                    drawing = svg2rlg(org["logo_path"])
-                    if drawing and drawing.width and drawing.height:
-                        target = 8.5 * cm
-                        factor = min(target / drawing.width, target / drawing.height)
-                        drawing.scale(factor, factor)
-                        if hasattr(canvas, "setFillAlpha"):
-                            canvas.setFillAlpha(0.055)
-                            canvas.setStrokeAlpha(0.055)
-                        renderPDF.draw(drawing, canvas, (A4[0] - drawing.width * factor) / 2, (A4[1] - drawing.height * factor) / 2)
-                else:
-                    if hasattr(canvas, "setFillAlpha"):
-                        canvas.setFillAlpha(0.05)
-                    canvas.drawImage(org["logo_path"], A4[0] / 2 - 4 * cm, A4[1] / 2 - 4 * cm, 8 * cm, 8 * cm, preserveAspectRatio=True, mask="auto")
-            except Exception as watermark_error:
-                print(f"[WARNING] PDF watermark skipped: {watermark_error}")
-        if hasattr(canvas, "setFillAlpha"):
-            canvas.setFillAlpha(1)
+        # No logo watermark. The exact crest remains in the official header;
+        # removing the centre watermark keeps minutes readable and professional.
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(colors.HexColor("#6B7280"))
         canvas.drawCentredString(A4[0] / 2, 0.75 * cm, f"{org['name']} · {org['motto']} · Official Minutes · Page {document.page}")
@@ -318,22 +296,19 @@ def export_docx(
         header = section.header
         header_p = header.paragraphs[0]
         header_p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        if org["logo_path"] and os.path.isfile(org["logo_path"]) and not org["logo_path"].lower().endswith(".svg"):
+        if org["logo_path"] and os.path.isfile(org["logo_path"]):
             try:
                 header_p.add_run().add_picture(org["logo_path"], width=Inches(0.7))
                 header_p.add_run("\n")
             except Exception:
                 pass
         name_run = header_p.add_run(org["name"].upper())
-        name_run.bold = True; name_run.font.size = Pt(13); name_run.font.color.rgb = royal
+        name_run.bold = True
+        name_run.font.size = Pt(13)
+        name_run.font.color.rgb = royal
         motto_run = header_p.add_run(f"\n{org['motto']}")
-        motto_run.italic = True; motto_run.font.size = Pt(8)
-        # Visible, very light repeating identity in the header serves as a Word watermark.
-        watermark = header.add_paragraph(org["name"].upper())
-        watermark.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        wrun = watermark.runs[0]
-        wrun.font.size = Pt(34)
-        wrun.font.color.rgb = RGBColor(0xE5, 0xE7, 0xEB)
+        motto_run.italic = True
+        motto_run.font.size = Pt(8)
         footer = section.footer.paragraphs[0]
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
         footer.add_run(f"{org['name']} · {org['motto']} · Official Meeting Minutes").font.size = Pt(8)
@@ -362,9 +337,11 @@ def export_docx(
     section_heading("2. Attendance Register")
     attendees = _participant_rows(participants)
     if attendees:
-        table = doc.add_table(rows=1, cols=5); table.style = "Table Grid"
+        table = doc.add_table(rows=1, cols=5)
+        table.style = "Table Grid"
         for cell, label in zip(table.rows[0].cells, ["No.", "Name", "Title / Position", "Email", "Status"]):
-            cell.text = label; cell.paragraphs[0].runs[0].bold = True
+            cell.text = label
+            cell.paragraphs[0].runs[0].bold = True
         for i, row in enumerate(attendees, 1):
             cells = table.add_row().cells
             for cell, value in zip(cells, [str(i), row["name"], row["role"] or "Member", row["email"] or "—", row["status"]]):
@@ -374,26 +351,37 @@ def export_docx(
 
     section_heading("3. Minutes / Proceedings")
     for paragraph in (summary_text or "No minutes have been generated.").splitlines():
-        if paragraph.strip(): doc.add_paragraph(paragraph.strip())
+        if paragraph.strip():
+            doc.add_paragraph(paragraph.strip())
 
     section_heading("4. Resolutions / Key Decisions")
     if decisions:
-        for item in decisions: doc.add_paragraph(item, style="List Number")
+        for item in decisions:
+            doc.add_paragraph(item, style="List Number")
     else:
         doc.add_paragraph("No decisions recorded.")
 
     section_heading("5. Action Items")
     if action_items:
-        table = doc.add_table(rows=1, cols=5); table.style = "Table Grid"
+        table = doc.add_table(rows=1, cols=5)
+        table.style = "Table Grid"
         for cell, label in zip(table.rows[0].cells, ["#", "Action", "Responsible", "Due date", "Status"]):
-            cell.text = label; cell.paragraphs[0].runs[0].bold = True
+            cell.text = label
+            cell.paragraphs[0].runs[0].bold = True
         for i, item in enumerate(action_items, 1):
             cells = table.add_row().cells
-            values = [str(i), item.get("text", ""), item.get("assignee_name") or "Unassigned", str(item.get("deadline") or "Not specified"), str(item.get("status", "pending")).replace("_", " ").title()]
-            for cell, value in zip(cells, values): cell.text = value
+            values = [
+                str(i), item.get("text", ""), item.get("assignee_name") or "Unassigned",
+                str(item.get("deadline") or "Not specified"),
+                str(item.get("status", "pending")).replace("_", " ").title(),
+            ]
+            for cell, value in zip(cells, values):
+                cell.text = value
     else:
         doc.add_paragraph("No action items recorded.")
 
+    # Appendix starts on a fresh Word page too.
+    doc.add_page_break()
     section_heading("Appendix: Full Transcript")
     doc.add_paragraph(transcript_text or "No transcript available.")
     generated = doc.add_paragraph(f"Prepared electronically on {datetime.now().strftime('%d %B %Y at %H:%M')}.")

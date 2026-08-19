@@ -51,18 +51,20 @@ class EmailService:
             with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
                 server.ehlo()
                 if settings.SMTP_USE_STARTTLS:
-                    server.starttls(context=context); server.ehlo()
+                    server.starttls(context=context)
+                    server.ehlo()
                 server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
                 server.send_message(message)
         return len(unique_recipients)
 
     @staticmethod
     def _brand_header() -> str:
-        logo = f"{settings.PUBLIC_APP_URL}/logo.svg"
+        # Use the exact Starlight S.S image supplied for this project.
+        logo = f"{settings.PUBLIC_APP_URL}/starlight-logo.jpg"
         return (
             '<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#1f2937">'
             '<div style="text-align:center;border-bottom:3px solid #173ea5;padding:18px 0">'
-            f'<img src="{html.escape(logo)}" alt="Starlight S.S" width="92" style="max-width:92px">'
+            f'<img src="{html.escape(logo)}" alt="Starlight S.S" width="110" style="max-width:110px;height:auto">'
             '<h2 style="margin:8px 0 2px;color:#173ea5">STARLIGHT SECONDARY SCHOOL</h2>'
             '<div style="font-size:12px;color:#4b5563">RISE AND SHINE</div></div>'
         )

@@ -35,7 +35,7 @@ export default function Sidebar() {
   return <>
     <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between bg-blue-800 px-4 text-white lg:hidden">
       <div className="flex min-w-0 items-center gap-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/logo.svg" alt="Starlight S.S" className="h-10 w-10 rounded bg-white object-contain p-0.5" />
+        {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/starlight-logo.jpg" alt="Starlight S.S" className="h-10 w-10 rounded bg-white object-contain p-0.5" />
         <div className="min-w-0"><div className="truncate text-xs font-bold">STARLIGHT S.S</div><div className="text-[9px] tracking-widest text-blue-100">RISE AND SHINE</div></div>
       </div>
       <button onClick={() => setMobileOpen((value) => !value)} className="rounded p-2 hover:bg-white/10" aria-label="Toggle navigation">{mobileOpen ? <X size={24}/> : <Menu size={24}/>}</button>
@@ -44,7 +44,7 @@ export default function Sidebar() {
     <aside className={`fixed bottom-0 left-0 top-0 z-50 flex w-[min(20rem,88vw)] flex-col border-r border-gray-200 bg-white transition-all duration-300 lg:translate-x-0 ${desktopWidth} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
       <div className="flex h-16 items-center justify-between border-b border-gray-200 px-3">
         <div className="flex min-w-0 items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/logo.svg" alt="Starlight S.S" className="h-11 w-11 shrink-0 object-contain" />
+          {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/starlight-logo.jpg" alt="Starlight S.S" className="h-11 w-11 shrink-0 object-contain" />
           {!collapsed && <div className="min-w-0"><div className="truncate text-xs font-extrabold text-blue-900">STARLIGHT S.S</div><div className="text-[9px] font-semibold tracking-[0.14em] text-gray-500">MEETING SUMMARIZER</div></div>}
         </div>
         <button onClick={() => setCollapsed((value) => !value)} className="hidden rounded p-1 text-gray-500 hover:bg-gray-100 lg:block">{collapsed ? <ChevronRight size={18}/> : <ChevronLeft size={18}/>}</button>

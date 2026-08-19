@@ -81,18 +81,18 @@ def _store_minutes(db: Session, meeting_id: int, full_text: str) -> str:
 
     db.query(Decision).filter(Decision.meeting_id == meeting_id).delete(synchronize_session=False)
     for item in decisions:
-        text = str(item).strip()
-        if text:
-            db.add(Decision(meeting_id=meeting_id, summary_id=summary.id, text=text))
+        text_value = str(item).strip()
+        if text_value:
+            db.add(Decision(meeting_id=meeting_id, summary_id=summary.id, text=text_value))
 
-    # Preserve manually edited action items on retries. Auto-create them only when
-    # none exist for this summary yet.
     if db.query(ActionItem).filter(ActionItem.meeting_id == meeting_id).count() == 0:
         for item in action_items:
+            responsible_name = None
             if isinstance(item, dict):
                 description = str(item.get("description") or item.get("text") or "").strip()
                 priority_value = str(item.get("priority") or "medium").lower()
                 due_value = item.get("due_date") or item.get("deadline") or item.get("raw_deadline")
+                responsible_name = str(item.get("assignee") or item.get("responsible_name") or "").strip() or None
             else:
                 description = str(item).strip()
                 priority_value = "medium"
@@ -107,6 +107,7 @@ def _store_minutes(db: Session, meeting_id: int, full_text: str) -> str:
                 meeting_id=meeting_id,
                 summary_id=summary.id,
                 description=description,
+                responsible_name=responsible_name,
                 status=ActionItemStatus.pending,
                 priority=priority,
                 deadline=_safe_due_date(due_value),
@@ -160,8 +161,8 @@ def transcribe_meeting(meeting_id: int, job_id: str):
         db.add(transcript)
         db.flush()
         for segment in segments:
-            text = str(segment.get("text", "")).strip()
-            if not text:
+            text_value = str(segment.get("text", "")).strip()
+            if not text_value:
                 continue
             start = max(0.0, float(segment.get("start", 0.0) or 0.0))
             end = max(start, float(segment.get("end", start) or start))
@@ -169,7 +170,7 @@ def transcribe_meeting(meeting_id: int, job_id: str):
                 transcript_id=transcript.id,
                 start_time=start,
                 end_time=end,
-                text=text,
+                text=text_value,
                 speaker=str(segment.get("speaker") or "Speaker").strip(),
             ))
 

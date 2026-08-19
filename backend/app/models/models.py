@@ -167,6 +167,9 @@ class ActionItem(Base):
     meeting_id = Column(Integer, ForeignKey("meetings.id", ondelete="CASCADE"), nullable=False)
     summary_id = Column(Integer, ForeignKey("summaries.id", ondelete="SET NULL"), nullable=True)
     assignee_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    # Free-text responsible person lets minute secretaries either choose an
+    # existing person or type a name that is not a system user.
+    responsible_name = Column(String(255), nullable=True)
     description = Column(Text, nullable=False)
     status = Column(Enum(ActionItemStatus), default=ActionItemStatus.pending, nullable=False, index=True)
     priority = Column(Enum(ActionItemPriority), default=ActionItemPriority.medium, nullable=False, index=True)

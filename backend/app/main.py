@@ -13,8 +13,6 @@ from app.models.models import User, UserRole
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Create every currently declared table (including invitations) before
-    # applying compatibility patches to older production databases.
     Base.metadata.create_all(bind=engine)
 
     if not settings.is_sqlite:
@@ -25,6 +23,11 @@ async def lifespan(app: FastAPI):
                 connection.execute(text(
                     "ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS "
                     "attendance_status VARCHAR(20) NOT NULL DEFAULT 'present'"
+                ))
+            if connection.execute(text("SELECT to_regclass('public.action_items') IS NOT NULL")).scalar():
+                connection.execute(text(
+                    "ALTER TABLE action_items ADD COLUMN IF NOT EXISTS "
+                    "responsible_name VARCHAR(255)"
                 ))
 
     db = SessionLocal()
@@ -53,8 +56,6 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Production is same-origin through the Next.js proxy. Keep the public origin
-# explicit so credentialed requests are also valid during direct API testing.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.PUBLIC_APP_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
