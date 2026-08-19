@@ -1,6 +1,6 @@
 # Requirements Traceability Matrix
 
-This matrix reflects the current production architecture. The retired Faster-Whisper references have been removed; Google Gemini is the production transcription provider.
+This matrix reflects the current production architecture. Google Gemini is the production transcription provider.
 
 | ID | Requirement | Main implementation | Verification | Status |
 |---|---|---|---|---|
@@ -42,4 +42,4 @@ This matrix reflects the current production architecture. The retired Faster-Whi
 
 ## Production AI note
 
-The application no longer exposes or uses a Whisper model setting. `GEMINI_API_KEY` and `GEMINI_MODEL` are deployment environment variables. The Settings page displays the effective provider/model and readiness without pretending an obsolete local model selector controls production.
+`GEMINI_API_KEY` and `GEMINI_MODEL` are deployment environment variables. The Settings page displays the effective provider/model and readiness instead of exposing infrastructure model selection as an ordinary UI preference.
