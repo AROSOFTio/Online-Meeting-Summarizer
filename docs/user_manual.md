@@ -56,12 +56,12 @@ The bell in authenticated pages shows:
 - school identity/letterhead details;
 - official logo replacement;
 - timezone and recording retention;
-- read-only runtime status for the real transcription provider (Google Gemini) and configured model;
+- read-only runtime status for Google Gemini and the configured model;
 - Gemini API readiness, SMTP readiness, database and queue status;
 - validated database backups; and
 - recent audit activity.
 
-There is no Whisper model selector because Whisper is not part of the production transcription path.
+The AI model is deployment configuration, so the Settings page reports the effective Gemini model instead of exposing a misleading model selector.
 
 ## 12. Backups and restore
 ### Create/download
