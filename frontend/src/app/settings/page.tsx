@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useAuth } from "@/context/AuthContext";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Database, Download, RefreshCw, Save, ShieldCheck, Sparkles, Upload } from "lucide-react";
+
 import DashboardLayout from "@/components/DashboardLayout";
+import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
-import { Save, RefreshCw, Upload } from "lucide-react";
 
 interface SettingsData {
   school_name: string;
@@ -18,258 +19,81 @@ interface SettingsData {
   organization_registration: string;
   timezone: string;
   retention_period_days: string;
-  whisper_model: string;
 }
+interface SystemStatus {
+  transcription_provider: string;
+  gemini_model: string;
+  gemini_configured: boolean;
+  smtp_configured: boolean;
+  database: string;
+  queue: string;
+  timezone: string;
+  retention_period_days: number;
+}
+interface Backup { id:number; filename:string; size_bytes:number; status:string; created_at:string; }
+interface Audit { id:number; user_email:string|null; action:string; details:string|null; ip_address:string|null; created_at:string; }
 
-const defaultSettings: SettingsData = {
-  school_name: "",
-  school_logo_url: "",
-  organization_address: "",
-  organization_phone: "",
-  organization_email: "",
-  organization_website: "",
-  organization_motto: "",
-  organization_registration: "",
-  timezone: "",
-  retention_period_days: "",
-  whisper_model: "",
+const emptySettings: SettingsData = {
+  school_name:"", school_logo_url:"", organization_address:"", organization_phone:"",
+  organization_email:"", organization_website:"", organization_motto:"",
+  organization_registration:"", timezone:"Africa/Kampala", retention_period_days:"365",
 };
+const formatBytes=(bytes:number)=>bytes<1024*1024?`${(bytes/1024).toFixed(1)} KB`:`${(bytes/1024/1024).toFixed(1)} MB`;
 
-export default function SettingsPage() {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const [formValues, setFormValues] = useState<SettingsData>(defaultSettings);
-  const [formLoaded, setFormLoaded] = useState(false);
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [logoUploading, setLogoUploading] = useState(false);
+export default function SettingsPage(){
+  const {user}=useAuth();
+  const queryClient=useQueryClient();
+  const [formValues,setFormValues]=useState<SettingsData>(emptySettings);
+  const [loaded,setLoaded]=useState(false);
+  const [message,setMessage]=useState<string|null>(null);
+  const [error,setError]=useState<string|null>(null);
+  const [logoUploading,setLogoUploading]=useState(false);
 
-  const { data, isLoading, isError } = useQuery<SettingsData>({
-    queryKey: ["system-settings"],
-    queryFn: () => apiRequest("/api/settings/"),
-  });
+  const settingsQuery=useQuery<SettingsData>({queryKey:["system-settings"],queryFn:()=>apiRequest("/api/settings/")});
+  const statusQuery=useQuery<SystemStatus>({queryKey:["system-status"],queryFn:()=>apiRequest("/api/system/status")});
+  const backupsQuery=useQuery<Backup[]>({queryKey:["system-backups"],queryFn:()=>apiRequest("/api/system/backups"),enabled:user?.role==="admin"});
+  const auditQuery=useQuery<Audit[]>({queryKey:["system-audit"],queryFn:()=>apiRequest("/api/system/audit?limit=20"),enabled:user?.role==="admin"});
 
-  useEffect(() => {
-    if (data && !formLoaded) {
-      setFormValues(data);
-      setFormLoaded(true);
-    }
-  }, [data, formLoaded]);
+  useEffect(()=>{if(settingsQuery.data&&!loaded){setFormValues(settingsQuery.data);setLoaded(true);}},[settingsQuery.data,loaded]);
 
-  const saveMutation = useMutation({
-    mutationFn: (values: SettingsData) =>
-      apiRequest("/api/settings/", {
-        method: "PUT",
-        body: JSON.stringify(values),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["system-settings"] });
-      setSuccessMsg("Settings saved successfully.");
-      setErrorMsg(null);
-      setFormLoaded(false); // allow re-sync from query
-      setTimeout(() => setSuccessMsg(null), 3000);
-    },
-    onError: (err: Error) => {
-      setErrorMsg(err.message || "Failed to save settings");
-      setSuccessMsg(null);
-    },
-  });
+  const saveMutation=useMutation({mutationFn:(values:SettingsData)=>apiRequest("/api/settings/",{method:"PUT",body:JSON.stringify(values)}),onSuccess:()=>{queryClient.invalidateQueries({queryKey:["system-settings"]});setLoaded(false);setMessage("Settings saved successfully.");setError(null);},onError:(err:Error)=>{setError(err.message);setMessage(null);}});
+  const backupMutation=useMutation({mutationFn:()=>apiRequest("/api/system/backups",{method:"POST"}),onSuccess:()=>{queryClient.invalidateQueries({queryKey:["system-backups"]});setMessage("Validated database backup created.");setError(null);},onError:(err:Error)=>setError(err.message)});
+  const cleanupMutation=useMutation({mutationFn:()=>apiRequest("/api/system/retention/cleanup",{method:"POST"}),onSuccess:(data)=>{setMessage(`Retention cleanup completed. Removed ${data.removed_recordings} archived recording(s).`);setError(null);},onError:(err:Error)=>setError(err.message)});
 
-  const handleChange = (key: keyof SettingsData, value: string) => {
-    setFormValues((prev) => ({ ...prev, [key]: value }));
-  };
+  const handleLogoUpload=async(file?:File)=>{if(!file)return;setLogoUploading(true);setError(null);try{const body=new FormData();body.append("file",file);const result=await apiRequest("/api/settings/logo",{method:"POST",body});setFormValues(v=>({...v,school_logo_url:result.school_logo_url}));await queryClient.invalidateQueries({queryKey:["system-settings"]});setMessage("School logo uploaded.");}catch(err){setError(err instanceof Error?err.message:"Logo upload failed");}finally{setLogoUploading(false);}};
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    saveMutation.mutate(formValues);
-  };
+  if(!user)return null;
+  if(user.role!=="admin")return <DashboardLayout><div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center text-red-700"><h2 className="font-bold">Access Denied</h2><p className="mt-1 text-sm">Only administrators can manage system settings.</p></div></DashboardLayout>;
 
-  const handleLogoUpload = async (file: File | undefined) => {
-    if (!file) return;
-    setLogoUploading(true);
-    setErrorMsg(null);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const result = await apiRequest("/api/settings/logo", {
-        method: "POST",
-        body: formData,
-      });
-      setFormValues((previous) => ({
-        ...previous,
-        school_logo_url: result.school_logo_url,
-      }));
-      await queryClient.invalidateQueries({ queryKey: ["system-settings"] });
-      setSuccessMsg("School logo uploaded successfully.");
-    } catch (error: unknown) {
-      setErrorMsg(error instanceof Error ? error.message : "Logo upload failed");
-    } finally {
-      setLogoUploading(false);
-    }
-  };
+  return <DashboardLayout><div className="space-y-6">
+    <div className="border-b border-gray-200 pb-5"><h1 className="text-2xl font-bold text-gray-900">System Settings & Operations</h1><p className="mt-1 text-sm text-gray-500">Branding, runtime readiness, retention, backups and recent audit activity.</p></div>
+    {(message||error)&&<div className={`rounded border p-3 text-sm ${error?"border-red-200 bg-red-50 text-red-700":"border-green-200 bg-green-50 text-green-700"}`}>{error||message}</div>}
 
-  if (!user) return null;
-  if (user.role !== "admin") {
-    return (
-      <DashboardLayout>
-        <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-lg text-center">
-          <h2 className="text-lg font-bold">Access Denied</h2>
-          <p className="text-sm mt-1">Only administrators can manage system settings.</p>
-        </div>
-      </DashboardLayout>
-    );
-  }
+    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {statusQuery.isLoading?<div className="col-span-full flex items-center gap-2 rounded border bg-white p-4 text-sm text-gray-500"><RefreshCw className="animate-spin" size={16}/>Loading runtime status...</div>:statusQuery.data&&<>
+        <StatusCard icon={<Sparkles size={18}/>} title="AI transcription" value={`${statusQuery.data.transcription_provider} · ${statusQuery.data.gemini_model}`} ok={statusQuery.data.gemini_configured} note={statusQuery.data.gemini_configured?"Gemini key configured":"Gemini key missing"}/>
+        <StatusCard icon={<Database size={18}/>} title="Database" value={statusQuery.data.database} ok note={statusQuery.data.queue}/>
+        <StatusCard icon={<ShieldCheck size={18}/>} title="Email delivery" value={statusQuery.data.smtp_configured?"Ready":"Not configured"} ok={statusQuery.data.smtp_configured} note="Invitations and final minutes"/>
+        <StatusCard icon={<RefreshCw size={18}/>} title="Retention" value={`${statusQuery.data.retention_period_days} days`} ok note="Archived recordings only"/>
+      </>}
+    </section>
 
-  return (
-    <DashboardLayout>
-      <div className="flex flex-col space-y-6">
-        <div className="border-b border-[#e5e7eb] pb-5">
-          <h1 className="text-2xl font-bold text-gray-900">System Settings</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Configure school branding, timezone, data retention and transcription model
-          </p>
-        </div>
-
-        {isLoading && (
-          <div className="flex items-center justify-center py-20 bg-white border border-gray-200 rounded-lg">
-            <RefreshCw className="animate-spin text-blue-700" size={24} />
-            <span className="ml-3 text-sm text-gray-500">Loading settings...</span>
-          </div>
-        )}
-
-        {isError && (
-          <div className="p-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
-            Failed to load system settings.
-          </div>
-        )}
-
-        {data && (
-          <form onSubmit={handleSubmit} className="bg-white border border-[#e5e7eb] rounded-lg shadow-sm p-6 max-w-2xl space-y-5">
-            {successMsg && (
-              <div className="p-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded">
-                {successMsg}
-              </div>
-            )}
-            {errorMsg && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded">
-                {errorMsg}
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">School Name</label>
-              <input
-                type="text"
-                value={formValues.school_name}
-                onChange={(e) => handleChange("school_name", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
-              />
-            </div>
-
-            <div className="border-t border-gray-200 pt-5">
-              <h2 className="font-semibold text-gray-900">Official letterhead details</h2>
-              <p className="mt-1 text-xs text-gray-500">These details appear on exported Word and PDF minutes.</p>
-            </div>
-
-            {([
-              ["organization_address", "Postal / Physical Address", "P.O. Box, town, district and country"],
-              ["organization_phone", "Telephone", "+256 ..."],
-              ["organization_email", "Official Email", "office@example.org"],
-              ["organization_website", "Website", "https://example.org"],
-              ["organization_motto", "Motto", "Organization motto"],
-              ["organization_registration", "Registration / Centre Number", "Official registration number"],
-            ] as const).map(([key, label, placeholder]) => (
-              <div key={key}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-                <input
-                  type={key === "organization_email" ? "email" : key === "organization_website" ? "url" : "text"}
-                  value={formValues[key]}
-                  placeholder={placeholder}
-                  onChange={(event) => handleChange(key, event.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
-                />
-              </div>
-            ))}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">School Logo</label>
-              <div className="flex flex-col items-start gap-4 rounded border border-gray-200 p-4 sm:flex-row sm:items-center">
-                <div className="h-16 w-16 overflow-hidden rounded bg-blue-50">
-                  {formValues.school_logo_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={formValues.school_logo_url} alt="School logo" className="h-full w-full object-contain" />
-                  )}
-                </div>
-                <label className="inline-flex cursor-pointer items-center gap-2 rounded bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800">
-                  <Upload size={16} />
-                  <span>{logoUploading ? "Uploading..." : "Upload Logo"}</span>
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/svg+xml"
-                    className="hidden"
-                    disabled={logoUploading}
-                    onChange={(event) => void handleLogoUpload(event.target.files?.[0])}
-                  />
-                </label>
-              </div>
-              <p className="mt-1 text-xs text-gray-500">PNG, JPEG, WebP, or SVG; maximum 5 MB.</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Timezone</label>
-              <select
-                value={formValues.timezone}
-                onChange={(e) => handleChange("timezone", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
-              >
-                <option value="Africa/Kampala">Africa/Kampala (EAT, UTC+3)</option>
-                <option value="Africa/Nairobi">Africa/Nairobi (EAT, UTC+3)</option>
-                <option value="UTC">UTC</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Data Retention Period (days)</label>
-              <input
-                type="number"
-                min="30"
-                max="3650"
-                value={formValues.retention_period_days}
-                onChange={(e) => handleChange("retention_period_days", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
-              />
-              <p className="mt-1 text-xs text-gray-500">Recordings older than this will be marked for cleanup</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Whisper Transcription Model</label>
-              <select
-                value={formValues.whisper_model}
-                onChange={(e) => handleChange("whisper_model", e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-900"
-              >
-                <option value="tiny">tiny (fastest, lowest accuracy)</option>
-                <option value="base">base (balanced)</option>
-                <option value="small">small (slower, higher accuracy)</option>
-                <option value="medium">medium (slow, high accuracy)</option>
-                <option value="large-v2">large-v2 (slowest, highest accuracy)</option>
-              </select>
-              <p className="mt-1 text-xs text-gray-500">Larger models require more RAM and processing time</p>
-            </div>
-
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={saveMutation.isPending}
-                className="flex items-center space-x-2 bg-blue-700 text-white px-5 py-2 rounded text-sm font-medium hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors disabled:opacity-50"
-              >
-                <Save size={16} />
-                <span>{saveMutation.isPending ? "Saving..." : "Save Settings"}</span>
-              </button>
-            </div>
-          </form>
-        )}
+    {settingsQuery.data&&<form onSubmit={e=>{e.preventDefault();saveMutation.mutate(formValues);}} className="max-w-3xl space-y-5 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <h2 className="font-bold text-gray-900">School identity & document details</h2>
+      <Field label="School Name" value={formValues.school_name} onChange={v=>setFormValues(s=>({...s,school_name:v}))}/>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Address" value={formValues.organization_address} onChange={v=>setFormValues(s=>({...s,organization_address:v}))}/><Field label="Telephone" value={formValues.organization_phone} onChange={v=>setFormValues(s=>({...s,organization_phone:v}))}/><Field label="Official Email" value={formValues.organization_email} type="email" onChange={v=>setFormValues(s=>({...s,organization_email:v}))}/><Field label="Website" value={formValues.organization_website} type="url" onChange={v=>setFormValues(s=>({...s,organization_website:v}))}/><Field label="Motto" value={formValues.organization_motto} onChange={v=>setFormValues(s=>({...s,organization_motto:v}))}/><Field label="Registration / Centre Number" value={formValues.organization_registration} onChange={v=>setFormValues(s=>({...s,organization_registration:v}))}/>
       </div>
-    </DashboardLayout>
-  );
+      <div><label className="mb-2 block text-sm font-medium text-gray-700">School Logo</label><div className="flex items-center gap-4 rounded border border-gray-200 p-4"><div className="h-20 w-20 overflow-hidden rounded bg-gray-50">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={formValues.school_logo_url||"/starlight-logo.jpg"} alt="School logo" className="h-full w-full object-contain"/></div><label className="inline-flex cursor-pointer items-center gap-2 rounded bg-blue-700 px-4 py-2 text-sm font-semibold text-white"><Upload size={16}/>{logoUploading?"Uploading...":"Replace Logo"}<input hidden type="file" accept="image/png,image/jpeg,image/webp" disabled={logoUploading} onChange={e=>void handleLogoUpload(e.target.files?.[0])}/></label></div></div>
+      <div className="grid gap-4 sm:grid-cols-2"><label className="text-sm font-medium text-gray-700">Timezone<select value={formValues.timezone} onChange={e=>setFormValues(s=>({...s,timezone:e.target.value}))} className="mt-1 w-full rounded border border-gray-300 bg-white px-3 py-2 text-gray-900"><option value="Africa/Kampala">Africa/Kampala (EAT, UTC+3)</option><option value="Africa/Nairobi">Africa/Nairobi (EAT, UTC+3)</option><option value="UTC">UTC</option></select></label><label className="text-sm font-medium text-gray-700">Recording retention (days)<input type="number" min={30} max={3650} value={formValues.retention_period_days} onChange={e=>setFormValues(s=>({...s,retention_period_days:e.target.value}))} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-gray-900"/><span className="mt-1 block text-xs font-normal text-gray-500">Only archived recordings are removed; transcripts and minutes remain.</span></label></div>
+      <div className="flex flex-wrap gap-2"><button disabled={saveMutation.isPending} className="inline-flex items-center gap-2 rounded bg-blue-700 px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"><Save size={16}/>{saveMutation.isPending?"Saving...":"Save Settings"}</button><button type="button" onClick={()=>cleanupMutation.mutate()} disabled={cleanupMutation.isPending} className="rounded border border-gray-300 px-4 py-2.5 text-sm font-semibold text-gray-700 disabled:opacity-50">Run Retention Cleanup</button></div>
+    </form>}
+
+    <section className="max-w-3xl rounded-lg border border-gray-200 bg-white p-6 shadow-sm"><div className="mb-4 flex items-center justify-between gap-3"><div><h2 className="font-bold text-gray-900">Database Backups</h2><p className="text-xs text-gray-500">Backups are validated before listing. Restore is offline for safety.</p></div><button onClick={()=>backupMutation.mutate()} disabled={backupMutation.isPending} className="rounded bg-blue-700 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50">{backupMutation.isPending?"Creating...":"Create Backup"}</button></div><div className="space-y-2">{(backupsQuery.data||[]).map(item=><div key={item.id} className="flex items-center justify-between gap-3 rounded border border-gray-200 p-3"><div><div className="text-sm font-medium text-gray-900">{item.filename}</div><div className="text-xs text-gray-500">{formatBytes(item.size_bytes)} · {new Date(item.created_at).toLocaleString()} · {item.status}</div></div><a href={`/api/system/backups/${item.id}/download`} className="inline-flex items-center gap-1 rounded border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700"><Download size={13}/>Download</a></div>)}{backupsQuery.data?.length===0&&<p className="text-sm text-gray-500">No backups created yet.</p>}</div></section>
+
+    <section className="max-w-3xl rounded-lg border border-gray-200 bg-white p-6 shadow-sm"><h2 className="font-bold text-gray-900">Recent Audit Activity</h2><div className="mt-3 divide-y divide-gray-100">{(auditQuery.data||[]).map(row=><div key={row.id} className="py-3"><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-gray-900">{row.action.replaceAll("_"," ")}</span><span className="text-xs text-gray-400">{new Date(row.created_at).toLocaleString()}</span></div><p className="mt-1 text-xs text-gray-600">{row.details||"No details"}</p><p className="mt-1 text-[11px] text-gray-400">{row.user_email||"System"}{row.ip_address?` · ${row.ip_address}`:""}</p></div>)}{auditQuery.data?.length===0&&<p className="mt-3 text-sm text-gray-500">No audit entries yet.</p>}</div></section>
+  </div></DashboardLayout>;
 }
+
+function Field({label,value,onChange,type="text"}:{label:string;value:string;onChange:(value:string)=>void;type?:string}){return <label className="block text-sm font-medium text-gray-700">{label}<input type={type} value={value} onChange={e=>onChange(e.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-gray-900"/></label>}
+function StatusCard({icon,title,value,ok,note}:{icon:React.ReactNode;title:string;value:string;ok:boolean;note:string}){return <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"><div className="flex items-center gap-2 text-gray-500">{icon}<span className="text-xs font-semibold uppercase">{title}</span></div><div className="mt-2 text-sm font-bold text-gray-900">{value}</div><div className={`mt-1 text-xs ${ok?"text-green-600":"text-amber-700"}`}>{note}</div></div>}
