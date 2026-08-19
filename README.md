@@ -19,7 +19,7 @@ A production-oriented three-tier web application for scheduling, inviting partic
 | Authentication | Argon2id + JWT cookies |
 | Deployment | Docker Compose / Coolify |
 
-**Faster-Whisper/Whisper is not used by the production transcription path.**
+Google Gemini is the single production transcription provider.
 
 ## Main features
 
