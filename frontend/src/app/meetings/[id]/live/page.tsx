@@ -28,7 +28,6 @@ export default function LiveMeetingPage() {
   const meetingId = Number(params.id);
   const router = useRouter();
   const { user } = useAuth();
-  const canEdit = user?.role === "admin" || user?.role === "minute_secretary";
 
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -40,8 +39,19 @@ export default function LiveMeetingPage() {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const leavingRef = useRef(false);
 
-  const meetingQuery = useQuery<Meeting>({ queryKey:["meeting-live",meetingId], queryFn:()=>apiRequest(`/api/meetings/${meetingId}`), enabled:Number.isInteger(meetingId)&&meetingId>0 });
-  const attendanceQuery = useQuery<Attendance[]>({ queryKey:["meeting-live-attendance",meetingId], queryFn:()=>apiRequest(`/api/meetings/${meetingId}/attendance`), enabled:Boolean(meetingQuery.data) });
+  const meetingQuery = useQuery<Meeting>({
+    queryKey:["meeting-live",meetingId],
+    queryFn:()=>apiRequest(`/api/meetings/${meetingId}`),
+    enabled:Boolean(user && Number.isInteger(meetingId) && meetingId > 0),
+  });
+  const canManageMeeting = Boolean(
+    user && meetingQuery.data && (user.role === "admin" || meetingQuery.data.owner_id === user.id)
+  );
+  const attendanceQuery = useQuery<Attendance[]>({
+    queryKey:["meeting-live-attendance",meetingId],
+    queryFn:()=>apiRequest(`/api/meetings/${meetingId}/attendance`),
+    enabled:canManageMeeting,
+  });
 
   const cleanupStream = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -87,8 +97,8 @@ export default function LiveMeetingPage() {
       recorder.ondataavailable = (event) => { if (event.data.size > 0) chunksRef.current.push(event.data); };
       recorder.onstop = () => {
         cleanupStream();
-        setIsRecording(false);
         if (leavingRef.current) return;
+        setIsRecording(false);
         const type = recorder.mimeType || chunksRef.current[0]?.type || "audio/webm";
         const blob = new Blob(chunksRef.current, { type });
         if (blob.size === 0) {
@@ -119,11 +129,12 @@ export default function LiveMeetingPage() {
   };
 
   if (!user) return null;
-  if (!canEdit) return <DashboardLayout><div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">Only the meeting organizer or administrator can start this meeting.</div></DashboardLayout>;
   if (meetingQuery.isLoading) return <DashboardLayout><div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm text-slate-500">Opening meeting...</div></DashboardLayout>;
   if (meetingQuery.isError || !meetingQuery.data) return <DashboardLayout><div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">Could not open this meeting.</div></DashboardLayout>;
 
   const meeting = meetingQuery.data;
+  if (!canManageMeeting) return <DashboardLayout><div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">Only the meeting organizer or an administrator can start this meeting.</div></DashboardLayout>;
+
   const attendance = attendanceQuery.data || [];
   const presentCount = attendance.filter((person) => person.attendance_status === "present").length;
 
