@@ -5,19 +5,19 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
-from sqlalchemy import func, or_
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core import deps
 from app.core.audit import log_action
 from app.core.config import settings
 from app.models.models import (
-    ActionItem, AuditLog, BackupRecord, JobStatus, Meeting, MeetingStatus,
-    Participant, ProcessingJob, Recording, SystemSetting, User, UserRole,
+    ActionItem, ActionItemStatus, AuditLog, BackupRecord, Meeting, MeetingStatus,
+    Participant, Recording, SystemSetting, User, UserRole,
 )
 from app.services.backup import create_database_backup, validate_backup
-from app.services.gemini_client import resolve_gemini_model
 from app.services.email import email_service
+from app.services.gemini_client import resolve_gemini_model
 
 router = APIRouter()
 
@@ -38,6 +38,7 @@ def system_status(
     current_user: User = Depends(deps.get_current_user),
 ):
     retention = db.query(SystemSetting).filter(SystemSetting.key == "retention_period_days").first()
+    timezone_setting = db.query(SystemSetting).filter(SystemSetting.key == "timezone").first()
     return {
         "transcription_provider": "Google Gemini",
         "gemini_model": resolve_gemini_model(),
@@ -45,7 +46,7 @@ def system_status(
         "smtp_configured": email_service.enabled,
         "database": "SQLite" if settings.is_sqlite else "PostgreSQL",
         "queue": "Redis + Celery",
-        "timezone": settings.TIMEZONE,
+        "timezone": timezone_setting.value if timezone_setting else settings.TIMEZONE,
         "retention_period_days": int(retention.value) if retention and retention.value.isdigit() else settings.RETENTION_PERIOD_DAYS,
     }
 
@@ -76,7 +77,7 @@ def notifications(
             "created_at": meeting.updated_at.isoformat(),
         })
 
-    actions = db.query(ActionItem).filter(ActionItem.status != "completed")
+    actions = db.query(ActionItem).filter(ActionItem.status != ActionItemStatus.completed)
     if current_user.role != UserRole.admin:
         actions = actions.join(Meeting).filter(
             ((Meeting.owner_id == current_user.id) | Meeting.participants.any(Participant.email == current_user.email))
