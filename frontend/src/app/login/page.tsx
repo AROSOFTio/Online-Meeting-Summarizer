@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useState } from "react";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
+import { Users } from "lucide-react";
+
 import { useAuth } from "@/context/AuthContext";
 
 const loginSchema = z.object({
-  email: z.string().email("Please enter a valid school email"),
+  email: z.string().email("Please enter a valid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
@@ -35,31 +38,33 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#f3f4f6] px-4">
-      <div className="w-full max-w-md rounded-lg border border-[#e5e7eb] bg-white p-8 shadow-sm">
-        <div className="mb-6 flex flex-col items-center">
+    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
+      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-8">
+        <div className="mb-7 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/starlight-logo.jpg" alt="Starlight Secondary School" className="mb-3 h-28 w-28 object-contain" />
-          <h1 className="text-center text-xl font-bold text-gray-900">STARLIGHT SECONDARY SCHOOL</h1>
-          <p className="text-sm text-gray-500">Online Meeting Summarizer</p>
+          <img src="/api/settings/logo" alt="Starlight Secondary School" className="mx-auto mb-4 h-auto max-h-32 w-auto max-w-[230px] object-contain" />
+          <h1 className="text-xl font-extrabold text-slate-950">STARLIGHT SECONDARY SCHOOL</h1>
+          <p className="mt-1 text-sm text-slate-500">Meeting Summarizer</p>
         </div>
 
-        {error && <div className="mb-4 rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
+        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Email Address</label>
-            <input type="email" {...register("email")} className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="name@starlight.sc.ug" />
-            {errors.email && <p className="mt-1 text-xs text-red-600">{errors.email.message}</p>}
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">Password</label>
-            <input type="password" {...register("password")} className="w-full rounded border border-gray-300 px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" placeholder="••••••••" />
-            {errors.password && <p className="mt-1 text-xs text-red-600">{errors.password.message}</p>}
-          </div>
-          <button type="submit" disabled={isSubmitting} className="w-full rounded bg-blue-700 py-2 text-sm font-medium text-white transition duration-150 hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50">{isSubmitting ? "Logging in..." : "Log In"}</button>
+          <label className="block text-sm font-medium text-slate-700">Email Address
+            <input type="email" {...register("email")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="name@starlight.sc.ug" />
+            {errors.email && <span className="mt-1 block text-xs text-red-600">{errors.email.message}</span>}
+          </label>
+          <label className="block text-sm font-medium text-slate-700">Password
+            <input type="password" {...register("password")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="••••••••" />
+            {errors.password && <span className="mt-1 block text-xs text-red-600">{errors.password.message}</span>}
+          </label>
+          <button type="submit" disabled={isSubmitting} className="w-full rounded-lg bg-blue-700 py-3 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">{isSubmitting ? "Signing in..." : "Sign In"}</button>
         </form>
+
+        <div className="my-6 flex items-center gap-3 text-xs text-slate-400"><span className="h-px flex-1 bg-slate-200" />OR<span className="h-px flex-1 bg-slate-200" /></div>
+        <Link href="/join-meeting" className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800 hover:bg-blue-100"><Users size={17} />Join an Invited Meeting</Link>
+        <p className="mt-2 text-center text-xs text-slate-400">Invitees do not need a staff login.</p>
       </div>
-    </div>
+    </main>
   );
 }

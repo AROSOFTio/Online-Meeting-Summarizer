@@ -59,7 +59,6 @@ class EmailService:
 
     @staticmethod
     def _brand_header() -> str:
-        # Use the exact Starlight S.S image supplied for this project.
         logo = f"{settings.PUBLIC_APP_URL}/starlight-logo.jpg"
         return (
             '<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#1f2937">'
@@ -73,16 +72,16 @@ class EmailService:
         safe_title = html.escape(meeting_title)
         safe_org = html.escape(organization_name)
         safe_url = html.escape(invitation_url)
-        date_text = meeting_date.strftime("%d %B %Y") if meeting_date else "Scheduled meeting"
+        date_text = meeting_date.strftime("%d %B %Y at %H:%M") if meeting_date else "Scheduled meeting"
         return self.send(
             [recipient],
             f"Meeting invitation: {meeting_title}",
-            f"You have been invited to {meeting_title} at {organization_name}.\nMeeting date: {date_text}\n\nRegister your attendance here:\n{invitation_url}\n",
+            f"You have been invited to {meeting_title} at {organization_name}.\nMeeting: {date_text}\n\nJoin the meeting here:\n{invitation_url}\n\nConfirm your name and position once, then you will enter the meeting.",
             self._brand_header()
             + f'<div style="padding:24px"><p>You have been invited to:</p><h3>{safe_title}</h3>'
-            + f'<p><b>Date:</b> {html.escape(date_text)}</p><p>{safe_org}</p>'
-            + f'<p><a href="{safe_url}" style="display:inline-block;background:#173ea5;color:white;padding:12px 18px;text-decoration:none;border-radius:6px;font-weight:bold">Register Attendance</a></p>'
-            + '<p style="font-size:12px;color:#6b7280">The link will ask for your full name and title/position.</p></div></div>',
+            + f'<p><b>Date &amp; time:</b> {html.escape(date_text)}</p><p>{safe_org}</p>'
+            + f'<p><a href="{safe_url}" style="display:inline-block;background:#173ea5;color:white;padding:13px 20px;text-decoration:none;border-radius:7px;font-weight:bold">Join Meeting</a></p>'
+            + '<p style="font-size:12px;color:#6b7280">No staff account is required. Confirm your full name and title/position, then enter the meeting.</p></div></div>',
         )
 
     def send_final_minutes(self, recipients: Iterable[str], meeting_title: str, meeting_id: int, pdf_data: bytes, organization_name: str) -> int:
