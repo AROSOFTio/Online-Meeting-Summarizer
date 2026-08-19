@@ -2,6 +2,7 @@ from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core import deps
@@ -33,12 +34,24 @@ def _item_payload(item: ActionItem) -> dict:
     }
 
 
+def _parse_date(value: Optional[str], field: str) -> Optional[date]:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid {field}. Use YYYY-MM-DD.") from exc
+
+
 @router.get("/")
 def list_action_items(
     meeting_id: Optional[int] = None,
     assignee_id: Optional[int] = None,
+    responsible: Optional[str] = None,
     status: Optional[str] = None,
     priority: Optional[str] = None,
+    deadline_from: Optional[str] = None,
+    deadline_to: Optional[str] = None,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
@@ -47,15 +60,26 @@ def list_action_items(
         query = query.filter(ActionItem.meeting_id == meeting_id)
     if assignee_id:
         query = query.filter(ActionItem.assignee_id == assignee_id)
+    if responsible:
+        needle = f"%{responsible.strip().lower()}%"
+        query = query.outerjoin(User, ActionItem.assignee_id == User.id).filter(
+            or_(func.lower(User.full_name).like(needle), func.lower(ActionItem.responsible_name).like(needle))
+        )
     if status:
         query = query.filter(ActionItem.status == status)
     if priority:
         query = query.filter(ActionItem.priority == priority)
+    start = _parse_date(deadline_from, "deadline_from")
+    end = _parse_date(deadline_to, "deadline_to")
+    if start:
+        query = query.filter(ActionItem.deadline >= start)
+    if end:
+        query = query.filter(ActionItem.deadline <= end)
 
     if current_user.role != UserRole.admin:
-        query = query.join(Meeting).filter(
+        query = query.join(Meeting, ActionItem.meeting_id == Meeting.id).filter(
             (Meeting.owner_id == current_user.id)
-            | (Meeting.participants.any(Participant.email == current_user.email))
+            | Meeting.participants.any(Participant.email == current_user.email)
         )
 
     items = query.order_by(ActionItem.deadline.asc().nulls_last(), ActionItem.created_at.desc()).all()
@@ -73,22 +97,17 @@ def create_action_item(
     text_value = str(body.get("text", "")).strip()
     if not meeting_id or not text_value:
         raise HTTPException(status_code=400, detail="meeting_id and text are required")
-
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised")
 
-    deadline = None
-    if body.get("deadline"):
-        try:
-            deadline = date.fromisoformat(body["deadline"])
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail="Invalid deadline format. Use YYYY-MM-DD.") from exc
-
+    deadline = _parse_date(body.get("deadline"), "deadline")
     responsible_name = str(body.get("responsible_name") or "").strip() or None
-    assignee_id = body.get("assignee_id")
+    assignee_id = body.get("assignee_id") or None
+    if assignee_id and not db.query(User).filter(User.id == assignee_id, User.is_active.is_(True)).first():
+        raise HTTPException(status_code=400, detail="Selected assignee does not exist or is inactive")
     item = ActionItem(
         meeting_id=meeting_id,
         description=text_value,
@@ -101,15 +120,7 @@ def create_action_item(
     db.add(item)
     db.commit()
     db.refresh(item)
-
-    log_action(
-        db,
-        action="create_action_item",
-        details=f"Created action item for meeting {meeting_id}: {text_value[:60]}",
-        user_id=current_user.id,
-        user_email=current_user.email,
-        ip_address=request.client.host if request.client else None,
-    )
+    log_action(db, action="create_action_item", details=f"Created action item for meeting {meeting_id}: {text_value[:60]}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return _item_payload(item)
 
 
@@ -124,7 +135,6 @@ def update_action_item(
     item = db.query(ActionItem).filter(ActionItem.id == item_id).first()
     if not item:
         raise HTTPException(status_code=404, detail="Action item not found")
-
     meeting = item.meeting
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised")
@@ -134,42 +144,27 @@ def update_action_item(
         if not text_value:
             raise HTTPException(status_code=400, detail="Action item text cannot be empty")
         item.description = text_value
-
     if "assignee_id" in body:
-        item.assignee_id = body["assignee_id"] or None
-        if item.assignee_id:
+        assignee_id = body["assignee_id"] or None
+        if assignee_id and not db.query(User).filter(User.id == assignee_id, User.is_active.is_(True)).first():
+            raise HTTPException(status_code=400, detail="Selected assignee does not exist or is inactive")
+        item.assignee_id = assignee_id
+        if assignee_id:
             item.responsible_name = None
-
     if "responsible_name" in body:
         item.responsible_name = str(body["responsible_name"] or "").strip() or None
-        # Typing or choosing a participant name from the free-text picker makes
-        # that name authoritative, even when the person is not a system user.
         if "assignee_id" not in body:
             item.assignee_id = None
-
     if "priority" in body:
         item.priority = body["priority"]
     if "status" in body:
         item.status = body["status"]
     if "deadline" in body:
-        if body["deadline"]:
-            try:
-                item.deadline = date.fromisoformat(body["deadline"])
-            except ValueError as exc:
-                raise HTTPException(status_code=400, detail="Invalid deadline format. Use YYYY-MM-DD.") from exc
-        else:
-            item.deadline = None
+        item.deadline = _parse_date(body["deadline"], "deadline")
 
     db.commit()
     db.refresh(item)
-    log_action(
-        db,
-        action="update_action_item",
-        details=f"Updated action item {item_id}",
-        user_id=current_user.id,
-        user_email=current_user.email,
-        ip_address=request.client.host if request.client else None,
-    )
+    log_action(db, action="update_action_item", details=f"Updated action item {item_id}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return _item_payload(item)
 
 
@@ -188,12 +183,5 @@ def delete_action_item(
         raise HTTPException(status_code=403, detail="Not authorised")
     db.delete(item)
     db.commit()
-    log_action(
-        db,
-        action="delete_action_item",
-        details=f"Deleted action item {item_id}",
-        user_id=current_user.id,
-        user_email=current_user.email,
-        ip_address=request.client.host if request.client else None,
-    )
+    log_action(db, action="delete_action_item", details=f"Deleted action item {item_id}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return {"detail": "Action item deleted"}

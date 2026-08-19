@@ -1,41 +1,45 @@
 # Requirements Traceability Matrix
 
-This document tracks all 35 functional requirements (FR) of the Online Meeting Summarizer, mapping each to its respective implementation components.
+This matrix reflects the current production architecture. Google Gemini is the production transcription provider.
 
-| Requirement ID | Description | Implementation File | API Endpoint | Database Entity | Automated Test | Status |
-|---|---|---|---|---|---|---|
-| **FR-01** | Secure login and logout | `backend/app/api/endpoints/auth.py`<br>`frontend/src/app/login/page.tsx` | `/api/auth/login`<br>`/api/auth/logout` | `User` | `backend/tests/test_auth.py` | Completed |
-| **FR-02** | Server-enforced role-based access | `backend/app/core/deps.py` | N/A | `User` | `backend/tests/test_auth.py` | Completed |
-| **FR-03** | Administrator staff account management | `backend/app/api/endpoints/staff.py`<br>`frontend/src/app/staff/page.tsx` | `/api/staff/*` | `User` | `backend/tests/test_staff.py` | Completed |
-| **FR-04** | Create, update, archive and delete meetings | `backend/app/api/endpoints/meetings.py`<br>`frontend/src/app/meetings/page.tsx` | `/api/meetings/*` | `Meeting` | `backend/tests/test_meetings.py` | Completed |
-| **FR-05** | Browser microphone recording with visible timer | `frontend/src/components/AudioRecorder.tsx` | N/A | N/A | N/A | Completed |
-| **FR-06** | Pause, resume, stop, preview and discard recording | `frontend/src/components/AudioRecorder.tsx` | N/A | N/A | N/A | Completed |
-| **FR-07** | Resumable or safely streamed media upload | `backend/app/api/endpoints/recordings.py` | `/api/recordings/upload` | `Recording` | `backend/tests/test_recordings.py` | Completed |
-| **FR-08** | Support WAV, MP3, M4A, MP4, WebM and OGG | `backend/app/services/audio.py` | N/A | N/A | `backend/tests/test_recordings.py` | Completed |
-| **FR-09** | Validate MIME type, extension, file size and duration | `backend/app/services/audio.py` | `/api/recordings/upload` | `Recording` | `backend/tests/test_recordings.py` | Completed |
-| **FR-10** | Use FFmpeg to normalise media before transcription | `backend/app/services/audio.py` | N/A | N/A | `backend/tests/test_meetings.py` | Completed |
-| **FR-11** | Real Faster-Whisper transcription with timestamps | `backend/app/services/transcription.py` | N/A | `Transcript`, `TranscriptSegment` | `backend/tests/test_meetings.py` | Completed |
-| **FR-12** | Use Redis-backed background job for HTTP response | `backend/app/workers/tasks.py` | `/api/meetings/{id}/transcribe` | `ProcessingJob` | `backend/tests/test_meetings.py` | Completed |
-| **FR-13** | Show queued, converting, transcribing, summarising, completed and failed progress | `backend/app/api/endpoints/meetings.py`<br>`frontend/src/app/meetings/new/page.tsx` | `/api/meetings/{id}/status` | `ProcessingJob` | `backend/tests/test_meetings.py` | Completed |
-| **FR-14** | Permit retrying failed jobs without duplicating meeting | `backend/app/api/endpoints/meetings.py` | `/api/meetings/{id}/retry` | `ProcessingJob`, `Meeting` | `backend/tests/test_meetings.py` | Completed |
-| **FR-15** | Provide near-real-time chunk processing where supported | `frontend/src/components/AudioRecorder.tsx`<br>`backend/app/api/endpoints/recordings.py` | `/api/recordings/upload/*` | N/A | `backend/tests/test_recordings.py` | Completed |
-| **FR-16** | Provide an editable full transcript | `backend/app/api/endpoints/transcripts.py`<br>`frontend/src/app/meetings/[id]/page.tsx` | `/api/transcripts/{id}` | `Transcript` | `backend/tests/test_meetings.py` | Completed |
-| **FR-17** | Preserve transcript revisions and record editor in audit log | `backend/app/api/endpoints/transcripts.py` | `/api/transcripts/{id}` | `TranscriptRevision`, `AuditLog` | `backend/tests/test_meetings.py` | Completed |
-| **FR-18** | Generate extractive TextRank summary | `backend/app/services/summarizer.py` | N/A | `Summary` | Pending | Pending |
-| **FR-19** | Generate structured key points, decisions and actions | `backend/app/services/summarizer.py` | N/A | `Decision`, `ActionItem` | Pending | Pending |
-| **FR-20** | Never invent a decision, participant, deadline or action item | `backend/app/services/summarizer.py` | N/A | N/A | Pending | Pending |
-| **FR-21** | Allow manual correction of all generated content | `backend/app/api/endpoints/summaries.py` | `/api/summaries/{id}` | `Summary`, `Decision`, `ActionItem` | Pending | Pending |
-| **FR-22** | Assign action items to staff, add priority, deadline, status | `backend/app/api/endpoints/action_items.py` | `/api/action-items/*` | `ActionItem` | Pending | Pending |
-| **FR-23** | Provide meeting search by title, owner, participant, date, transcript text | `backend/app/api/endpoints/meetings.py` | `/api/meetings/` | `Meeting`, `Transcript` | `backend/tests/test_meetings.py` | Completed |
-| **FR-24** | Filter action items by assignee, status, priority, deadline | `backend/app/api/endpoints/action_items.py` | `/api/action-items/search` | `ActionItem` | Pending | Pending |
-| **FR-25** | Export professional minutes to PDF, DOCX and TXT | `backend/app/services/export.py` | `/api/meetings/{id}/export` | `Export` | Pending | Pending |
-| **FR-26** | Preserve recording, transcript, summary, decisions, actions, exports | `backend/app/models/models.py` | N/A | All entities | `backend/tests/test_meetings.py` | Completed |
-| **FR-27** | Provide dashboard statistics calculated from database | `backend/app/api/endpoints/stats.py`<br>`frontend/src/app/dashboard/page.tsx` | `/api/stats` | All entities | `backend/tests/test_health.py` | Completed |
-| **FR-28** | Provide audit logs for security-sensitive and content-changing operations | `backend/app/core/audit.py`<br>`backend/app/api/endpoints/audit.py` | `/api/audit` | `AuditLog` | `backend/tests/test_staff.py` | Completed |
-| **FR-29** | Provide backup and restoration scripts with validation | `backend/app/services/backup.py` | N/A | `BackupRecord` | Pending | Pending |
-| **FR-30** | Configurable school name, logo, timezone, retention, Whisper model | `backend/app/api/endpoints/settings.py` | `/api/settings` | `SystemSetting` | `backend/tests/test_settings.py` | Completed |
-| **FR-31** | Provide private authorized download endpoints | `backend/app/api/endpoints/recordings.py` | `/api/recordings/{id}/download` | `Recording` | `backend/tests/test_meetings.py` | Completed |
-| **FR-32** | Provide helpful error messages and recovery actions | `frontend/src/components/DashboardLayout.tsx` | N/A | N/A | N/A | Completed |
-| **FR-33** | Provide notification indicators for completed jobs and assigned tasks | `backend/app/api/endpoints/notifications.py` | `/api/notifications` | N/A | Pending | Pending |
-| **FR-34** | Support local network deployment | `docker-compose.yml` | N/A | N/A | N/A | Completed |
-| **FR-35** | Provide complete administrator and staff user manual | `docs/user_manual.md` | N/A | N/A | N/A | Pending |
+| ID | Requirement | Main implementation | Verification | Status |
+|---|---|---|---|---|
+| FR-01 | Secure login/logout | `api/endpoints/auth.py`, login UI | `test_auth.py` | Completed |
+| FR-02 | Server-enforced roles | `core/deps.py` | `test_auth.py` | Completed |
+| FR-03 | Administrator staff management | `api/endpoints/staff.py`, Staff UI | `test_staff.py` | Completed |
+| FR-04 | Create/update/archive/delete meetings | `api/endpoints/meetings.py`, Meetings UI | `test_meetings.py` | Completed |
+| FR-05 | Browser microphone recording with timer | `components/AudioRecorder.tsx` | UI flow | Completed |
+| FR-06 | Pause/resume/stop/preview/discard | `components/AudioRecorder.tsx` | UI flow | Completed |
+| FR-07 | Safely streamed media upload | `api/endpoints/recordings.py` | `test_meetings.py` | Completed |
+| FR-08 | WAV/MP3/M4A/MP4/WebM/OGG | `services/audio.py` | recording tests | Completed |
+| FR-09 | Validate type/extension/size/duration | `services/audio.py`, recordings endpoint | recording tests | Completed |
+| FR-10 | FFmpeg normalisation | `services/audio.py` | meeting tests | Completed |
+| FR-11 | Real AI transcription with timestamps | `services/transcription.py`, Gemini Files API | meeting tests + production pipeline | Completed |
+| FR-12 | Redis/Celery background jobs | `workers/tasks.py` | meeting tests | Completed |
+| FR-13 | Processing progress states | meetings status API, new-meeting UI | meeting tests | Completed |
+| FR-14 | Retry failed job without duplicate meeting | meetings retry API/UI | meeting tests | Completed |
+| FR-15 | Non-blocking upload/processing workflow | recordings API + Celery pipeline | meeting tests | Completed |
+| FR-16 | Editable transcript | transcripts API + meeting workspace | meeting tests | Completed |
+| FR-17 | Transcript revisions/audit | transcripts API, `TranscriptRevision`, `AuditLog` | meeting tests | Completed |
+| FR-18 | Deterministic extractive fallback summary | `services/summarizer.py` | `test_summaries.py` | Completed |
+| FR-19 | Structured key points/decisions/actions | `services/gemini.py`, summarizer fallback | `test_summaries.py` | Completed |
+| FR-20 | Avoid invented decisions/participants/deadlines | constrained Gemini prompt/schema + deterministic fallback | summary tests/manual review | Completed |
+| FR-21 | Manual correction of generated content | summaries/transcripts/action-items APIs + workspace | `test_summaries.py` | Completed |
+| FR-22 | Assignee/responsible, priority, deadline, status | action-items API/UI | `test_summaries.py` | Completed |
+| FR-23 | Meeting search | meetings API/directory | `test_meetings.py` | Completed |
+| FR-24 | Action filters by assignee/responsible/status/priority/deadline | `api/endpoints/action_items.py`, Action Items UI | API/UI flow | Completed |
+| FR-25 | PDF/DOCX/TXT official exports | `services/export.py`, exports endpoint | `test_summaries.py` | Completed |
+| FR-26 | Preserve meeting records and generated artifacts | ORM models/storage | meeting tests | Completed |
+| FR-27 | Database-backed dashboard statistics | stats API/dashboard | health/stats flow | Completed |
+| FR-28 | Security/content audit logs with admin visibility | `core/audit.py`, `/api/system/audit`, Settings UI | `test_system.py` | Completed |
+| FR-29 | Validated backup + restore tooling | `services/backup.py`, `/api/system/backups`, `scripts/restore_backup.py` | `test_system.py` + validation commands | Completed |
+| FR-30 | Configurable school branding/timezone/retention + actual AI status | settings API/UI + `/api/system/status` | `test_settings.py` | Completed |
+| FR-31 | Private authorised recording/backup download | recordings/system endpoints | meeting/system tests | Completed |
+| FR-32 | Helpful errors and recovery actions | processing UI, retry flow, Settings readiness cards | UI flow | Completed |
+| FR-33 | Notification indicator for jobs/tasks | `/api/system/notifications`, `NotificationCenter.tsx` | `test_system.py` | Completed |
+| FR-34 | Local/container deployment | `docker-compose.yml`, Dockerfiles | deployment flow | Completed |
+| FR-35 | Administrator/staff user manual | `docs/user_manual.md` | documentation review | Completed |
+
+## Production AI note
+
+`GEMINI_API_KEY` and `GEMINI_MODEL` are deployment environment variables. The Settings page displays the effective provider/model and readiness instead of exposing infrastructure model selection as an ordinary UI preference.

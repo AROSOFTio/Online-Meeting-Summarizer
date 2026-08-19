@@ -6,35 +6,27 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    # App Settings
     PROJECT_NAME: str = "Online Meeting Summarizer"
     SECRET_KEY: str = "supersecretkeydefaultforstarlightsecondaryschool2026!"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 day
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
     PUBLIC_APP_URL: str = "https://oms.arosoftlabs.com"
 
-    # Database & Redis Settings
     DATABASE_URL: str = "sqlite:///./meeting_summarizer.db"
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    # Default Administrator Seeding Credentials
     ADMIN_EMAIL: EmailStr = "admin@starlight.sc.ug"
     ADMIN_PASSWORD: str = "Starlight2026!"
 
-    # School & System Settings Defaults
     SCHOOL_NAME: str = "Starlight Secondary School"
     SCHOOL_LOGO_URL: str = "/api/settings/logo"
     TIMEZONE: str = "Africa/Kampala"
     RETENTION_PERIOD_DAYS: int = 365
-    WHISPER_MODEL: str = "tiny"
 
-    # Gemini AI API Configuration
+    # Gemini is the single production transcription/summarisation provider.
     GEMINI_API_KEY: Optional[str] = None
-    # The old Gemini 1.5 model family was retired. Keep this current default in
-    # one place so transcription, diarisation and minutes generation agree.
     GEMINI_MODEL: str = "gemini-3.6-flash"
 
-    # SMTP notifications
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 465
     SMTP_USERNAME: Optional[str] = None
@@ -44,7 +36,6 @@ class Settings(BaseSettings):
     SMTP_USE_STARTTLS: bool = False
     SMTP_VERIFY_TLS: bool = True
 
-    # Storage Paths
     STORAGE_DIR: str = "storage"
     UPLOAD_DIR: str = "storage/recordings"
     EXPORT_DIR: str = "storage/exports"
@@ -67,15 +58,10 @@ class Settings(BaseSettings):
     def normalise_public_url(cls, v: Optional[str]) -> str:
         return (v or "https://oms.arosoftlabs.com").rstrip("/")
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()
-
 Path(settings.STORAGE_DIR).mkdir(parents=True, exist_ok=True)
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 Path(settings.EXPORT_DIR).mkdir(parents=True, exist_ok=True)

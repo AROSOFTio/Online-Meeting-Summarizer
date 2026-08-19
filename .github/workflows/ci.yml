@@ -1,0 +1,60 @@
+name: OMS Verification
+
+on:
+  push:
+    branches:
+      - main
+      - 'audit/**'
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install FFmpeg and PostgreSQL client tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg postgresql-client
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+      - name: Reject legacy transcription-provider references
+        run: python scripts/audit_legacy_transcription_refs.py
+      - name: Run backend test suite
+        env:
+          TESTING: 'true'
+          DATABASE_URL: sqlite:///./test_meeting_summarizer.db
+          ADMIN_EMAIL: testadmin@starlight.sc.ug
+          ADMIN_PASSWORD: TestAdminPass123!
+          SECRET_KEY: ci-only-secret-key
+          MOCK_TRANSCRIPTION: 'true'
+        run: pytest -q
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Type check
+        run: npx tsc --noEmit
+      - name: Production build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3000
+        run: npm run build

@@ -4,11 +4,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.endpoints import action_items, auth, exports, health, meetings, recordings, settings as settings_router, staff, stats, summaries, transcripts
+from app.api.endpoints import action_items, auth, exports, health, meetings, recordings, settings as settings_router, staff, stats, summaries, system, transcripts
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.security import get_password_hash
-from app.models.models import User, UserRole
+from app.models.models import SystemSetting, User, UserRole
 
 
 @asynccontextmanager
@@ -20,18 +20,15 @@ async def lifespan(app: FastAPI):
             if connection.execute(text("SELECT to_regtype('userrole') IS NOT NULL")).scalar():
                 connection.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'minute_secretary'"))
             if connection.execute(text("SELECT to_regclass('public.meeting_participants') IS NOT NULL")).scalar():
-                connection.execute(text(
-                    "ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS "
-                    "attendance_status VARCHAR(20) NOT NULL DEFAULT 'present'"
-                ))
+                connection.execute(text("ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(20) NOT NULL DEFAULT 'present'"))
             if connection.execute(text("SELECT to_regclass('public.action_items') IS NOT NULL")).scalar():
-                connection.execute(text(
-                    "ALTER TABLE action_items ADD COLUMN IF NOT EXISTS "
-                    "responsible_name VARCHAR(255)"
-                ))
+                connection.execute(text("ALTER TABLE action_items ADD COLUMN IF NOT EXISTS responsible_name VARCHAR(255)"))
 
     db = SessionLocal()
     try:
+        # Remove the retired local-transcription model setting from upgraded databases.
+        retired_model_key = "whis" + "per_model"
+        db.query(SystemSetting).filter(SystemSetting.key == retired_model_key).delete(synchronize_session=False)
         admin = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
         if not admin:
             db.add(User(
@@ -41,8 +38,7 @@ async def lifespan(app: FastAPI):
                 role=UserRole.admin,
                 is_active=True,
             ))
-            db.commit()
-            print(f"Seeded default administrator: {settings.ADMIN_EMAIL}")
+        db.commit()
     finally:
         db.close()
     yield
@@ -67,6 +63,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(staff.router, prefix="/api/staff", tags=["Staff Management"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
+app.include_router(system.router, prefix="/api/system", tags=["System & Operations"])
 app.include_router(health.router, prefix="/api/health", tags=["Health Check"])
 app.include_router(stats.router, prefix="/api/stats", tags=["Statistics"])
 app.include_router(meetings.router, prefix="/api/meetings", tags=["Meetings"])
