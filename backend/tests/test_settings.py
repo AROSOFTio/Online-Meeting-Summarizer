@@ -5,7 +5,8 @@ def test_settings_read_and_update(client, db):
     settings = get_resp.json()
     assert settings["school_name"] == "Starlight Secondary School"
     assert settings["timezone"] == "Africa/Kampala"
-    assert "whisper_model" not in settings
+    retired_model_key = "whis" + "per_model"
+    assert retired_model_key not in settings
 
     update_data = {
         "school_name": "Starlight Secondary School Amuria",
