@@ -33,8 +33,8 @@
 ## Phase 4: Hardening, Operations and Documentation
 **Status: Completed**
 
-- [x] Removed obsolete Whisper/Faster-Whisper configuration and UI
-- [x] Settings shows actual Gemini model/key readiness rather than a fake local model selector
+- [x] Removed retired local transcription-provider configuration and UI
+- [x] Settings shows actual Gemini model/key readiness rather than a misleading local model selector
 - [x] SMTP/database/queue readiness displayed to administrators
 - [x] Notification indicator for completed/failed jobs and open tasks
 - [x] Administrator audit activity view
@@ -45,6 +45,7 @@
 - [x] Requirements matrix aligned with current production architecture
 - [x] PostgreSQL client tools included in the backend image for backup/restore
 - [x] Tests updated/added for Settings and system operations
+- [x] GitHub Actions backend/frontend verification workflow
 
 ### Deployment verification
 After each production deployment, perform the smoke-test sequence in `docs/user_manual.md`: login, create/invite meeting, public join, short media processing, transcript/minutes review, export, notification, backup and Settings status checks.
