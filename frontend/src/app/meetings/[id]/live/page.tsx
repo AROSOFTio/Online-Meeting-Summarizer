@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -38,23 +38,25 @@ export default function LiveMeetingPage() {
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const leavingRef = useRef(false);
 
   const meetingQuery = useQuery<Meeting>({ queryKey:["meeting-live",meetingId], queryFn:()=>apiRequest(`/api/meetings/${meetingId}`), enabled:Number.isInteger(meetingId)&&meetingId>0 });
   const attendanceQuery = useQuery<Attendance[]>({ queryKey:["meeting-live-attendance",meetingId], queryFn:()=>apiRequest(`/api/meetings/${meetingId}/attendance`), enabled:Boolean(meetingQuery.data) });
 
-  const cleanupStream = () => {
+  const cleanupStream = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
-  };
+  }, []);
 
   useEffect(() => () => {
+    leavingRef.current = true;
     try {
-      if (recorderRef.current?.state === "recording") recorderRef.current.stop();
-    } catch { /* no-op during page cleanup */ }
+      if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
+    } catch { /* recorder may already be closed */ }
     cleanupStream();
-  }, []);
+  }, [cleanupStream]);
 
   const sendForMinutes = async (source: Blob | File, filename: string) => {
     setProcessing(true);
@@ -72,6 +74,7 @@ export default function LiveMeetingPage() {
   };
 
   const startMeeting = async () => {
+    leavingRef.current = false;
     setError(null);
     chunksRef.current = [];
     setSeconds(0);
@@ -83,10 +86,11 @@ export default function LiveMeetingPage() {
       recorderRef.current = recorder;
       recorder.ondataavailable = (event) => { if (event.data.size > 0) chunksRef.current.push(event.data); };
       recorder.onstop = () => {
-        const type = recorder.mimeType || chunksRef.current[0]?.type || "audio/webm";
-        const blob = new Blob(chunksRef.current, { type });
         cleanupStream();
         setIsRecording(false);
+        if (leavingRef.current) return;
+        const type = recorder.mimeType || chunksRef.current[0]?.type || "audio/webm";
+        const blob = new Blob(chunksRef.current, { type });
         if (blob.size === 0) {
           setError("The recording was empty. Please try again.");
           return;
@@ -104,6 +108,7 @@ export default function LiveMeetingPage() {
   };
 
   const endMeeting = () => {
+    leavingRef.current = false;
     if (!recorderRef.current || recorderRef.current.state === "inactive") return;
     recorderRef.current.stop();
   };
@@ -140,7 +145,7 @@ export default function LiveMeetingPage() {
           {!isRecording && !processing && <>
             <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 text-blue-700"><Mic size={36}/></div>
             <h2 className="mt-4 text-xl font-extrabold text-slate-950">Ready to begin?</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Press Start Meeting. This device will record the meeting. When you press End Meeting, the recording is sent directly for transcription and minutes.</p>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">Press Start Meeting. This device records the meeting. When you press End Meeting, the recording goes directly to transcription and minutes.</p>
             <button onClick={startMeeting} className="mt-6 w-full rounded-xl bg-blue-700 px-5 py-4 text-base font-extrabold text-white shadow-sm hover:bg-blue-800 sm:w-auto sm:min-w-64"><Mic className="mr-2 inline" size={20}/>Start Meeting</button>
             <div className="mt-6 border-t border-slate-100 pt-5"><p className="mb-2 text-xs text-slate-400">Already recorded elsewhere?</p><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"><Upload size={15}/>Upload recording instead<input type="file" className="hidden" accept=".wav,.mp3,.m4a,.mp4,.webm,.ogg,audio/*,video/*" onChange={(event)=>uploadExisting(event.target.files?.[0])}/></label></div>
           </>}
