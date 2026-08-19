@@ -1,44 +1,34 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from sqlalchemy import text
 import redis
+from fastapi import APIRouter, Depends
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
 from app.core import deps
 from app.core.config import settings
 
 router = APIRouter()
 
+
 @router.get("")
 @router.get("/")
 def health_check(db: Session = Depends(deps.get_db)):
-    """Health check endpoint to verify database and Redis state"""
-    postgres_status = "healthy"
+    database_status = "healthy"
     redis_status = "healthy"
     details = {}
-    
-    # Check Database connection
     try:
         db.execute(text("SELECT 1"))
-    except Exception as e:
-        postgres_status = "unhealthy"
-        details["database_error"] = str(e)
-        
-    # Check Redis connection
+    except Exception as exc:
+        database_status = "unhealthy"
+        details["database_error"] = str(exc)
     try:
-        r = redis.Redis.from_url(settings.REDIS_URL, socket_timeout=2.0)
-        r.ping()
-    except Exception as e:
+        client = redis.Redis.from_url(settings.REDIS_URL, socket_timeout=2.0)
+        client.ping()
+    except Exception as exc:
         redis_status = "unhealthy"
-        details["redis_error"] = str(e)
-        
-    overall_status = "healthy" if postgres_status == "healthy" else "degraded"
-    
-    response_data = {
-        "status": overall_status,
-        "database": postgres_status,
-        "redis": redis_status
-    }
-    if details:
-        response_data["details"] = details
-        
-    return response_data
+        details["redis_error"] = str(exc)
 
+    overall = "healthy" if database_status == "healthy" and redis_status == "healthy" else "degraded"
+    response = {"status": overall, "database": database_status, "redis": redis_status}
+    if details:
+        response["details"] = details
+    return response
