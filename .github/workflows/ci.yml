@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - 'audit/**'
+      - 'fix/**'
   pull_request:
 
 jobs:
