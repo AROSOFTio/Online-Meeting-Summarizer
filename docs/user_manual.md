@@ -1,98 +1,100 @@
 # Starlight S.S Online Meeting Summarizer — User Manual
 
-## 1. Purpose
-The system records or uploads school meetings, converts media with FFmpeg, transcribes speech with Google Gemini, stores timestamps and speaker turns, generates editable minutes, tracks decisions/action items, invites participants, and exports official PDF/DOCX/TXT minutes.
+## 1. The simple meeting flow
+For an organizer, the normal workflow is:
+
+**New Meeting → Invite People → Start Meeting → End Meeting → Review Minutes**
+
+For an invited participant, the normal workflow is:
+
+**Open Invite → Confirm Name/Position → Enter Meeting**
+
+Invitees do not need a staff username or password.
 
 ## 2. Roles
-- **Administrator:** full access, staff accounts, settings, backups, audit activity, all meetings and exports.
-- **Minute Secretary:** creates meetings, records/uploads media, edits transcripts/minutes, manages attendance, invitations and action items for meetings they manage.
+- **Administrator:** full system access, staff accounts, settings, backups, audit activity and all meetings.
+- **Minute Secretary:** creates and starts meetings, manages invitations/attendance, reviews transcripts/minutes and action items.
 - **Staff:** reads authorised completed meetings and action items.
 
-## 3. Login
-Open the deployed site and sign in with your assigned email/password. Administrators create or deactivate staff under **Staff**. Change production administrator credentials through environment variables rather than source code.
+## 3. Staff sign in
+Open the site and use **Sign In** with the account issued by the school. The login page also has **Join an Invited Meeting** for people who only received a meeting link/code.
 
-## 4. Schedule and invite a meeting
-1. Open **Schedule & Invite**.
-2. Enter the meeting title, date and agenda/description.
-3. Enter participant emails, or leave the email box empty for a general link.
-4. Create the meeting.
-5. Copy the general link for WhatsApp, or use the personal links emailed to participants.
-6. A participant opening `/join/<code>` enters full name and title/position. They may choose Member, Staff, Support Staff, Secretary, Chairperson, Vice Chairperson, Headteacher, Treasurer or Other.
+## 4. Create a meeting
+1. Click **New Meeting** from the sidebar, dashboard or Meetings page.
+2. Enter the meeting name and date/time.
+3. Add agenda/notes if needed.
+4. Add participant email addresses if you want the system to email invitations. This is optional.
+5. Click **Create Meeting**.
+6. The system immediately gives you:
+   - **Start Meeting Now**;
+   - a shareable invitation link;
+   - **Share on WhatsApp**;
+   - email delivery status when email addresses were entered.
 
-## 5. Record or upload a meeting
-1. Open **Record / Upload**.
-2. Enter meeting details and attendance.
-3. Either record in the browser or upload WAV, MP3, M4A, MP4, WebM or OGG.
-4. Start processing.
-5. The pipeline shows upload, FFmpeg conversion, Gemini transcription and minutes generation.
-6. If processing fails, use **Retry** on the same meeting. Do not create a duplicate meeting.
+If the meeting is scheduled for later, simply leave the page. Under **Meetings**, every scheduled meeting has a clear **Start Meeting** button.
 
-## 6. Meeting workspace
+## 5. Start and end a meeting
+1. Open **Meetings** and click **Start Meeting**, or click **Start Meeting Now** immediately after creation.
+2. On the Host Meeting screen, click **Start Meeting**.
+3. Allow microphone permission in the browser.
+4. Keep the page open while the meeting is in progress. The timer shows that recording is active.
+5. At the end, click **End Meeting & Generate Minutes**.
+6. The recording is uploaded, processed with FFmpeg and Google Gemini, and the system takes you to the meeting while the transcript/minutes are prepared.
+
+If the meeting was recorded on another device, choose **Upload recording instead** on the Host Meeting screen.
+
+## 6. Invitee joining
+An invited participant can open the link directly from email/WhatsApp. If they only have a code, they can click **Join an Invited Meeting** on the public sign-in page and enter it.
+
+The participant enters their full name and title/position, then clicks **Confirm & Enter Meeting**. They are taken directly to a simple Meeting Room confirmation page. Their attendance is recorded automatically; there is no second login or extra setup.
+
+## 7. Meeting workspace
+After processing, the meeting contains:
 - **Overview:** agenda and attendance register.
-- **Recording:** play or download the authorised recording.
-- **Transcript:** review timestamped speaker turns and correct text/speaker names.
-- **Minutes:** review, edit or regenerate minutes and decisions.
-- **Action Items:** track responsible person, deadline, priority and status.
+- **Recording:** authorised playback/download.
+- **Transcript:** timestamped speaker turns that authorised editors can correct.
+- **Minutes:** generated minutes, key points and decisions that authorised editors can review/edit.
+- **Action Items:** responsible person, deadline, priority and status.
 
-## 7. Responsible person / assignee
-Action items support both methods:
-- choose/type the name of an existing staff/member shown by the picker; or
-- type a completely new name for a person who does not have a system account.
+A scheduled meeting also keeps a visible **Start Meeting** action so the organizer does not have to hunt for the correct screen.
 
-## 8. Action item filters
-Use **Action Items** to filter by status, priority, responsible person and deadline range. Pending/in-progress items also appear in the notification indicator.
+## 8. Action items
+Use **Action Items** to filter by status, priority, responsible person and deadline. A responsible person can be selected from known people or typed manually even when that person has no system account.
 
 ## 9. Official exports
-From a meeting workspace choose **PDF** or **Word**. The export uses the configured Starlight identity, attendance, proceedings, decisions and action items. The full transcript appendix starts on a separate page. TXT export is available through the API where required.
+From the meeting workspace choose **PDF** or **Word**. Official exports use the configured Starlight identity and include attendance, proceedings, decisions and action items. The transcript appendix starts on a separate page. TXT export is also supported by the API.
 
 ## 10. Notifications
-The bell in authenticated pages shows:
-- recent completed meetings;
-- failed meeting processing that requires attention; and
-- open action items relevant to the user.
+The notification bell shows recent completed meetings, failed processing that needs attention and open action items relevant to the current user.
 
 ## 11. System Settings (Administrator)
-**System Settings & Operations** provides:
-- school identity/letterhead details;
-- official logo replacement;
-- timezone and recording retention;
-- read-only runtime status for Google Gemini and the configured model;
-- Gemini API readiness, SMTP readiness, database and queue status;
-- validated database backups; and
-- recent audit activity.
-
-The AI model is deployment configuration, so the Settings page reports the effective Gemini model instead of exposing a misleading model selector.
+Settings provides school identity/logo, timezone, recording retention, actual Google Gemini model/readiness, SMTP readiness, database/queue status, validated backups and recent audit activity.
 
 ## 12. Backups and restore
-### Create/download
-Administrators can click **Create Backup** under System Settings. PostgreSQL backups use `pg_dump --format=custom`; SQLite development backups use the SQLite backup API. Each backup is validated before it is listed and downloadable.
+Administrators can create/download validated backups under Settings. PostgreSQL uses `pg_dump --format=custom`; local SQLite uses its backup API.
 
-### Restore safely
-Restore is intentionally offline. Stop the backend and worker first, then inside the backend container/workspace run:
+Restore is intentionally offline. Stop backend and worker services first, then run:
 
 ```bash
 python scripts/restore_backup.py storage/backups/<backup-file> --yes
 ```
 
-PostgreSQL restores use `pg_restore --clean --if-exists`. SQLite restores replace the database file after integrity validation. Keep a second external copy before restoring production.
-
 ## 13. Retention cleanup
-The retention setting controls when **archived recordings** become eligible for physical deletion. Clicking **Run Retention Cleanup** deletes eligible archived recording files/rows but preserves meeting metadata, transcripts, minutes, decisions and action items.
+Retention cleanup only physically removes old recordings from **archived meetings**. Meeting metadata, transcripts, minutes, decisions and action items are preserved.
 
 ## 14. Email configuration
-Invitation/final-minutes email requires these Coolify environment variables:
+Invitation/final-minutes email requires:
 `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM_EMAIL`, `SMTP_USE_SSL`, `SMTP_USE_STARTTLS`, `SMTP_VERIFY_TLS`.
 
 ## 15. Gemini configuration
-Production transcription and structured minutes require `GEMINI_API_KEY`. `GEMINI_MODEL` controls the deployed model; the Settings page displays the effective model but does not let ordinary UI changes alter infrastructure configuration.
+Production transcription and structured minutes require `GEMINI_API_KEY`. `GEMINI_MODEL` selects the deployment model. The Settings page reports the effective model/readiness.
 
 ## 16. Troubleshooting
-- **No available server:** check Coolify service health and frontend domain routing to internal port 3000.
-- **Gemini not configured:** add/rotate `GEMINI_API_KEY` in Coolify and redeploy.
-- **Email not sent:** verify SMTP settings and server connectivity; invitation links still remain valid.
-- **Failed processing:** open the meeting and retry the same meeting after fixing the cause.
-- **Old logo/UI after deploy:** hard refresh the browser; the service worker cache is versioned.
-- **Backup fails in PostgreSQL:** confirm the deployed backend image contains PostgreSQL client tools and can reach the database.
+- **Microphone does not start:** allow microphone permission in the browser and make sure another application is not exclusively using the microphone.
+- **Meeting processing fails:** fix the reported problem and use Retry on the same meeting rather than creating a duplicate.
+- **Invitation email does not send:** the link is still usable; copy/share it while SMTP is being fixed.
+- **Old logo/favicon remains after deployment:** hard refresh/reopen the tab. The service-worker cache version is bumped when branding assets change.
+- **Backup fails:** verify PostgreSQL client tools are present and the backend can reach the database.
 
-## 17. Security notes
-Do not paste API keys, SMTP passwords or production database passwords into chat, tickets or source control. Use Coolify environment variables. Recording and backup download endpoints require authentication; backup creation, audit activity and retention cleanup require administrator access.
+## 17. Security
+Keep API keys, SMTP passwords and database passwords in Coolify environment variables, not source control. Recording/backup downloads require authorisation; backup creation, audit activity and retention cleanup require administrator access.
