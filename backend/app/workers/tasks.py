@@ -11,6 +11,7 @@ from app.core.database import SessionLocal
 from app.models.models import (
     ActionItem, ActionItemPriority, ActionItemStatus, Decision, JobStatus, Meeting,
     MeetingStatus, ProcessingJob, Recording, Summary, Transcript, TranscriptSegment,
+    meeting_participants,
 )
 from app.services.audio import normalise_audio
 from app.services.transcription import transcription_service
@@ -49,9 +50,14 @@ def _safe_due_date(value):
 
 def _local_minutes(text: str):
     from app.services.summarizer import extract_action_items, extract_decisions, extract_key_points, summarize
+    key_points = extract_key_points(text, count=5)
+    agenda = [point.strip() for point in key_points if point and point.strip()]
+    if not agenda:
+        agenda = ["General Meeting Proceedings"]
     return {
+        "agenda": agenda,
         "summary": summarize(text, sentence_count=6),
-        "key_points": extract_key_points(text, count=5),
+        "key_points": key_points,
         "decisions": extract_decisions(text),
         "action_items": extract_action_items(text),
     }
@@ -65,10 +71,17 @@ def _store_minutes(db: Session, meeting_id: int, full_text: str) -> str:
         print(f"[WARNING] Gemini minutes generation failed; using deterministic fallback: {exc}")
         result = _local_minutes(full_text)
 
+    agenda = [str(item).strip() for item in (result.get("agenda") or []) if str(item).strip()]
+    if not agenda:
+        agenda = ["General Meeting Proceedings"]
     summary_text = result.get("summary") or full_text[:4000]
     key_points = result.get("key_points") or []
     decisions = result.get("decisions") or []
     action_items = result.get("action_items") or []
+
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    if meeting and not (meeting.description or "").strip():
+        meeting.description = "\n".join(f"{index}. {item}" for index, item in enumerate(agenda, 1))
 
     summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
     if summary:
@@ -144,7 +157,18 @@ def transcribe_meeting(meeting_id: int, job_id: str):
         job.progress = 50
         db.commit()
 
-        participant_names = [participant.name for participant in meeting.participants if participant.name]
+        attendance_rows = db.execute(
+            meeting_participants.select().where(
+                meeting_participants.c.meeting_id == meeting_id,
+                meeting_participants.c.attendance_status == "present",
+            )
+        ).mappings().all()
+        present_ids = {row["participant_id"] for row in attendance_rows}
+        participant_names = [
+            participant.name
+            for participant in meeting.participants
+            if participant.id in present_ids and participant.name
+        ]
         segments = transcription_service.transcribe(normalized_path, participant_names=participant_names)
         from app.services.speaker_detection import speaker_detection_service
         segments = speaker_detection_service.match_speakers_to_attendance(segments, participant_names)
