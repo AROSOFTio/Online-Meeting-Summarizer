@@ -8,6 +8,7 @@ from app.api.endpoints import action_items, auth, exports, health, meetings, rec
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.security import get_password_hash
+from app.models.meeting_flow import DirectoryProfile, MeetingRuntime  # noqa: F401
 from app.models.models import SystemSetting, User, UserRole
 
 
@@ -31,13 +32,17 @@ async def lifespan(app: FastAPI):
         db.query(SystemSetting).filter(SystemSetting.key == retired_model_key).delete(synchronize_session=False)
         admin = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
         if not admin:
-            db.add(User(
+            admin = User(
                 email=settings.ADMIN_EMAIL,
                 hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
                 full_name="Starlight Administrator",
                 role=UserRole.admin,
                 is_active=True,
-            ))
+            )
+            db.add(admin)
+            db.flush()
+        if not db.query(DirectoryProfile).filter(DirectoryProfile.user_id == admin.id).first():
+            db.add(DirectoryProfile(user_id=admin.id, directory_group="Management", position_title="Administrator"))
         db.commit()
     finally:
         db.close()
