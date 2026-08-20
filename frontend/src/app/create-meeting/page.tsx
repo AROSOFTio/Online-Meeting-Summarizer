@@ -56,7 +56,7 @@ export default function CreateMeetingPage() {
         body: JSON.stringify({ user_ids: selectedUserIds, emails: externalEmails, send_email: true }),
       }) as InviteResult;
       if (mode === "now") {
-        router.push(`/meetings/${meeting.id}/live`);
+        router.push(`/meetings/${meeting.id}/live?autostart=1`);
         return;
       }
       setResult(invitation);
@@ -89,7 +89,7 @@ export default function CreateMeetingPage() {
             <section className="grid gap-3 sm:grid-cols-2">
               <button type="button" onClick={() => setMode("now")} className={`rounded-2xl border p-5 text-left ${mode === "now" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-slate-200 bg-white"}`}>
                 <div className="flex items-center gap-2 font-extrabold text-slate-950"><Mic className="text-blue-700" size={20}/>Start Meeting Now</div>
-                <p className="mt-2 text-xs leading-5 text-slate-500">Create the meeting, send the invitations and open the host recording screen immediately.</p>
+                <p className="mt-2 text-xs leading-5 text-slate-500">Create the meeting, send invitations and immediately request microphone access to begin recording.</p>
               </button>
               <button type="button" onClick={() => setMode("later")} className={`rounded-2xl border p-5 text-left ${mode === "later" ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-slate-200 bg-white"}`}>
                 <div className="flex items-center gap-2 font-extrabold text-slate-950"><CalendarClock className="text-blue-700" size={20}/>Schedule for Later</div>
