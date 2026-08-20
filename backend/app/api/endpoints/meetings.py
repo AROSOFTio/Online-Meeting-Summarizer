@@ -5,6 +5,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Optional
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func
@@ -27,6 +28,23 @@ from app.workers.tasks import run_background_job, transcribe_meeting
 
 router = APIRouter()
 INVITE_ALPHABET = string.ascii_uppercase + string.digits
+APP_TIMEZONE = ZoneInfo(app_settings.TIMEZONE)
+
+
+def _storage_datetime(value: datetime) -> datetime:
+    """Store school-local wall time in the existing timezone-naive meeting columns."""
+    if value.tzinfo is not None:
+        return value.astimezone(APP_TIMEZONE).replace(tzinfo=None)
+    return value
+
+
+def _public_datetime(value: Optional[datetime]) -> Optional[datetime]:
+    """Expose stored school-local wall time with an explicit timezone offset."""
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=APP_TIMEZONE)
+    return value.astimezone(APP_TIMEZONE)
 
 
 def _invite_code(db: Session, length: int = 8) -> str:
@@ -144,6 +162,7 @@ def staff_attendance_options(
             "directory_group": profile.directory_group or "Staff",
             "position_title": profile.position_title,
         })
+    db.commit()
     return options
 
 
@@ -168,13 +187,13 @@ def public_invitation(code: str, db: Session = Depends(deps.get_db)):
         "code": invitation.code,
         "meeting_id": meeting.id,
         "meeting_title": meeting.title,
-        "meeting_date": meeting.date,
+        "meeting_date": _public_datetime(meeting.date),
         "description": meeting.description or "",
         "invited_email": invitation.email,
         "invitation_status": invitation.status,
         "lifecycle": runtime.lifecycle,
-        "started_at": runtime.started_at,
-        "ended_at": runtime.ended_at,
+        "started_at": _public_datetime(runtime.started_at),
+        "ended_at": _public_datetime(runtime.ended_at),
         "requires_name": known_user is None,
         "known_name": known_name,
         "known_position": known_position,
@@ -212,11 +231,11 @@ def join_by_invitation(code: str, body: InvitationJoin, db: Session = Depends(de
         db.add(participant)
         db.flush()
     else:
+        participant.name = full_name
         if known_user:
-            participant.name = full_name
             participant.role_title = role_title
-        elif not participant.name.strip():
-            participant.name = full_name
+        elif not participant.role_title:
+            participant.role_title = role_title
 
     attendance_status = "present" if runtime.lifecycle == "live" else "waiting"
     _link_participant(meeting, participant, db, attendance_status)
@@ -243,7 +262,7 @@ def create_meeting(
     current_user: User = Depends(deps.get_minutes_editor),
 ):
     meeting = Meeting(
-        title=meeting_in.title, description=meeting_in.description, date=meeting_in.date,
+        title=meeting_in.title, description=meeting_in.description, date=_storage_datetime(meeting_in.date),
         owner_id=current_user.id, status=MeetingStatus.draft, is_archived=False,
     )
     db.add(meeting)
@@ -313,7 +332,12 @@ def get_meeting_runtime(
         raise HTTPException(status_code=404, detail="Meeting not found")
     runtime = _runtime_for(meeting, db)
     db.commit()
-    return {"meeting_id": meeting.id, "lifecycle": runtime.lifecycle, "started_at": runtime.started_at, "ended_at": runtime.ended_at}
+    return {
+        "meeting_id": meeting.id,
+        "lifecycle": runtime.lifecycle,
+        "started_at": _public_datetime(runtime.started_at),
+        "ended_at": _public_datetime(runtime.ended_at),
+    }
 
 
 @router.post("/{meeting_id}/start")
@@ -331,11 +355,11 @@ def start_meeting(
         raise HTTPException(status_code=400, detail="This meeting has already ended")
     if runtime.lifecycle != "live":
         runtime.lifecycle = "live"
-        runtime.started_at = datetime.now(timezone.utc)
+        runtime.started_at = _storage_datetime(datetime.now(timezone.utc))
         runtime.ended_at = None
         db.commit()
         log_action(db, action="start_meeting", details=f"Started meeting: {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
-    return {"meeting_id": meeting.id, "lifecycle": runtime.lifecycle, "started_at": runtime.started_at}
+    return {"meeting_id": meeting.id, "lifecycle": runtime.lifecycle, "started_at": _public_datetime(runtime.started_at)}
 
 
 @router.post("/{meeting_id}/end")
@@ -349,7 +373,7 @@ def end_meeting(
     runtime = _runtime_for(meeting, db)
     if runtime.lifecycle != "ended":
         runtime.lifecycle = "ended"
-        runtime.ended_at = datetime.now(timezone.utc)
+        runtime.ended_at = _storage_datetime(datetime.now(timezone.utc))
         db.execute(
             meeting_participants.update().where(
                 meeting_participants.c.meeting_id == meeting.id,
@@ -358,7 +382,7 @@ def end_meeting(
         )
         db.commit()
         log_action(db, action="end_meeting", details=f"Ended meeting: {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
-    return {"meeting_id": meeting.id, "lifecycle": runtime.lifecycle, "ended_at": runtime.ended_at}
+    return {"meeting_id": meeting.id, "lifecycle": runtime.lifecycle, "ended_at": _public_datetime(runtime.ended_at)}
 
 
 @router.put("/{meeting_id}", response_model=MeetingOut)
@@ -367,10 +391,12 @@ def update_meeting(
     db: Session = Depends(deps.get_db), current_user: User = Depends(deps.get_minutes_editor),
 ):
     meeting = _editable_meeting(meeting_id, db, current_user)
-    for field in ("title", "description", "date", "is_archived", "status"):
+    for field in ("title", "description", "is_archived", "status"):
         value = getattr(meeting_in, field)
         if value is not None:
             setattr(meeting, field, value)
+    if meeting_in.date is not None:
+        meeting.date = _storage_datetime(meeting_in.date)
     db.commit(); db.refresh(meeting)
     log_action(db, action="update_meeting", details=f"User updated meeting details for: {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return meeting
@@ -499,7 +525,7 @@ def trigger_transcription(
     runtime = _runtime_for(meeting, db)
     if runtime.lifecycle != "ended":
         runtime.lifecycle = "ended"
-        runtime.ended_at = datetime.now(timezone.utc)
+        runtime.ended_at = _storage_datetime(datetime.now(timezone.utc))
     db.commit(); db.refresh(job)
     run_background_job(transcribe_meeting, meeting_id, job.id)
     log_action(db, action="trigger_transcription", details=f"Triggered transcription job {job.id} for meeting {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
@@ -548,5 +574,5 @@ def retry_transcription(
     job = ProcessingJob(id=str(uuid.uuid4()), meeting_id=meeting_id, status=JobStatus.queued, progress=0)
     db.add(job); meeting.status = MeetingStatus.processing; db.commit(); db.refresh(job)
     run_background_job(transcribe_meeting, meeting_id, job.id)
-    log_action(db, action="retry_transcription", details=f"Retried failed transcription job. New job ID: {job.id}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
+    log_action(db, action="retry_transcription", details=f"Retried failed transcription job. New job ID: {job.id} for meeting {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return job
