@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Calendar, DoorOpen, UserCheck } from "lucide-react";
 
@@ -13,11 +13,14 @@ interface Invitation {
   meeting_date: string;
   description: string;
   invited_email: string | null;
-  status: string;
+  invitation_status: string;
+  lifecycle: "scheduled" | "live" | "ended";
+  requires_name: boolean;
+  known_name: string | null;
+  known_position: string | null;
+  known_group: string | null;
   school_name: string;
 }
-
-const roles = ["Member", "Staff", "Support Staff", "Secretary", "Chairperson", "Vice Chairperson", "Headteacher", "Treasurer", "Other"];
 
 export default function PublicJoinPage() {
   const params = useParams<{ code: string }>();
@@ -27,46 +30,56 @@ export default function PublicJoinPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [role, setRole] = useState("Member");
-  const [otherRole, setOtherRole] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [autoAttempted, setAutoAttempted] = useState(false);
 
   useEffect(() => {
     if (!code) return;
     let active = true;
     apiRequest(`/api/meetings/public/invitations/${code}`)
-      .then((data: Invitation) => {
-        if (!active) return;
-        setInvitation(data);
-        if (data.invited_email) setEmail(data.invited_email);
-      })
+      .then((data: Invitation) => active && setInvitation(data))
       .catch((error) => active && setLoadError(error instanceof Error ? error.message : "Invitation not found"))
       .finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [code]);
 
-  const submit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!invitation) return;
-    const title = role === "Other" ? otherRole.trim() : role;
-    if (!title) {
-      setSubmitError("Please enter your title or position.");
-      return;
-    }
+  const enterMeeting = useCallback(async (name?: string) => {
+    if (!code) return;
     setSubmitting(true);
     setSubmitError(null);
     try {
       await apiRequest(`/api/meetings/public/invitations/${code}/join`, {
         method: "POST",
-        body: JSON.stringify({ full_name: fullName.trim(), email: email.trim() || null, role_title: title }),
+        body: JSON.stringify({ full_name: name?.trim() || null }),
       });
-      router.push(`/join/${code}/room`);
+      if (name?.trim()) localStorage.setItem(`meeting-name:${code}`, name.trim());
+      router.replace(`/join/${code}/room`);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : "Could not join the meeting.");
+      setSubmitError(error instanceof Error ? error.message : "Could not open the meeting.");
       setSubmitting(false);
     }
+  }, [code, router]);
+
+  useEffect(() => {
+    if (!invitation || autoAttempted || invitation.lifecycle === "ended") return;
+    if (!invitation.requires_name) {
+      setAutoAttempted(true);
+      void enterMeeting();
+      return;
+    }
+    const savedName = localStorage.getItem(`meeting-name:${code}`)?.trim();
+    if (savedName) {
+      setAutoAttempted(true);
+      setFullName(savedName);
+      void enterMeeting(savedName);
+    }
+  }, [autoAttempted, code, enterMeeting, invitation]);
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!fullName.trim()) return;
+    await enterMeeting(fullName);
   };
 
   return (
@@ -79,8 +92,8 @@ export default function PublicJoinPage() {
         </header>
 
         <div className="p-6 sm:p-8">
-          {loading && <div className="py-12 text-center text-sm text-slate-500">Opening invitation...</div>}
-          {loadError && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"><b>Invitation unavailable.</b><br />{loadError}</div>}
+          {loading && <div className="py-12 text-center text-sm text-slate-500">Opening meeting link...</div>}
+          {loadError && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"><b>Meeting link unavailable.</b><br />{loadError}</div>}
 
           {invitation && (
             <>
@@ -90,23 +103,28 @@ export default function PublicJoinPage() {
                 {invitation.description && <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">{invitation.description}</p>}
               </div>
 
-              <div className="mb-4 flex items-center gap-2"><UserCheck className="text-blue-700" size={20} /><h3 className="font-bold text-slate-900">Confirm once, then enter the meeting</h3></div>
-              <form onSubmit={submit} className="space-y-4">
-                <label className="block text-sm font-medium text-slate-700">Full name
-                  <input required minLength={2} value={fullName} onChange={(event) => setFullName(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900" placeholder="Your full name" />
-                </label>
-                <label className="block text-sm font-medium text-slate-700">Email {invitation.invited_email ? "" : "(optional)"}
-                  <input type="email" required={Boolean(invitation.invited_email)} readOnly={Boolean(invitation.invited_email)} value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900 read-only:bg-slate-100" placeholder="name@example.com" />
-                </label>
-                <label className="block text-sm font-medium text-slate-700">Title / position
-                  <select value={role} onChange={(event) => setRole(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-slate-900">{roles.map((item) => <option key={item} value={item}>{item}</option>)}</select>
-                </label>
-                {role === "Other" && <label className="block text-sm font-medium text-slate-700">Specify title / position
-                  <input required value={otherRole} onChange={(event) => setOtherRole(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900" placeholder="e.g. PTA Representative" />
-                </label>}
-                {submitError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{submitError}</div>}
-                <button disabled={submitting} className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-3 text-sm font-extrabold text-white hover:bg-blue-800 disabled:opacity-50"><DoorOpen size={18} />{submitting ? "Joining..." : "Confirm & Enter Meeting"}</button>
-              </form>
+              {invitation.lifecycle === "ended" ? <div className="rounded-lg border border-slate-200 bg-slate-50 p-5 text-center text-sm text-slate-600"><b>This meeting has ended.</b><div className="mt-1 text-xs">The join link is no longer active.</div></div> : !invitation.requires_name ? (
+                <div className="rounded-xl border border-blue-100 bg-blue-50 p-5 text-center">
+                  <UserCheck className="mx-auto text-blue-700" size={34}/>
+                  <h3 className="mt-2 font-extrabold text-slate-900">Welcome, {invitation.known_name}</h3>
+                  <p className="mt-1 text-xs text-slate-600">Your personal link identified you automatically. Opening the waiting room…</p>
+                  {submitting && <div className="mt-3 text-xs font-semibold text-blue-700">Connecting…</div>}
+                </div>
+              ) : (
+                <>
+                  <div className="mb-4 flex items-center gap-2"><UserCheck className="text-blue-700" size={20} /><h3 className="font-bold text-slate-900">Enter your full name once</h3></div>
+                  <p className="mb-4 text-xs leading-5 text-slate-500">You are not in the staff directory, so we only need your full name. There is no accept/decline step and no email or position form.</p>
+                  <form onSubmit={submit} className="space-y-4">
+                    <label className="block text-sm font-medium text-slate-700">Full name
+                      <input required minLength={2} value={fullName} onChange={(event) => setFullName(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-slate-900" placeholder="Your full name" />
+                    </label>
+                    {submitError && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{submitError}</div>}
+                    <button disabled={submitting} className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-3 text-sm font-extrabold text-white hover:bg-blue-800 disabled:opacity-50"><DoorOpen size={18} />{submitting ? "Opening..." : "Continue to Meeting"}</button>
+                  </form>
+                </>
+              )}
+
+              {submitError && !invitation.requires_name && <div className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{submitError}</div>}
             </>
           )}
         </div>
