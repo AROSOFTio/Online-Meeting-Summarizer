@@ -1,6 +1,7 @@
 import concurrent.futures
 import json
 import os
+import re
 from datetime import date
 
 from celery import Celery
@@ -48,6 +49,33 @@ def _safe_due_date(value):
         return None
 
 
+def _agenda_from_description(description: str) -> list[str]:
+    text = (description or "").strip()
+    if not text:
+        return []
+    items = []
+    for raw in re.split(r"(?:\r?\n|;)+", text):
+        value = re.sub(r"^\s*(?:\d+[\.\)]|[-•])\s*", "", raw).strip()
+        if value:
+            items.append(value)
+    return items
+
+
+def _merge_agenda(supplied: list[str], inferred: list[str]) -> list[str]:
+    merged: list[str] = []
+    seen: set[str] = set()
+    for item in [*supplied, *inferred]:
+        value = str(item).strip()
+        if not value:
+            continue
+        key = re.sub(r"\s+", " ", value).casefold()
+        if key in seen:
+            continue
+        seen.add(key)
+        merged.append(value)
+    return merged or ["General Meeting Proceedings"]
+
+
 def _local_minutes(text: str):
     from app.services.summarizer import extract_action_items, extract_decisions, extract_key_points, summarize
     key_points = extract_key_points(text, count=5)
@@ -71,16 +99,17 @@ def _store_minutes(db: Session, meeting_id: int, full_text: str) -> str:
         print(f"[WARNING] Gemini minutes generation failed; using deterministic fallback: {exc}")
         result = _local_minutes(full_text)
 
-    agenda = [str(item).strip() for item in (result.get("agenda") or []) if str(item).strip()]
-    if not agenda:
-        agenda = ["General Meeting Proceedings"]
+    inferred_agenda = [str(item).strip() for item in (result.get("agenda") or []) if str(item).strip()]
+    if not inferred_agenda:
+        inferred_agenda = ["General Meeting Proceedings"]
     summary_text = result.get("summary") or full_text[:4000]
     key_points = result.get("key_points") or []
     decisions = result.get("decisions") or []
     action_items = result.get("action_items") or []
 
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
-    if meeting and not (meeting.description or "").strip():
+    if meeting:
+        agenda = _merge_agenda(_agenda_from_description(meeting.description or ""), inferred_agenda)
         meeting.description = "\n".join(f"{index}. {item}" for index, item in enumerate(agenda, 1))
 
     summary = db.query(Summary).filter(Summary.meeting_id == meeting_id).first()
