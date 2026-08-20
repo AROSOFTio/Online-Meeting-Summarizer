@@ -20,6 +20,8 @@ class UserBase(BaseModel):
     full_name: str
     role: UserRole
     is_active: bool = True
+    directory_group: str = "Staff"
+    position_title: Optional[str] = None
 
 
 class UserCreate(UserBase):
@@ -32,6 +34,8 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
     password: Optional[str] = None
+    directory_group: Optional[str] = None
+    position_title: Optional[str] = None
 
 
 class UserOut(UserBase):
@@ -127,14 +131,13 @@ class MeetingOut(MeetingBase):
 
 
 class InvitationCreate(BaseModel):
+    user_ids: List[int] = Field(default_factory=list)
     emails: List[EmailStr] = Field(default_factory=list)
     send_email: bool = True
 
 
 class InvitationJoin(BaseModel):
-    full_name: str = Field(min_length=2, max_length=255)
-    email: Optional[EmailStr] = None
-    role_title: str = Field(default="Member", min_length=2, max_length=255)
+    full_name: Optional[str] = Field(default=None, min_length=2, max_length=255)
 
 
 class ProcessingJobOut(BaseModel):
