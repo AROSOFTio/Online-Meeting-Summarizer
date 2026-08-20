@@ -71,7 +71,8 @@ export default function StaffPage() {
   const onSubmit = (data: StaffFormValues) => {
     setFormError(null);
     if (editingUser) {
-      const { is_active: _isActive, ...payload } = data;
+      const payload: Partial<StaffFormValues> = { ...data };
+      delete payload.is_active;
       if (!payload.password) delete payload.password;
       updateMutation.mutate({ id: editingUser.id, values: payload });
     } else {
