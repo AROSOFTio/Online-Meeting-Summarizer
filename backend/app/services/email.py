@@ -76,12 +76,12 @@ class EmailService:
         return self.send(
             [recipient],
             f"Meeting invitation: {meeting_title}",
-            f"You have been invited to {meeting_title} at {organization_name}.\nMeeting: {date_text}\n\nJoin the meeting here:\n{invitation_url}\n\nConfirm your name and position once, then you will enter the meeting.",
+            f"You have been invited to {meeting_title} at {organization_name}.\nMeeting: {date_text}\n\nOpen your meeting link:\n{invitation_url}\n\nIf the organiser has not started the meeting yet, the page will show the live countdown and waiting room.",
             self._brand_header()
             + f'<div style="padding:24px"><p>You have been invited to:</p><h3>{safe_title}</h3>'
             + f'<p><b>Date &amp; time:</b> {html.escape(date_text)}</p><p>{safe_org}</p>'
             + f'<p><a href="{safe_url}" style="display:inline-block;background:#173ea5;color:white;padding:13px 20px;text-decoration:none;border-radius:7px;font-weight:bold">Join Meeting</a></p>'
-            + '<p style="font-size:12px;color:#6b7280">No staff account is required. Confirm your full name and title/position, then enter the meeting.</p></div></div>',
+            + '<p style="font-size:12px;color:#6b7280">There is no accept/decline step. Open the link; if the meeting has not started, you will wait on the countdown page until the organiser starts it.</p></div></div>',
         )
 
     def send_final_minutes(self, recipients: Iterable[str], meeting_title: str, meeting_id: int, pdf_data: bytes, organization_name: str) -> int:
