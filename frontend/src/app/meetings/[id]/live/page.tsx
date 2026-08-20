@@ -38,6 +38,7 @@ export default function LiveMeetingPage() {
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const leavingRef = useRef(false);
+  const autoStartAttemptedRef = useRef(false);
 
   const meetingQuery = useQuery<Meeting>({
     queryKey:["meeting-live",meetingId],
@@ -90,10 +91,12 @@ export default function LiveMeetingPage() {
     setError(null);
     chunksRef.current = [];
     setSeconds(0);
+    let runtimeStarted = false;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       await apiRequest(`/api/meetings/${meetingId}/start`, { method:"POST" });
+      runtimeStarted = true;
       const preferred = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"].find((type) => MediaRecorder.isTypeSupported(type));
       const recorder = preferred ? new MediaRecorder(stream, { mimeType: preferred }) : new MediaRecorder(stream);
       recorderRef.current = recorder;
@@ -116,10 +119,23 @@ export default function LiveMeetingPage() {
       void attendanceQuery.refetch();
       timerRef.current = setInterval(() => setSeconds((value) => value + 1), 1000);
     } catch (err) {
+      if (runtimeStarted) {
+        try { await apiRequest(`/api/meetings/${meetingId}/end`, { method:"POST" }); } catch { /* preserve original start error */ }
+      }
       cleanupStream();
       setError(err instanceof Error ? err.message : "Microphone access or meeting start failed. Allow microphone permission and try again.");
     }
   };
+
+  useEffect(() => {
+    if (!canManageMeeting || autoStartAttemptedRef.current || typeof window === "undefined") return;
+    const shouldAutoStart = new URLSearchParams(window.location.search).get("autostart") === "1";
+    if (!shouldAutoStart) return;
+    autoStartAttemptedRef.current = true;
+    window.history.replaceState({}, "", window.location.pathname);
+    const timer = window.setTimeout(() => document.getElementById("start-meeting-button")?.click(), 0);
+    return () => window.clearTimeout(timer);
+  }, [canManageMeeting]);
 
   const endMeeting = () => {
     leavingRef.current = false;
@@ -162,7 +178,7 @@ export default function LiveMeetingPage() {
             <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 text-blue-700"><Mic size={36}/></div>
             <h2 className="mt-4 text-xl font-extrabold text-slate-950">Ready to begin?</h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">You may start before, at, or after the scheduled time. Pressing Start Meeting changes the public waiting room to LIVE and begins recording on this device.</p>
-            <button onClick={startMeeting} className="mt-6 w-full rounded-xl bg-blue-700 px-5 py-4 text-base font-extrabold text-white shadow-sm hover:bg-blue-800 sm:w-auto sm:min-w-64"><Mic className="mr-2 inline" size={20}/>Start Meeting</button>
+            <button id="start-meeting-button" onClick={startMeeting} className="mt-6 w-full rounded-xl bg-blue-700 px-5 py-4 text-base font-extrabold text-white shadow-sm hover:bg-blue-800 sm:w-auto sm:min-w-64"><Mic className="mr-2 inline" size={20}/>Start Meeting</button>
             <div className="mt-6 border-t border-slate-100 pt-5"><p className="mb-2 text-xs text-slate-400">Already recorded elsewhere?</p><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"><Upload size={15}/>Upload recording instead<input type="file" className="hidden" accept=".wav,.mp3,.m4a,.mp4,.webm,.ogg,audio/*,video/*" onChange={(event)=>uploadExisting(event.target.files?.[0])}/></label></div>
           </>}
 
