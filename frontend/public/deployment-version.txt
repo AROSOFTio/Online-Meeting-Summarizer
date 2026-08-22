@@ -1,0 +1,4 @@
+Meeting system frontend refresh
+Version: neutral-ui-2026-08-22-2345-EAT
+Expected meeting status text: Preparing meeting minutes
+Provider branding: hidden from user-facing interface
