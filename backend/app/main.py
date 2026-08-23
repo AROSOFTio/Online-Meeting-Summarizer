@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.endpoints import action_items, auth, exports, health, live_rooms, meetings, recordings, settings as settings_router, staff, stats, summaries, system, transcripts
+from app.api.endpoints import action_items, attendance, auth, exports, health, live_rooms, meetings, recordings, settings as settings_router, staff, stats, summaries, system, transcripts
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.security import get_password_hash
@@ -22,6 +22,7 @@ async def lifespan(app: FastAPI):
                 connection.execute(text("ALTER TYPE userrole ADD VALUE IF NOT EXISTS 'minute_secretary'"))
             if connection.execute(text("SELECT to_regclass('public.meeting_participants') IS NOT NULL")).scalar():
                 connection.execute(text("ALTER TABLE meeting_participants ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(20) NOT NULL DEFAULT 'present'"))
+                connection.execute(text("ALTER TABLE meeting_participants ALTER COLUMN attendance_status TYPE VARCHAR(500)"))
             if connection.execute(text("SELECT to_regclass('public.action_items') IS NOT NULL")).scalar():
                 connection.execute(text("ALTER TABLE action_items ADD COLUMN IF NOT EXISTS responsible_name VARCHAR(255)"))
 
@@ -80,6 +81,9 @@ app.include_router(settings_router.router, prefix="/api/settings", tags=["Settin
 app.include_router(system.router, prefix="/api/system", tags=["System & Operations"])
 app.include_router(health.router, prefix="/api/health", tags=["Health Check"])
 app.include_router(stats.router, prefix="/api/stats", tags=["Statistics"])
+# Register richer invitation/attendance handlers first so they override the
+# older status-only handlers still kept in meetings.py for compatibility.
+app.include_router(attendance.router, prefix="/api/meetings", tags=["Attendance"])
 app.include_router(meetings.router, prefix="/api/meetings", tags=["Meetings"])
 app.include_router(live_rooms.router, prefix="/api/live-rooms", tags=["Live Meetings"])
 app.include_router(recordings.router, prefix="/api/recordings", tags=["Recordings"])
