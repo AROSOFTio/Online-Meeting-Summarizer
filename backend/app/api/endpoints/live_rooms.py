@@ -203,7 +203,7 @@ def _register_invited_participant(
     if not name and participant:
         name = participant.name.strip()
     if len(name) < 2:
-        raise HTTPException(status_code=400, detail="Please enter your full name before joining the audio meeting")
+        raise HTTPException(status_code=400, detail="Please enter your full name before joining the meeting microphone")
     if not participant:
         participant = _participant_by_name_for_meeting(db, meeting, name)
     if not participant:
@@ -214,7 +214,7 @@ def _register_invited_participant(
         participant.name = name
         if email and not participant.email:
             participant.email = email
-        if not participant.role_title:
+        if not participant.role_title or participant.role_title == "Invited guest":
             participant.role_title = "Guest"
     _link_present(meeting, participant, db)
     invitation.status = "joined"
@@ -481,7 +481,7 @@ def moderate_live_room(meeting_id: int, body: ModerateRequest):
     with _LOCK:
         actor = _peer_locked(meeting_id, body.peer_id, body.session_key)
         if not actor.is_moderator:
-            raise HTTPException(status_code=403, detail="Only the meeting organiser or owner can mute participants")
+            raise HTTPException(status_code=403, detail="Only the meeting organiser or owner can control participant microphones")
         room = _ROOMS.get(meeting_id, {})
         if body.target_id == "*":
             targets = [peer for peer in room.values() if peer.peer_id != actor.peer_id]
@@ -490,7 +490,7 @@ def moderate_live_room(meeting_id: int, body: ModerateRequest):
             if not target:
                 raise HTTPException(status_code=404, detail="Participant is no longer connected")
             if target.peer_id == actor.peer_id:
-                raise HTTPException(status_code=400, detail="Use your microphone control to mute yourself")
+                raise HTTPException(status_code=400, detail="Use your own microphone control for your microphone")
             targets = [target]
 
         for target in targets:
@@ -503,18 +503,19 @@ def moderate_live_room(meeting_id: int, body: ModerateRequest):
                     {
                         "type": "force-mute",
                         "from_peer_id": actor.peer_id,
-                        "payload": {"reason": "Muted by meeting organiser"},
+                        "payload": {"reason": "Microphone turned off by meeting organiser"},
                     },
                 )
             else:
                 target.forced_muted = False
+                target.muted = False
                 _enqueue(
                     meeting_id,
                     target.peer_id,
                     {
                         "type": "release-mute",
                         "from_peer_id": actor.peer_id,
-                        "payload": {"reason": "Microphone enabled by meeting organiser"},
+                        "payload": {"reason": "Microphone turned on by meeting organiser"},
                     },
                 )
         participants = _serialize_peers(meeting_id, actor.peer_id)
