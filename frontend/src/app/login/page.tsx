@@ -29,7 +29,7 @@ export default function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await login(data.email, data.password);
+      await login(data.email.trim().toLowerCase(), data.password);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Invalid credentials");
     } finally {
@@ -41,9 +41,7 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-8">
         <div className="mb-7 text-center">
-          {/* Use the bundled official logo directly so it is not proxied through the API binary response path. */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/starlight-logo.jpg?v=official-20260823" alt="Starlight Secondary School" className="mx-auto mb-4 h-auto max-h-32 w-auto max-w-[230px] object-contain" />
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-800 text-xl font-black tracking-tight text-white shadow-sm">SS</div>
           <h1 className="text-xl font-extrabold text-slate-950">STARLIGHT SECONDARY SCHOOL</h1>
           <p className="mt-1 text-sm text-slate-500">Meeting Summarizer</p>
         </div>
@@ -52,11 +50,11 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <label className="block text-sm font-medium text-slate-700">Email Address
-            <input type="email" {...register("email")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="name@starlightsecondaryschool.com" />
+            <input type="email" autoComplete="username" {...register("email")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="name@starlightsecondaryschool.com" />
             {errors.email && <span className="mt-1 block text-xs text-red-600">{errors.email.message}</span>}
           </label>
           <label className="block text-sm font-medium text-slate-700">Password
-            <input type="password" {...register("password")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="••••••••" />
+            <input type="password" autoComplete="current-password" {...register("password")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="••••••••" />
             {errors.password && <span className="mt-1 block text-xs text-red-600">{errors.password.message}</span>}
           </label>
           <button type="submit" disabled={isSubmitting} className="w-full rounded-lg bg-blue-700 py-3 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">{isSubmitting ? "Signing in..." : "Sign In"}</button>
