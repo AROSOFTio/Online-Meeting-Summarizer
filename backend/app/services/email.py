@@ -97,15 +97,27 @@ class EmailService:
             attachment_filename=f"{meeting_title[:50].replace('/', '-')}-final-minutes.pdf",
         )
 
-    def send_meeting_complete(self, recipients: Iterable[str], meeting_title: str, meeting_id: int, summary: str) -> int:
+    def send_meeting_complete(
+        self,
+        recipients: Iterable[str],
+        meeting_title: str,
+        meeting_id: int,
+        summary: str,
+        pdf_data: Optional[bytes] = None,
+    ) -> int:
         public_url = f"{settings.PUBLIC_APP_URL}/meetings/{meeting_id}"
+        attachment_note = "\n\nThe generated meeting minutes are attached as a PDF." if pdf_data else ""
+        html_attachment_note = "<p><b>The generated meeting minutes are attached as a PDF.</b></p>" if pdf_data else ""
         return self.send(
             recipients,
             f"Meeting minutes ready: {meeting_title}",
-            f'The transcript and minutes for "{meeting_title}" are ready.\n\n{summary}\n\nView: {public_url}',
+            f'The transcript and minutes for "{meeting_title}" are ready.\n\n{summary}{attachment_note}\n\nView: {public_url}',
             self._brand_header()
             + f'<div style="padding:24px"><h3>{html.escape(meeting_title)}</h3><p>The transcript and meeting minutes are ready.</p>'
+            + html_attachment_note
             + f'<p>{html.escape(summary)}</p><p><a href="{html.escape(public_url)}">View meeting minutes</a></p></div></div>',
+            attachment=pdf_data,
+            attachment_filename=f"{meeting_title[:50].replace('/', '-')}-generated-minutes.pdf",
         )
 
 
