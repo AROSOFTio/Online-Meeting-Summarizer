@@ -40,17 +40,17 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Starlight2026!}
       SCHOOL_NAME: ${SCHOOL_NAME:-Starlight Secondary School}
       TIMEZONE: ${TIMEZONE:-Africa/Kampala}
-      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://oms.arosoftlabs.com}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://starlightsecondaryschool.com}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
-      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_HOST: ${SMTP_HOST:-stalwart}
       SMTP_PORT: ${SMTP_PORT:-465}
-      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-info@starlightsecondaryschool.com}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@arofi.net}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-info@starlightsecondaryschool.com}
       SMTP_USE_SSL: ${SMTP_USE_SSL:-true}
       SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-false}
-      SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-true}
+      SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-false}
     expose:
       - "8000"
     volumes:
@@ -76,17 +76,17 @@ services:
       SECRET_KEY: ${SECRET_KEY:-supersecretkeydefaultforstarlightsecondaryschool2026!}
       SCHOOL_NAME: ${SCHOOL_NAME:-Starlight Secondary School}
       TIMEZONE: ${TIMEZONE:-Africa/Kampala}
-      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://oms.arosoftlabs.com}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://starlightsecondaryschool.com}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
-      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_HOST: ${SMTP_HOST:-stalwart}
       SMTP_PORT: ${SMTP_PORT:-465}
-      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_USERNAME: ${SMTP_USERNAME:-info@starlightsecondaryschool.com}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-no-reply@arofi.net}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-info@starlightsecondaryschool.com}
       SMTP_USE_SSL: ${SMTP_USE_SSL:-true}
       SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-false}
-      SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-true}
+      SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-false}
     volumes:
       - recordings:/workspace/storage
     command: ["celery", "-A", "app.workers.tasks", "worker", "--loglevel=info", "--concurrency=2"]
@@ -99,7 +99,7 @@ services:
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://oms.arosoftlabs.com}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://starlightsecondaryschool.com}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
       interval: 20s
