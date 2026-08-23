@@ -11,10 +11,11 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.models import (
     ActionItem, ActionItemPriority, ActionItemStatus, Decision, JobStatus, Meeting,
-    MeetingStatus, ProcessingJob, Recording, Summary, Transcript, TranscriptSegment,
-    meeting_participants,
+    MeetingStatus, ProcessingJob, Recording, Summary, SystemSetting, Transcript,
+    TranscriptSegment, meeting_participants,
 )
 from app.services.audio import normalise_audio
+from app.services.export import export_pdf
 from app.services.transcription import transcription_service
 
 celery_app = Celery("meeting_tasks", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
@@ -47,6 +48,10 @@ def _safe_due_date(value):
         return date.fromisoformat(str(value))
     except (TypeError, ValueError):
         return None
+
+
+def _enum_value(value):
+    return getattr(value, "value", str(value))
 
 
 def _agenda_from_description(description: str) -> list[str]:
@@ -158,6 +163,60 @@ def _store_minutes(db: Session, meeting_id: int, full_text: str) -> str:
     return summary_text
 
 
+def _build_generated_minutes_pdf(db: Session, meeting: Meeting, transcript_text: str) -> bytes:
+    attendance_rows = db.execute(
+        meeting_participants.select().where(meeting_participants.c.meeting_id == meeting.id)
+    ).mappings().all()
+    attendance = {row["participant_id"]: row["attendance_status"] for row in attendance_rows}
+    participants = [
+        {
+            "name": participant.name,
+            "role": participant.role_title or "Member",
+            "email": participant.email or "",
+            "status": attendance.get(participant.id, "present").title(),
+        }
+        for participant in meeting.participants
+    ]
+
+    summary = db.query(Summary).filter(Summary.meeting_id == meeting.id).first()
+    decisions = db.query(Decision).filter(Decision.meeting_id == meeting.id).all()
+    action_rows = db.query(ActionItem).filter(ActionItem.meeting_id == meeting.id).all()
+    action_items = [
+        {
+            "text": action.description,
+            "assignee_name": action.assignee.full_name if action.assignee else (action.responsible_name or None),
+            "deadline": str(action.deadline) if action.deadline else None,
+            "status": _enum_value(action.status),
+            "priority": _enum_value(action.priority),
+        }
+        for action in action_rows
+    ]
+
+    system_settings = {row.key: row.value for row in db.query(SystemSetting).all()}
+    organization = {
+        "name": system_settings.get("school_name", settings.SCHOOL_NAME),
+        "address": system_settings.get("organization_address", ""),
+        "phone": system_settings.get("organization_phone", ""),
+        "email": system_settings.get("organization_email", ""),
+        "website": system_settings.get("organization_website", ""),
+        "motto": system_settings.get("organization_motto", ""),
+        "registration": system_settings.get("organization_registration", ""),
+        "logo_path": system_settings.get("school_logo_file", ""),
+    }
+
+    return export_pdf(
+        meeting_title=meeting.title,
+        meeting_date=meeting.date,
+        participants=participants,
+        summary_text=summary.summary_text if summary else "",
+        decisions=[decision.text for decision in decisions],
+        action_items=action_items,
+        transcript_text=transcript_text,
+        organization=organization,
+        meeting_description=meeting.description or "",
+    )
+
+
 @celery_app.task(name="tasks.transcribe_meeting")
 def transcribe_meeting(meeting_id: int, job_id: str):
     db: Session = SessionLocal()
@@ -240,17 +299,19 @@ def transcribe_meeting(meeting_id: int, job_id: str):
 
         try:
             from app.services.email import email_service
-            recipients = [p.email for p in meeting.participants if p.email]
+            recipients = [participant.email for participant in meeting.participants if participant.email]
             if meeting.owner and meeting.owner.email:
                 recipients.append(meeting.owner.email)
             if recipients and email_service.enabled:
+                pdf_data = _build_generated_minutes_pdf(db, meeting, full_text)
                 sent = email_service.send_meeting_complete(
                     recipients=recipients,
                     meeting_title=meeting.title,
                     meeting_id=meeting.id,
                     summary=summary_text or "The transcript and meeting minutes are now available.",
+                    pdf_data=pdf_data,
                 )
-                print(f"[SUCCESS] Sent completion notification to {sent} recipient(s).")
+                print(f"[SUCCESS] Sent generated minutes PDF to {sent} recipient(s).")
         except Exception as email_error:
             print(f"[WARNING] Completion email failed (non-fatal): {email_error}")
 
