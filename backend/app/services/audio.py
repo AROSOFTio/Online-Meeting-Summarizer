@@ -21,18 +21,14 @@ MAX_FILE_SIZE_BYTES = 500 * 1024 * 1024  # 500 MB limit
 
 def validate_media_file(filename: str, file_size: int, content_type: str) -> Tuple[bool, str]:
     """Validate media file size, extension, and content type."""
-    # Validate file size
     if file_size > MAX_FILE_SIZE_BYTES:
         return False, f"File size exceeds the limit of 500MB (got {round(file_size / (1024 * 1024), 2)}MB)"
 
-    # Validate file extension
     ext = Path(filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         return False, f"Unsupported file extension: {ext}. Supported: {', '.join(SUPPORTED_EXTENSIONS)}"
 
-    # Validate MIME type
     if content_type and content_type.lower() not in SUPPORTED_MIME_TYPES:
-        # Check if we can guess it
         guessed_type, _ = mimetypes.guess_type(filename)
         if not guessed_type or guessed_type.lower() not in SUPPORTED_MIME_TYPES:
             return False, f"Unsupported media type: {content_type}"
@@ -60,6 +56,46 @@ def check_ffmpeg_available() -> bool:
     except Exception:
         return False
 
+
+def compress_speech_webm(input_path: str, output_path: str) -> bool:
+    """Compress a browser WebM meeting recording for speech while keeping it easy to play and transcribe.
+
+    The live recorder can produce roughly 100-130 kbps audio. Meeting minutes only need clear
+    speech, so store a mono 16 kHz Opus copy at 32 kbps. A four-minute meeting is typically around
+    one megabyte instead of several megabytes.
+    """
+    if not check_ffmpeg_available() or not os.path.isfile(input_path):
+        return False
+
+    cmd = [
+        "ffmpeg", "-y", "-i", input_path,
+        "-vn",
+        "-ac", "1",
+        "-ar", "16000",
+        "-c:a", "libopus",
+        "-b:a", "32k",
+        "-application", "voip",
+        "-vbr", "on",
+        output_path,
+    ]
+    try:
+        subprocess.run(cmd, capture_output=True, check=True)
+        if not os.path.isfile(output_path) or os.path.getsize(output_path) <= 0:
+            return False
+        # Never replace the original with a larger file.
+        if os.path.getsize(output_path) >= os.path.getsize(input_path):
+            os.remove(output_path)
+            return False
+        return True
+    except Exception:
+        if os.path.exists(output_path):
+            try:
+                os.remove(output_path)
+            except OSError:
+                pass
+        return False
+
+
 def normalise_audio(input_path: str, output_path: str) -> float:
     """
     Normalise audio/video media into 16kHz mono WAV format.
@@ -69,7 +105,6 @@ def normalise_audio(input_path: str, output_path: str) -> float:
     if not os.path.exists(input_path):
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
-    # Avoid an FFmpeg pass when the input already matches Whisper's preferred format.
     if Path(input_path).suffix.lower() == ".wav":
         try:
             with wave.open(input_path, "rb") as source:
@@ -84,28 +119,23 @@ def normalise_audio(input_path: str, output_path: str) -> float:
         except (wave.Error, EOFError):
             pass
 
-    # Check FFmpeg availability
     ffmpeg_available = check_ffmpeg_available()
-    
+
     if not ffmpeg_available:
         print("[WARNING] FFmpeg is not installed or available on this system path. Running fallback processing.")
-        # If the input is already a WAV file, we copy it and extract duration using python native wave module
         input_ext = Path(input_path).suffix.lower()
         if input_ext == ".wav":
-            # Direct copy
             import shutil
             shutil.copy2(input_path, output_path)
             duration = get_audio_duration_python_wave(output_path)
             if duration > 0:
                 return duration
-            return 10.0  # Safe default fallback duration for testing
+            return 10.0
         else:
-            # Copy file as-is and return dummy duration to satisfy local development without crashes
             import shutil
             shutil.copy2(input_path, output_path)
             return 15.0
 
-    # FFmpeg conversion: 16kHz sample rate, 1 channel (mono), output container wav
     cmd = [
         "ffmpeg", "-y",
         "-i", input_path,
@@ -119,7 +149,6 @@ def normalise_audio(input_path: str, output_path: str) -> float:
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"FFmpeg conversion failed: {e.stderr.decode('utf-8', errors='ignore')}")
 
-    # Extract duration using ffprobe/ffmpeg
     duration = 0.0
     ffprobe_cmd = [
         "ffprobe", "-v", "error",
@@ -131,7 +160,6 @@ def normalise_audio(input_path: str, output_path: str) -> float:
         result = subprocess.run(ffprobe_cmd, capture_output=True, text=True, check=True)
         duration = float(result.stdout.strip())
     except Exception:
-        # Fallback duration query using ffmpeg output
         try:
             result = subprocess.run(["ffmpeg", "-i", output_path], capture_output=True, text=True)
             for line in result.stderr.splitlines():
