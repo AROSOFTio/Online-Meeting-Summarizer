@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Database, Download, FileText, RefreshCw, Save, ShieldCheck, Upload } from "lucide-react";
+import { Download, Save, Upload } from "lucide-react";
 
 import DashboardLayout from "@/components/DashboardLayout";
 import { useAuth } from "@/context/AuthContext";
@@ -19,15 +19,6 @@ interface SettingsData {
   organization_registration: string;
   timezone: string;
   retention_period_days: string;
-}
-
-interface SystemStatus {
-  gemini_configured: boolean;
-  smtp_configured: boolean;
-  database: string;
-  queue: string;
-  timezone: string;
-  retention_period_days: number;
 }
 
 interface Backup { id:number; filename:string; size_bytes:number; status:string; created_at:string; }
@@ -50,7 +41,6 @@ export default function SettingsPage(){
   const [logoUploading,setLogoUploading]=useState(false);
 
   const settingsQuery=useQuery<SettingsData>({queryKey:["system-settings"],queryFn:()=>apiRequest("/api/settings/")});
-  const statusQuery=useQuery<SystemStatus>({queryKey:["system-status"],queryFn:()=>apiRequest("/api/system/status")});
   const backupsQuery=useQuery<Backup[]>({queryKey:["system-backups"],queryFn:()=>apiRequest("/api/system/backups"),enabled:user?.role==="admin"});
   const auditQuery=useQuery<Audit[]>({queryKey:["system-audit"],queryFn:()=>apiRequest("/api/system/audit?limit=20"),enabled:user?.role==="admin"});
 
@@ -66,17 +56,10 @@ export default function SettingsPage(){
   if(user.role!=="admin")return <DashboardLayout><div className="rounded-lg border border-red-200 bg-red-50 p-6 text-center text-red-700"><h2 className="font-bold">Access Denied</h2><p className="mt-1 text-sm">Only administrators can manage system settings.</p></div></DashboardLayout>;
 
   return <DashboardLayout><div className="space-y-6">
-    <div className="border-b border-gray-200 pb-5"><h1 className="text-2xl font-bold text-gray-900">System Settings & Operations</h1><p className="mt-1 text-sm text-gray-500">Branding, minutes processing, retention, backups and recent audit activity.</p></div>
+    <div className="border-b border-gray-200 pb-5"><h1 className="text-2xl font-bold text-gray-900">System Settings & Operations</h1><p className="mt-1 text-sm text-gray-500">School identity, retention, backups and recent audit activity.</p></div>
     {(message||error)&&<div className={`rounded border p-3 text-sm ${error?"border-red-200 bg-red-50 text-red-700":"border-green-200 bg-green-50 text-green-700"}`}>{error||message}</div>}
 
-    <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      {statusQuery.isLoading?<div className="col-span-full flex items-center gap-2 rounded border bg-white p-4 text-sm text-gray-500"><RefreshCw className="animate-spin" size={16}/>Loading runtime status...</div>:statusQuery.data&&<>
-        <StatusCard icon={<FileText size={18}/>} title="Minutes processing" value={statusQuery.data.gemini_configured?"Ready":"Configuration required"} ok={statusQuery.data.gemini_configured} note={statusQuery.data.gemini_configured?"Speaker detection and minute preparation ready":"Processing service key is missing"}/>
-        <StatusCard icon={<Database size={18}/>} title="Database" value={statusQuery.data.database} ok note={statusQuery.data.queue}/>
-        <StatusCard icon={<ShieldCheck size={18}/>} title="Email delivery" value={statusQuery.data.smtp_configured?"Ready":"Not configured"} ok={statusQuery.data.smtp_configured} note="Invitations and final minutes"/>
-        <StatusCard icon={<RefreshCw size={18}/>} title="Retention" value={`${statusQuery.data.retention_period_days} days`} ok note="Archived recordings only"/>
-      </>}
-    </section>
+    {settingsQuery.data&&<div className="max-w-xs rounded-lg border border-gray-200 bg-white p-4 shadow-sm"><div className="text-xs font-semibold uppercase text-gray-500">Recording retention</div><div className="mt-2 text-sm font-bold text-gray-900">{formValues.retention_period_days} days</div><div className="mt-1 text-xs text-green-600">Archived recordings only</div></div>}
 
     {settingsQuery.data&&<form onSubmit={(event)=>{event.preventDefault();saveMutation.mutate(formValues);}} className="max-w-3xl space-y-5 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
       <h2 className="font-bold text-gray-900">School identity & document details</h2>
@@ -101,4 +84,3 @@ export default function SettingsPage(){
 }
 
 function Field({label,value,onChange,type="text"}:{label:string;value:string;onChange:(value:string)=>void;type?:string}){return <label className="block text-sm font-medium text-gray-700">{label}<input type={type} value={value} onChange={(event)=>onChange(event.target.value)} className="mt-1 w-full rounded border border-gray-300 px-3 py-2 text-gray-900"/></label>}
-function StatusCard({icon,title,value,ok,note}:{icon:React.ReactNode;title:string;value:string;ok:boolean;note:string}){return <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"><div className="flex items-center gap-2 text-gray-500">{icon}<span className="text-xs font-semibold uppercase">{title}</span></div><div className="mt-2 text-sm font-bold text-gray-900">{value}</div><div className={`mt-1 text-xs ${ok?"text-green-600":"text-amber-700"}`}>{note}</div></div>}
