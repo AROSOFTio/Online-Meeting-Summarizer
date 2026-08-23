@@ -8,6 +8,7 @@ import { Calendar, CheckCircle2, Mail, Mic, Radio, RefreshCw, Square, Upload, Us
 
 import DashboardLayout from "@/components/DashboardLayout";
 import LiveAudioRoom from "@/components/LiveAudioRoom";
+import LiveInvitePanel from "@/components/LiveInvitePanel";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
 
@@ -33,8 +34,7 @@ interface Attendance {
   attendance_status: string;
 }
 
-const formatTime = (seconds: number) =>
-  `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
+const formatTime = (seconds: number) => `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 
 export default function LiveMeetingPage() {
   const params = useParams<{ id: string }>();
@@ -47,6 +47,9 @@ export default function LiveMeetingPage() {
   const [processing, setProcessing] = useState(false);
   const [hostStream, setHostStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
+  const [selectedInputId, setSelectedInputId] = useState("");
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -74,12 +77,20 @@ export default function LiveMeetingPage() {
     refetchInterval: meeting?.lifecycle === "live" ? 2000 : false,
   });
 
+  const refreshInputs = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setAudioInputs(devices.filter((device) => device.kind === "audioinput"));
+    } catch { /* labels may be hidden before permission */ }
+  }, []);
+
+  useEffect(() => { void refreshInputs(); }, [refreshInputs]);
+
   const cleanupMedia = useCallback(() => {
     if (timerRef.current) clearInterval(timerRef.current);
     timerRef.current = null;
-    mixSourcesRef.current.forEach((source) => {
-      try { source.disconnect(); } catch { /* Source may already be disconnected. */ }
-    });
+    mixSourcesRef.current.forEach((source) => { try { source.disconnect(); } catch {} });
     mixSourcesRef.current.clear();
     streamRef.current?.getTracks().forEach((track) => track.stop());
     streamRef.current = null;
@@ -90,9 +101,7 @@ export default function LiveMeetingPage() {
 
   useEffect(() => () => {
     leavingRef.current = true;
-    try {
-      if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop();
-    } catch { /* Recorder may already be closed. */ }
+    try { if (recorderRef.current && recorderRef.current.state !== "inactive") recorderRef.current.stop(); } catch {}
     cleanupMedia();
   }, [cleanupMedia]);
 
@@ -105,7 +114,7 @@ export default function LiveMeetingPage() {
       source.connect(destination);
       mixSourcesRef.current.set(peerId, source);
     } catch (streamError) {
-      console.error("Could not add remote participant to meeting recording:", streamError);
+      console.error("Could not add participant microphone to meeting recording:", streamError);
     }
   }, []);
 
@@ -134,9 +143,15 @@ export default function LiveMeetingPage() {
     let stream: MediaStream | null = null;
     try {
       stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        audio: {
+          deviceId: selectedInputId ? { exact: selectedInputId } : undefined,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
       });
       streamRef.current = stream;
+      await refreshInputs();
       await apiRequest(`/api/meetings/${meetingId}/start`, { method: "POST" });
       runtimeStarted = true;
       await meetingQuery.refetch();
@@ -161,10 +176,7 @@ export default function LiveMeetingPage() {
         setHostStream(null);
         setIsRecording(false);
         if (leavingRef.current) return;
-        if (blob.size === 0) {
-          setError("The recording was empty. Please try again.");
-          return;
-        }
+        if (blob.size === 0) { setError("The recording was empty. Please try again."); return; }
         const extension = type.includes("mp4") ? "m4a" : "webm";
         void sendForMinutes(blob, `meeting-${meetingId}.${extension}`);
       };
@@ -174,14 +186,12 @@ export default function LiveMeetingPage() {
       void attendanceQuery.refetch();
       timerRef.current = setInterval(() => setSeconds((value) => value + 1), 1000);
     } catch (startError) {
-      if (runtimeStarted && meeting?.lifecycle !== "live") {
-        try { await apiRequest(`/api/meetings/${meetingId}/end`, { method: "POST" }); } catch { /* Preserve original error. */ }
-      }
+      if (runtimeStarted && meeting?.lifecycle !== "live") { try { await apiRequest(`/api/meetings/${meetingId}/end`, { method: "POST" }); } catch {} }
       cleanupMedia();
       setHostStream(null);
-      setError(startError instanceof Error ? startError.message : "Microphone access or meeting start failed. Allow microphone permission and try again.");
+      setError(startError instanceof Error ? startError.message : "Microphone access or meeting start failed.");
     }
-  }, [attendanceQuery, cleanupMedia, meeting?.lifecycle, meetingId, meetingQuery, sendForMinutes]);
+  }, [attendanceQuery, cleanupMedia, meeting?.lifecycle, meetingId, meetingQuery, refreshInputs, selectedInputId, sendForMinutes]);
 
   useEffect(() => {
     if (!canManageMeeting || autoStartAttemptedRef.current || typeof window === "undefined") return;
@@ -202,34 +212,37 @@ export default function LiveMeetingPage() {
   const uploadExisting = (file?: File) => { if (file) void sendForMinutes(file, file.name); };
 
   if (!user) return null;
-  if (meetingQuery.isLoading) return <DashboardLayout><div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm text-slate-500"><RefreshCw className="mx-auto mb-3 animate-spin text-blue-700" />Opening meeting...</div></DashboardLayout>;
+  if (meetingQuery.isLoading) return <DashboardLayout><div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm text-slate-500"><RefreshCw className="mx-auto mb-3 animate-spin text-blue-700"/>Opening meeting...</div></DashboardLayout>;
   if (meetingQuery.isError || !meeting) return <DashboardLayout><div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">Could not open this live meeting. {meetingQuery.error?.message || "The meeting may no longer be live."}</div></DashboardLayout>;
 
   if (meeting.status === "processing" || meeting.status === "completed" || meeting.lifecycle === "ended") {
-    return <DashboardLayout><div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><CheckCircle2 className="mx-auto text-green-600" size={52} /><h1 className="mt-3 text-2xl font-extrabold text-slate-950">{meeting.status === "completed" ? "Meeting completed" : "Minutes are being prepared"}</h1><p className="mt-2 text-sm text-slate-500">The system is preparing the transcript, detecting speakers and building the meeting minutes.</p><Link href={`/meetings/${meeting.id}`} className="mt-6 inline-flex rounded-lg bg-blue-700 px-5 py-3 text-sm font-bold text-white">Open Meeting</Link></div></DashboardLayout>;
+    return <DashboardLayout><div className="mx-auto max-w-2xl rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm"><CheckCircle2 className="mx-auto text-green-600" size={52}/><h1 className="mt-3 text-2xl font-extrabold text-slate-950">{meeting.status === "completed" ? "Meeting completed" : "Minutes are being prepared"}</h1><p className="mt-2 text-sm text-slate-500">The system is preparing the transcript, detecting speakers and building the meeting minutes.</p><Link href={`/meetings/${meeting.id}`} className="mt-6 inline-flex rounded-lg bg-blue-700 px-5 py-3 text-sm font-bold text-white">Open Meeting</Link></div></DashboardLayout>;
   }
 
   const attendance = attendanceQuery.data || [];
   const presentCount = attendance.filter((person) => person.attendance_status === "present").length;
   const waitingCount = attendance.filter((person) => person.attendance_status === "waiting").length;
+  const invitedCount = attendance.filter((person) => person.attendance_status === "invited").length;
 
   return <DashboardLayout><div className="mx-auto w-full max-w-4xl space-y-6">
+    {inviteOpen && <LiveInvitePanel meetingId={meeting.id} onClose={() => setInviteOpen(false)} onInvited={() => void attendanceQuery.refetch()}/>}
+
     <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div><div className="flex items-center gap-2">{meeting.lifecycle === "live" && <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />}<p className="text-xs font-bold uppercase tracking-wider text-blue-700">{meeting.lifecycle === "live" ? "Live Meeting" : "Meeting Room"}</p></div><h1 className="mt-1 text-2xl font-extrabold text-slate-950">{meeting.title}</h1><div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500"><span className="flex items-center gap-1"><Calendar size={14} />{new Date(meeting.date).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</span>{canManageMeeting && <span className="flex items-center gap-1"><Users size={14} />{presentCount} present · {waitingCount} waiting</span>}</div></div>
-        <div className="flex flex-wrap gap-2">{canManageMeeting && <Link href={`/meetings/${meeting.id}/invite`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-extrabold text-blue-800"><Mail size={15} />Invite People</Link>}<Link href={canManageMeeting ? `/meetings/${meeting.id}` : "/meetings"} className="rounded-lg border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-600">{canManageMeeting ? "Meeting details" : "All meetings"}</Link></div>
+        <div><div className="flex items-center gap-2">{meeting.lifecycle === "live" && <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500"/>}<p className="text-xs font-bold uppercase tracking-wider text-blue-700">{meeting.lifecycle === "live" ? "On-ground meeting in progress" : "Meeting room"}</p></div><h1 className="mt-1 text-2xl font-extrabold text-slate-950">{meeting.title}</h1><div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500"><span className="flex items-center gap-1"><Calendar size={14}/>{new Date(meeting.date).toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"})}</span>{canManageMeeting && <span className="flex items-center gap-1"><Users size={14}/>{presentCount} present · {waitingCount} waiting · {invitedCount} invited</span>}</div></div>
+        <div className="flex flex-wrap gap-2">{canManageMeeting && <button type="button" onClick={() => setInviteOpen(true)} className="inline-flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-2.5 text-xs font-extrabold text-blue-800"><Mail size={15}/>Invite People</button>}<Link href={canManageMeeting ? `/meetings/${meeting.id}` : "/meetings"} className="rounded-lg border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-600">{canManageMeeting ? "Meeting details" : "All meetings"}</Link></div>
       </div>
     </header>
 
-    {canManageMeeting && !isRecording && !processing && <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8"><div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 text-blue-700">{meeting.lifecycle === "live" ? <Radio size={36} /> : <Mic size={36} />}</div><h2 className="mt-4 text-xl font-extrabold text-slate-950">{meeting.lifecycle === "live" ? "Meeting is live — connect host recording" : "Ready to begin?"}</h2><p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-slate-500">{meeting.lifecycle === "live" ? "Reconnect the organiser microphone to continue the room recording. People can keep joining while the meeting is live." : "Starting changes the waiting room to LIVE, opens the audio room and begins the organiser recording."}</p><button id="start-meeting-button" type="button" onClick={() => void startMeeting()} className="mt-6 w-full rounded-xl bg-blue-700 px-5 py-4 text-base font-extrabold text-white shadow-sm hover:bg-blue-800 sm:w-auto sm:min-w-72"><Mic className="mr-2 inline" size={20} />{meeting.lifecycle === "live" ? "Connect Host & Record" : "Start Meeting"}</button>{meeting.lifecycle !== "live" && <div className="mt-6 border-t border-slate-100 pt-5"><p className="mb-2 text-xs text-slate-400">Already recorded elsewhere?</p><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"><Upload size={15} />Upload recording instead<input type="file" className="hidden" accept=".wav,.mp3,.m4a,.mp4,.webm,.ogg,audio/*,video/*" onChange={(event) => uploadExisting(event.target.files?.[0])} /></label></div>}</section>}
+    {canManageMeeting && !isRecording && !processing && <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8"><div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 text-blue-700">{meeting.lifecycle === "live" ? <Radio size={36}/> : <Mic size={36}/>}</div><h2 className="mt-4 text-xl font-extrabold text-slate-950">{meeting.lifecycle === "live" ? "Reconnect the main meeting microphone" : "Ready to begin the meeting record?"}</h2><p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500">This system supports a normal physical meeting. Choose the main room microphone, laptop microphone, USB/Bluetooth microphone or audio interface. Other invited devices can add microphones while the meeting continues.</p>{audioInputs.length > 0 && <label className="mx-auto mt-5 block max-w-xl text-left text-xs font-bold text-slate-700">Main room microphone / audio source<select value={selectedInputId} onChange={(event)=>setSelectedInputId(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm text-slate-900"><option value="">Default microphone</option>{audioInputs.map((device,index)=><option key={device.deviceId||index} value={device.deviceId}>{device.label||`Microphone ${index+1}`}</option>)}</select></label>}<button id="start-meeting-button" type="button" onClick={() => void startMeeting()} className="mt-6 w-full rounded-xl bg-blue-700 px-5 py-4 text-base font-extrabold text-white shadow-sm hover:bg-blue-800 sm:w-auto sm:min-w-72"><Mic className="mr-2 inline" size={20}/>{meeting.lifecycle === "live" ? "Reconnect & Continue Recording" : "Start Meeting Recording"}</button>{meeting.lifecycle !== "live" && <div className="mt-6 border-t border-slate-100 pt-5"><p className="mb-2 text-xs text-slate-400">Already recorded elsewhere?</p><label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50"><Upload size={15}/>Upload recording instead<input type="file" className="hidden" accept=".wav,.mp3,.m4a,.mp4,.webm,.ogg,audio/*,video/*" onChange={(event)=>uploadExisting(event.target.files?.[0])}/></label></div>}</section>}
 
-    {canManageMeeting && isRecording && hostStream && <><section className="rounded-2xl border border-red-200 bg-white p-6 text-center shadow-sm"><div className="mx-auto h-4 w-4 animate-pulse rounded-full bg-red-600" /><div className="mt-4 font-mono text-4xl font-extrabold tracking-wider text-slate-950">{formatTime(seconds)}</div><h2 className="mt-3 text-lg font-bold text-slate-900">Meeting is LIVE and recording</h2><p className="mx-auto mt-1 max-w-xl text-sm text-slate-500">The recording combines the organiser microphone with connected participant audio for speaker detection and minute preparation.</p><button type="button" onClick={endMeeting} className="mt-7 w-full rounded-xl bg-red-600 px-5 py-4 text-base font-extrabold text-white hover:bg-red-700 sm:w-auto sm:min-w-72"><Square className="mr-2 inline" size={18} fill="currentColor" />End Meeting & Process Minutes</button></section><LiveAudioRoom meetingId={meeting.id} displayName={user.full_name} providedStream={hostStream} autoJoin onRemoteStream={attachRemoteStream} /></>}
+    {canManageMeeting && isRecording && hostStream && <><section className="rounded-2xl border border-red-200 bg-white p-6 text-center shadow-sm"><div className="mx-auto h-4 w-4 animate-pulse rounded-full bg-red-600"/><div className="mt-4 font-mono text-4xl font-extrabold tracking-wider text-slate-950">{formatTime(seconds)}</div><h2 className="mt-3 text-lg font-bold text-slate-900">Meeting is being recorded for minutes</h2><p className="mx-auto mt-1 max-w-2xl text-sm text-slate-500">The main room microphone and all connected participant microphones are combined into the meeting record. Inviting another person does not interrupt this recording.</p><div className="mt-5 flex flex-wrap justify-center gap-2"><button type="button" onClick={() => setInviteOpen(true)} className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-extrabold text-blue-800"><Mail size={16}/>Invite During Meeting</button><button type="button" onClick={endMeeting} className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-extrabold text-white hover:bg-red-700"><Square size={17} fill="currentColor"/>End Meeting & Process Minutes</button></div></section><LiveAudioRoom meetingId={meeting.id} displayName={user.full_name} providedStream={hostStream} autoJoin onRemoteStream={attachRemoteStream}/></>}
 
-    {!canManageMeeting && meeting.lifecycle === "live" && <LiveAudioRoom meetingId={meeting.id} displayName={user.full_name} />}
+    {!canManageMeeting && meeting.lifecycle === "live" && <LiveAudioRoom meetingId={meeting.id} displayName={user.full_name}/>} 
 
-    {processing && <section className="rounded-2xl border border-blue-200 bg-blue-50 p-8 text-center"><div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-700 border-t-transparent" /><h2 className="mt-4 text-lg font-extrabold text-slate-950">Processing minutes...</h2><p className="mt-2 text-sm text-slate-600">The system will detect speakers, prepare the transcript and create the meeting minutes.</p></section>}
+    {processing && <section className="rounded-2xl border border-blue-200 bg-blue-50 p-8 text-center"><div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-blue-700 border-t-transparent"/><h2 className="mt-4 text-lg font-extrabold text-slate-950">Processing minutes...</h2><p className="mt-2 text-sm text-slate-600">The system will detect speakers, prepare the transcript and create the meeting minutes.</p></section>}
     {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
-    {canManageMeeting && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-bold text-slate-900">Attendance</h2><span className="text-xs font-bold text-blue-700">{presentCount} present · {waitingCount} waiting</span></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{attendance.length === 0 ? <p className="text-sm text-slate-500">No participants have joined yet.</p> : attendance.map((person) => <div key={person.id} className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-sm font-semibold text-slate-800">{person.name}</div><div className="text-xs text-slate-500">{person.role_title || "Member"} · <span className="capitalize">{person.attendance_status}</span></div></div>)}</div></section>}
+    {canManageMeeting && <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-center justify-between"><h2 className="font-bold text-slate-900">Attendance & invitations</h2><span className="text-xs font-bold text-blue-700">{presentCount} present · {waitingCount} waiting · {invitedCount} invited</span></div><div className="mt-3 grid gap-2 sm:grid-cols-2">{attendance.length===0?<p className="text-sm text-slate-500">No participants have registered yet.</p>:attendance.map((person)=><div key={person.id} className="rounded-lg bg-slate-50 px-3 py-2"><div className="text-sm font-semibold text-slate-800">{person.name}</div><div className="text-xs text-slate-500">{person.role_title||"Member"} · <span className="capitalize">{person.attendance_status}</span></div></div>)}</div></section>}
   </div></DashboardLayout>;
 }
