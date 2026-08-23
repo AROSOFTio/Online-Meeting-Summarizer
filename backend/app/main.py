@@ -27,9 +27,9 @@ async def lifespan(app: FastAPI):
 
     db = SessionLocal()
     try:
-        # Remove the retired local-transcription model setting from upgraded databases.
         retired_model_key = "whis" + "per_model"
         db.query(SystemSetting).filter(SystemSetting.key == retired_model_key).delete(synchronize_session=False)
+
         admin = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
         if not admin:
             admin = User(
@@ -41,6 +41,15 @@ async def lifespan(app: FastAPI):
             )
             db.add(admin)
             db.flush()
+        else:
+            # This is a single-organisation deployment. The configured admin
+            # account is authoritative so changing ADMIN_PASSWORD/ADMIN_EMAIL
+            # in production does not leave a stale database credential behind.
+            admin.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
+            admin.full_name = admin.full_name or "Starlight Administrator"
+            admin.role = UserRole.admin
+            admin.is_active = True
+
         if not db.query(DirectoryProfile).filter(DirectoryProfile.user_id == admin.id).first():
             db.add(DirectoryProfile(user_id=admin.id, directory_group="Management", position_title="Administrator"))
         db.commit()
