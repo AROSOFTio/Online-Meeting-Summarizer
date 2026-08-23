@@ -10,7 +10,7 @@ from app.core import deps
 from app.core.audit import log_action
 from app.core.config import settings
 from app.models.models import Meeting, MeetingStatus, Recording, User, UserRole
-from app.services.audio import validate_media_file
+from app.services.audio import compress_speech_webm, validate_media_file
 
 router = APIRouter()
 
@@ -61,6 +61,25 @@ async def upload_recording(
             os.remove(saved_path)
         raise HTTPException(status_code=500, detail=f"Failed to write recording: {exc}") from exc
 
+    stored_path = saved_path
+    stored_filename = file.filename or "recording"
+    stored_size = file_size
+    stored_mime = file.content_type
+
+    # Browser live meetings arrive as WebM. Keep speech clear but reduce storage
+    # dramatically by storing mono 16 kHz Opus at 32 kbps.
+    if extension == ".webm":
+        compact_path = os.path.join(settings.UPLOAD_DIR, f"meeting_{meeting_id}_{str(uuid.uuid4())[:8]}.webm")
+        if compress_speech_webm(saved_path, compact_path):
+            try:
+                os.remove(saved_path)
+            except OSError:
+                pass
+            stored_path = compact_path
+            stored_filename = f"meeting-{meeting_id}.webm"
+            stored_size = os.path.getsize(compact_path)
+            stored_mime = "audio/webm"
+
     existing = db.query(Recording).filter(Recording.meeting_id == meeting_id).first()
     old_path = existing.filepath if existing else None
     if existing:
@@ -68,17 +87,17 @@ async def upload_recording(
         db.flush()
     recording = Recording(
         meeting_id=meeting_id,
-        filename=file.filename or "recording",
-        filepath=saved_path,
-        file_size_bytes=file_size,
-        mime_type=file.content_type,
+        filename=stored_filename,
+        filepath=stored_path,
+        file_size_bytes=stored_size,
+        mime_type=stored_mime,
         uploaded_by_id=current_user.id,
     )
     db.add(recording)
     meeting.status = MeetingStatus.draft
     db.commit()
     db.refresh(recording)
-    if old_path and old_path != saved_path and os.path.exists(old_path):
+    if old_path and old_path != stored_path and os.path.exists(old_path):
         try:
             os.remove(old_path)
         except OSError:
