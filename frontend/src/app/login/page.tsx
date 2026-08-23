@@ -20,6 +20,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [logoFailed, setLogoFailed] = useState(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -41,7 +42,12 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-8">
         <div className="mb-7 text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-800 text-xl font-black tracking-tight text-white shadow-sm">SS</div>
+          {!logoFailed ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src="/api/settings/logo?v=official" alt="Starlight Secondary School" onError={() => setLogoFailed(true)} className="mx-auto mb-4 h-28 w-28 object-contain" />
+          ) : (
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-800 text-xl font-black tracking-tight text-white shadow-sm">SS</div>
+          )}
           <h1 className="text-xl font-extrabold text-slate-950">STARLIGHT SECONDARY SCHOOL</h1>
           <p className="mt-1 text-sm text-slate-500">Meeting Summarizer</p>
         </div>
