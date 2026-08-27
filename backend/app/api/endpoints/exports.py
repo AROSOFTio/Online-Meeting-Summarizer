@@ -23,6 +23,32 @@ def _final_pdf_path(meeting_id: int) -> Path:
     return Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf"
 
 
+def _organization_from_settings(db: Session) -> dict[str, str]:
+    rows = {row.key: row.value for row in db.query(SystemSetting).all()}
+    organization_name = rows.get("organization_name") or rows.get("school_name") or "Starlight Secondary School"
+    organization_logo_file = rows.get("organization_logo_file") or rows.get("school_logo_file") or ""
+    return {
+        "organization_name": organization_name,
+        "organization_address": rows.get("organization_address", ""),
+        "organization_phone": rows.get("organization_phone", ""),
+        "organization_email": rows.get("organization_email", ""),
+        "organization_website": rows.get("organization_website", ""),
+        "organization_motto": rows.get("organization_motto", ""),
+        "organization_registration": rows.get("organization_registration", ""),
+        "organization_logo_file": organization_logo_file,
+        "minutes_document_title": rows.get("minutes_document_title", "Official Meeting Minutes"),
+        "agenda_label": rows.get("agenda_label", "Agenda"),
+        "attendance_label": rows.get("attendance_label", "Attendance Register"),
+        "proceedings_label": rows.get("proceedings_label", "Minutes / Proceedings"),
+        "decisions_label": rows.get("decisions_label", "Resolutions / Key Decisions"),
+        "action_items_label": rows.get("action_items_label", "Action Items"),
+        "transcript_appendix_label": rows.get("transcript_appendix_label", "Appendix: Full Transcript"),
+        # Compatibility for email helpers and older export call sites.
+        "name": organization_name,
+        "logo_path": organization_logo_file,
+    }
+
+
 def _gather_export_data(meeting_id: int, db: Session):
     meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
     if not meeting:
@@ -60,21 +86,9 @@ def _gather_export_data(meeting_id: int, db: Session):
         for a in action_items_rows
     ]
 
-    setting_rows = db.query(SystemSetting).all()
-    settings = {row.key: row.value for row in setting_rows}
-    organization = {
-        "name": settings.get("school_name", "Starlight Secondary School"),
-        "address": settings.get("organization_address", ""),
-        "phone": settings.get("organization_phone", ""),
-        "email": settings.get("organization_email", ""),
-        "website": settings.get("organization_website", ""),
-        "motto": settings.get("organization_motto", ""),
-        "registration": settings.get("organization_registration", ""),
-        "logo_path": settings.get("school_logo_file", ""),
-    }
     return (
         meeting, participants, summary_text, decision_texts, action_items,
-        transcript.content if transcript else "", organization,
+        transcript.content if transcript else "", _organization_from_settings(db),
     )
 
 
@@ -207,7 +221,7 @@ def finalize_and_share_minutes(
                 meeting_title=meeting.title,
                 meeting_id=meeting.id,
                 pdf_data=pdf_data,
-                organization_name=organization["name"],
+                organization_name=organization["organization_name"],
             )
         except Exception as error:
             delivery_error = str(error)
