@@ -6,7 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Online Meeting Summarizer"
+    PROJECT_NAME: str = "ConveneCore"
     SECRET_KEY: str = "supersecretkeydefaultforstarlightsecondaryschool2026!"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
@@ -15,9 +15,10 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./meeting_summarizer.db"
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # Starlight remains the academic case-study defaults. Runtime organization
+    # identity is controlled from Organization Settings in ConveneCore.
     ADMIN_EMAIL: EmailStr = "admin@starlightsecondaryschool.com"
     ADMIN_PASSWORD: str = "Starlight2026!"
-
     SCHOOL_NAME: str = "Starlight Secondary School"
     SCHOOL_LOGO_URL: str = "/api/settings/logo"
     TIMEZONE: str = "Africa/Kampala"
