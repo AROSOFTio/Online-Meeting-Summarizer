@@ -6,8 +6,8 @@ from html import escape
 from pathlib import Path
 from typing import Any, List, Optional
 
-# This is the exact Starlight S.S logo supplied for the project.  Do not
-# replace it with a generated/recreated crest.
+# Starlight remains the bundled academic case-study logo. Worldwide deployments
+# normally override this through Organization Settings.
 BUNDLED_LOGO = Path(__file__).resolve().parents[1] / "static" / "starlight-logo.jpg"
 
 
@@ -24,22 +24,31 @@ def _format_date(value: Any) -> str:
 
 def _org(organization: Optional[dict]) -> dict:
     data = organization or {}
-    configured_logo = data.get("logo_path") or ""
-    # Keep a manually uploaded raster logo if one exists, but never fall back
-    # to the old recreated SVG crest. The bundled JPG is the real school logo.
+    configured_logo = data.get("organization_logo_file") or data.get("logo_path") or ""
     if configured_logo and os.path.isfile(configured_logo) and not configured_logo.lower().endswith(".svg"):
         logo_path = configured_logo
     else:
         logo_path = str(BUNDLED_LOGO) if BUNDLED_LOGO.is_file() else ""
+
+    def value(canonical: str, legacy: str, default: str = "") -> str:
+        return str(data.get(canonical) or data.get(legacy) or default)
+
     return {
-        "name": data.get("name") or "Starlight Secondary School",
-        "address": data.get("address") or "Amuria District, Uganda",
-        "phone": data.get("phone") or "",
-        "email": data.get("email") or "",
-        "website": data.get("website") or "https://oms.arosoftlabs.com",
-        "motto": data.get("motto") or "RISE AND SHINE",
-        "registration": data.get("registration") or "",
+        "name": value("organization_name", "name", "Starlight Secondary School"),
+        "address": value("organization_address", "address", "Amuria District, Uganda"),
+        "phone": value("organization_phone", "phone"),
+        "email": value("organization_email", "email"),
+        "website": value("organization_website", "website"),
+        "motto": value("organization_motto", "motto", "RISE AND SHINE"),
+        "registration": value("organization_registration", "registration"),
         "logo_path": logo_path,
+        "minutes_document_title": value("minutes_document_title", "minutes_document_title", "Official Meeting Minutes"),
+        "agenda_label": value("agenda_label", "agenda_label", "Agenda"),
+        "attendance_label": value("attendance_label", "attendance_label", "Attendance Register"),
+        "proceedings_label": value("proceedings_label", "proceedings_label", "Minutes / Proceedings"),
+        "decisions_label": value("decisions_label", "decisions_label", "Resolutions / Key Decisions"),
+        "action_items_label": value("action_items_label", "action_items_label", "Action Items"),
+        "transcript_appendix_label": value("transcript_appendix_label", "transcript_appendix_label", "Appendix: Full Transcript"),
     }
 
 
@@ -88,22 +97,22 @@ def export_txt(
         org["motto"],
         contacts,
         "=" * 78,
-        "OFFICIAL MEETING MINUTES",
+        org["minutes_document_title"].upper(),
         "=" * 78,
         f"Meeting: {meeting_title}",
         f"Date: {_format_date(meeting_date)}",
         "",
-        "AGENDA",
+        org["agenda_label"].upper(),
     ]
     lines.extend(f"{i}. {item}" for i, item in enumerate(_agenda_items(meeting_description), 1))
-    lines.extend(["", "ATTENDANCE REGISTER"])
+    lines.extend(["", org["attendance_label"].upper()])
     for i, row in enumerate(_participant_rows(participants), 1):
         lines.append(f"{i}. {row['name']} | {row['role'] or 'Member'} | {row['email'] or '—'} | {row['status']}")
-    lines.extend(["", "MINUTES / PROCEEDINGS", summary_text or "No minutes generated.", "", "RESOLUTIONS / KEY DECISIONS"])
+    lines.extend(["", org["proceedings_label"].upper(), summary_text or "No minutes generated.", "", org["decisions_label"].upper()])
     lines.extend(f"{i}. {item}" for i, item in enumerate(decisions, 1))
     if not decisions:
         lines.append("No decisions recorded.")
-    lines.extend(["", "ACTION ITEMS"])
+    lines.extend(["", org["action_items_label"].upper()])
     for i, item in enumerate(action_items, 1):
         lines.append(
             f"{i}. {item.get('text', '')} | Responsible: {item.get('assignee_name') or 'Unassigned'} | "
@@ -111,7 +120,7 @@ def export_txt(
         )
     if not action_items:
         lines.append("No action items recorded.")
-    lines.extend(["", "--- APPENDIX: FULL TRANSCRIPT (NEW PAGE IN PDF/DOCX) ---", transcript_text or "No transcript available."])
+    lines.extend(["", f"--- {org['transcript_appendix_label'].upper()} (NEW PAGE IN PDF/DOCX) ---", transcript_text or "No transcript available."])
     return "\n".join(lines).encode("utf-8")
 
 
@@ -148,7 +157,7 @@ def export_pdf(
         rightMargin=1.6 * cm,
         topMargin=1.4 * cm,
         bottomMargin=1.6 * cm,
-        title=f"Minutes - {meeting_title}",
+        title=f"{org['minutes_document_title']} - {meeting_title}",
         author=org["name"],
     )
     styles = getSampleStyleSheet()
@@ -174,9 +183,9 @@ def export_pdf(
     else:
         story.extend(org_text)
     if org["registration"]:
-        story.append(Paragraph(f"Registration/Centre No: {escape(org['registration'])}", centered))
+        story.append(Paragraph(f"Registration / Reference No: {escape(org['registration'])}", centered))
     story.append(HRFlowable(width="100%", thickness=1.2, color=royal, spaceBefore=5, spaceAfter=8))
-    story.append(Paragraph("OFFICIAL MEETING MINUTES", title_style))
+    story.append(Paragraph(escape(org["minutes_document_title"].upper()), title_style))
 
     details = Table(
         [["Meeting", Paragraph(escape(meeting_title), body)], ["Date", _format_date(meeting_date)]],
@@ -192,11 +201,11 @@ def export_pdf(
     ]))
     story.append(details)
 
-    story.append(Paragraph("1. Agenda", heading))
+    story.append(Paragraph(f"1. {escape(org['agenda_label'])}", heading))
     for i, item in enumerate(_agenda_items(meeting_description), 1):
         story.append(Paragraph(f"<b>{i}.</b> {escape(item)}", body))
 
-    story.append(Paragraph("2. Attendance Register", heading))
+    story.append(Paragraph(f"2. {escape(org['attendance_label'])}", heading))
     attendees = _participant_rows(participants)
     if attendees:
         rows = [["#", "Name", "Title / Position", "Email", "Status"]]
@@ -216,19 +225,19 @@ def export_pdf(
     else:
         story.append(Paragraph("No attendance recorded.", body))
 
-    story.append(Paragraph("3. Minutes / Proceedings", heading))
+    story.append(Paragraph(f"3. {escape(org['proceedings_label'])}", heading))
     for paragraph in (summary_text or "No minutes have been generated.").splitlines():
         if paragraph.strip():
             story.append(Paragraph(escape(paragraph.strip()), body))
 
-    story.append(Paragraph("4. Resolutions / Key Decisions", heading))
+    story.append(Paragraph(f"4. {escape(org['decisions_label'])}", heading))
     if decisions:
         for i, decision in enumerate(decisions, 1):
             story.append(Paragraph(f"<b>{i}.</b> {escape(decision)}", body))
     else:
         story.append(Paragraph("No decisions recorded.", body))
 
-    story.append(Paragraph("5. Action Items", heading))
+    story.append(Paragraph(f"5. {escape(org['action_items_label'])}", heading))
     if action_items:
         rows = [["#", "Action", "Responsible", "Due date", "Status"]]
         for i, item in enumerate(action_items, 1):
@@ -249,21 +258,18 @@ def export_pdf(
     else:
         story.append(Paragraph("No action items recorded.", body))
 
-    # The transcript appendix must never crowd the official minutes. Start it
-    # on a completely new page.
     story.append(PageBreak())
-    story.append(Paragraph("Appendix: Full Transcript", heading))
+    story.append(Paragraph(escape(org["transcript_appendix_label"]), heading))
     for paragraph in (transcript_text or "No transcript available.").splitlines():
         if paragraph.strip():
             story.append(Paragraph(escape(paragraph.strip()), small))
 
     def branded_page(canvas, document):
         canvas.saveState()
-        # No logo watermark. The exact crest remains in the official header;
-        # removing the centre watermark keeps minutes readable and professional.
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(colors.HexColor("#6B7280"))
-        canvas.drawCentredString(A4[0] / 2, 0.75 * cm, f"{org['name']} · {org['motto']} · Official Minutes · Page {document.page}")
+        footer_bits = [org["name"], org["motto"], org["minutes_document_title"], f"Page {document.page}"]
+        canvas.drawCentredString(A4[0] / 2, 0.75 * cm, " · ".join(bit for bit in footer_bits if bit))
         canvas.restoreState()
 
     doc.build(story, onFirstPage=branded_page, onLaterPages=branded_page)
@@ -306,14 +312,15 @@ def export_docx(
         name_run.bold = True
         name_run.font.size = Pt(13)
         name_run.font.color.rgb = royal
-        motto_run = header_p.add_run(f"\n{org['motto']}")
-        motto_run.italic = True
-        motto_run.font.size = Pt(8)
+        if org["motto"]:
+            motto_run = header_p.add_run(f"\n{org['motto']}")
+            motto_run.italic = True
+            motto_run.font.size = Pt(8)
         footer = section.footer.paragraphs[0]
         footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        footer.add_run(f"{org['name']} · {org['motto']} · Official Meeting Minutes").font.size = Pt(8)
+        footer.add_run(f"{org['name']} · {org['minutes_document_title']}").font.size = Pt(8)
 
-    title = doc.add_heading("OFFICIAL MEETING MINUTES", 0)
+    title = doc.add_heading(org["minutes_document_title"].upper(), 0)
     title.alignment = WD_ALIGN_PARAGRAPH.CENTER
     for run in title.runs:
         run.font.color.rgb = royal
@@ -330,11 +337,11 @@ def export_docx(
         for run in heading.runs:
             run.font.color.rgb = royal
 
-    section_heading("1. Agenda")
+    section_heading(f"1. {org['agenda_label']}")
     for item in _agenda_items(meeting_description):
         doc.add_paragraph(item, style="List Number")
 
-    section_heading("2. Attendance Register")
+    section_heading(f"2. {org['attendance_label']}")
     attendees = _participant_rows(participants)
     if attendees:
         table = doc.add_table(rows=1, cols=5)
@@ -349,19 +356,19 @@ def export_docx(
     else:
         doc.add_paragraph("No attendance recorded.")
 
-    section_heading("3. Minutes / Proceedings")
+    section_heading(f"3. {org['proceedings_label']}")
     for paragraph in (summary_text or "No minutes have been generated.").splitlines():
         if paragraph.strip():
             doc.add_paragraph(paragraph.strip())
 
-    section_heading("4. Resolutions / Key Decisions")
+    section_heading(f"4. {org['decisions_label']}")
     if decisions:
         for item in decisions:
             doc.add_paragraph(item, style="List Number")
     else:
         doc.add_paragraph("No decisions recorded.")
 
-    section_heading("5. Action Items")
+    section_heading(f"5. {org['action_items_label']}")
     if action_items:
         table = doc.add_table(rows=1, cols=5)
         table.style = "Table Grid"
@@ -380,9 +387,8 @@ def export_docx(
     else:
         doc.add_paragraph("No action items recorded.")
 
-    # Appendix starts on a fresh Word page too.
     doc.add_page_break()
-    section_heading("Appendix: Full Transcript")
+    section_heading(org["transcript_appendix_label"])
     doc.add_paragraph(transcript_text or "No transcript available.")
     generated = doc.add_paragraph(f"Prepared electronically on {datetime.now().strftime('%d %B %Y at %H:%M')}.")
     generated.alignment = WD_ALIGN_PARAGRAPH.CENTER
