@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 260" role="img" aria-labelledby="title desc">
+  <title id="title">ConveneCore</title>
+  <desc id="desc">ConveneCore CC conversation mark and wordmark.</desc>
+  <defs>
+    <linearGradient id="left" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0B5CE1"/>
+      <stop offset="1" stop-color="#082B76"/>
+    </linearGradient>
+    <linearGradient id="right" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4EA1FF"/>
+      <stop offset="1" stop-color="#1769E8"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(22 14) scale(.45)">
+    <path d="M278 104A164 164 0 1 0 278 408" fill="none" stroke="url(#left)" stroke-width="62"/>
+    <path d="M232 167A151 151 0 1 1 232 345" fill="none" stroke="url(#right)" stroke-width="58"/>
+    <rect x="194" y="214" width="124" height="84" rx="42" fill="#fff"/>
+    <circle cx="231" cy="256" r="8" fill="#082B76"/>
+    <circle cx="256" cy="256" r="8" fill="#082B76"/>
+    <circle cx="281" cy="256" r="8" fill="#082B76"/>
+  </g>
+  <text x="270" y="164" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="92" font-weight="650" letter-spacing="-3" fill="#071B45">Convene<tspan fill="#1769E8">Core</tspan></text>
+</svg>
