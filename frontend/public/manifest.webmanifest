@@ -1,22 +1,16 @@
 {
-  "name": "Starlight S.S Meeting Summarizer",
-  "short_name": "Starlight Meetings",
-  "description": "Create, join, record and summarize Starlight Secondary School meetings.",
+  "name": "ConveneCore",
+  "short_name": "ConveneCore",
+  "description": "AI-powered hybrid meeting intelligence, professional minutes and action management.",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#f8fafc",
-  "theme_color": "#173ea5",
+  "theme_color": "#1769e8",
   "icons": [
     {
-      "src": "/api/settings/logo?v=9",
+      "src": "/convenecore-mark.svg?v=10",
       "sizes": "any",
-      "type": "image/jpeg",
-      "purpose": "any"
-    },
-    {
-      "src": "/starlight-logo.jpg?v=9",
-      "sizes": "452x452",
-      "type": "image/jpeg",
+      "type": "image/svg+xml",
       "purpose": "any"
     }
   ]

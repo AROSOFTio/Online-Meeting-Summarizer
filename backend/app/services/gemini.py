@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Any, Optional
 
 from google.genai import types
 
@@ -12,22 +12,35 @@ class GeminiService:
     def enabled(self) -> bool:
         return bool(settings.GEMINI_API_KEY)
 
-    def summarize_transcript(self, transcript: str) -> dict[str, Any]:
+    def summarize_transcript(self, transcript: str, organization: Optional[dict[str, str]] = None) -> dict[str, Any]:
         if not self.enabled:
             raise RuntimeError("GEMINI_API_KEY is not configured")
         if not transcript.strip():
             raise RuntimeError("Cannot summarize an empty transcript")
 
+        org = organization or {}
+        org_name = org.get("organization_name") or "the organization"
+        org_type = org.get("organization_type") or "General organization"
+        minutes_title = org.get("minutes_document_title") or "Meeting Minutes"
+        minutes_style = org.get("minutes_style") or "Standard Professional"
+        minutes_language = org.get("minutes_language") or "English"
+        agenda_label = org.get("agenda_label") or "Agenda"
+        proceedings_label = org.get("proceedings_label") or "Minutes / Proceedings"
+        decisions_label = org.get("decisions_label") or "Decisions"
+        action_items_label = org.get("action_items_label") or "Action Items"
+
         prompt = (
-            "Act as a professional minute secretary for Starlight Secondary School. Prepare formal, "
-            "publication-ready meeting minutes using only facts stated in the transcript. Write in "
-            "clear past tense and keep discussions, resolutions and conclusions in logical order. "
-            "Never invent names, dates, attendance, decisions or deadlines. ALWAYS return a non-empty "
-            "agenda. Infer concise agenda items from the topics actually discussed even when nobody "
-            "explicitly announces an agenda. Topic changes may indicate new agenda items. If the meeting "
-            "contains only one broad topic, return one agenda item describing that topic. Return a polished "
-            "summary, up to 10 key points, explicit decisions, and action items. Each action item must include "
-            "description, assignee (empty when unknown), priority (low, medium or high), and due_date "
+            f"Act as a professional minute secretary for {org_name}, an organization categorized as {org_type}. "
+            f"Prepare publication-ready {minutes_title} in {minutes_language}, using a {minutes_style} style. "
+            "Use only facts stated in the transcript. Write clearly in past tense and preserve the logical order "
+            "of discussions, resolutions and conclusions. Never invent names, dates, attendance, decisions, "
+            "deadlines or responsibilities. ALWAYS return a non-empty agenda. Infer concise agenda items from "
+            "topics actually discussed even when nobody explicitly announces an agenda. Topic changes may indicate "
+            "new agenda items. If the meeting contains only one broad topic, return one agenda item describing it. "
+            f"The organization's preferred document labels are: {agenda_label}; {proceedings_label}; "
+            f"{decisions_label}; {action_items_label}. Reflect those conventions in wording where appropriate. "
+            "Return a polished summary, up to 10 key points, explicit decisions, and action items. Each action item "
+            "must include description, assignee (empty when unknown), priority (low, medium or high), and due_date "
             "(ISO date or empty).\n\nTRANSCRIPT:\n" + transcript
         )
         schema = {

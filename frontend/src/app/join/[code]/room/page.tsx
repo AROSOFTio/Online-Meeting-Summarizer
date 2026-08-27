@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Calendar, Clock3, Radio, ShieldCheck } from "lucide-react";
 
 import LiveAudioRoom from "@/components/LiveAudioRoom";
@@ -17,6 +18,7 @@ interface Invitation {
   requires_name: boolean;
   known_name: string | null;
 }
+interface PublicBranding { product_name:string; organization_name:string; organization_logo_url:string; organization_motto:string; }
 
 export default function PublicMeetingRoomPage() {
   const params = useParams<{ code: string }>();
@@ -25,6 +27,8 @@ export default function PublicMeetingRoomPage() {
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
+  const brandingQuery = useQuery<PublicBranding>({queryKey:["public-branding"],queryFn:()=>apiRequest("/api/settings/branding"),staleTime:5*60*1000});
+  const branding = brandingQuery.data || {product_name:"ConveneCore",organization_name:"Organization",organization_logo_url:"/api/settings/logo",organization_motto:""};
 
   const refresh = useCallback(async () => {
     if (!code) return;
@@ -61,7 +65,11 @@ export default function PublicMeetingRoomPage() {
 
   return <main className="min-h-screen bg-slate-50 px-4 py-8 sm:py-12"><div className="mx-auto w-full max-w-3xl space-y-5">
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <header className="border-b border-slate-200 px-6 py-6 text-center">{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/api/settings/logo" alt="Starlight Secondary School" className="mx-auto h-auto max-h-28 w-auto max-w-[230px] object-contain" /><p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Meeting Room</p></header>
+      <header className="border-b border-slate-200 px-6 py-6 text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}<img src={branding.organization_logo_url} alt={branding.organization_name} className="mx-auto h-auto max-h-24 w-auto max-w-[210px] object-contain" />
+        <div className="mt-2 text-sm font-extrabold text-slate-900">{branding.organization_name}</div>
+        <p className="mt-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Meeting Room</p>
+      </header>
       <div className="p-6 sm:p-8">
         {error && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
         {!invitation && !error && <div className="py-12 text-center text-sm text-slate-500">Opening meeting room...</div>}
@@ -72,6 +80,7 @@ export default function PublicMeetingRoomPage() {
           {invitation.lifecycle === "ended" && <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center"><ShieldCheck className="mx-auto text-slate-500" size={40} /><h2 className="mt-3 text-xl font-extrabold text-slate-950">Meeting has ended</h2><p className="mt-2 text-sm text-slate-600">The organiser has closed this meeting.</p></div>}
         </div>}
       </div>
+      <div className="border-t border-slate-100 px-6 py-3 text-center text-[11px] text-slate-400">Powered by {branding.product_name}</div>
     </section>
     {invitation?.lifecycle === "live" && (!invitation.requires_name || savedName) && <LiveAudioRoom meetingId={invitation.meeting_id} displayName={displayName} inviteCode={code} />}
   </div></main>;

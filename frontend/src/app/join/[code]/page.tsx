@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { Calendar, CheckCircle2, DoorOpen, UserCheck, UserX } from "lucide-react";
 
 import { apiRequest } from "@/lib/api";
@@ -19,8 +20,8 @@ interface Invitation {
   known_name: string | null;
   known_position: string | null;
   known_group: string | null;
-  school_name: string;
 }
+interface PublicBranding { product_name:string; organization_name:string; organization_logo_url:string; organization_motto:string; }
 
 export default function PublicJoinPage() {
   const params = useParams<{ code: string }>();
@@ -35,6 +36,8 @@ export default function PublicJoinPage() {
   const [apologySaved, setApologySaved] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const brandingQuery = useQuery<PublicBranding>({queryKey:["public-branding"],queryFn:()=>apiRequest("/api/settings/branding"),staleTime:5*60*1000});
+  const branding = brandingQuery.data || {product_name:"ConveneCore",organization_name:"Organization",organization_logo_url:"/api/settings/logo",organization_motto:""};
 
   useEffect(() => {
     if (!code) return;
@@ -113,8 +116,9 @@ export default function PublicJoinPage() {
       <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <header className="border-b border-slate-200 px-6 py-6 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/api/settings/logo" alt="Starlight Secondary School" className="mx-auto h-auto max-h-32 w-auto max-w-[240px] object-contain" />
-          <h1 className="mt-3 text-lg font-extrabold text-blue-950">STARLIGHT SECONDARY SCHOOL</h1>
+          <img src={branding.organization_logo_url} alt={branding.organization_name} className="mx-auto h-auto max-h-28 w-auto max-w-[220px] object-contain" />
+          <h1 className="mt-3 text-lg font-extrabold text-blue-950">{branding.organization_name}</h1>
+          {branding.organization_motto&&<p className="mt-1 text-xs text-slate-500">{branding.organization_motto}</p>}
         </header>
 
         <div className="p-6 sm:p-8">
@@ -158,6 +162,7 @@ export default function PublicJoinPage() {
             )}
           </>}
         </div>
+        <div className="border-t border-slate-100 px-6 py-3 text-center text-[11px] text-slate-400">Powered by {branding.product_name}</div>
       </div>
     </main>
   );

@@ -19,12 +19,12 @@ export default function Home() {
   }, [user, isLoading, router]);
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50">
       <div className="flex flex-col items-center">
-        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-        <p className="mt-4 text-sm font-medium text-gray-600">
-          Loading Starlight Meeting Summarizer...
-        </p>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/convenecore-mark.svg" alt="ConveneCore" className="h-16 w-16 object-contain" />
+        <div className="mt-4 h-6 w-6 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
+        <p className="mt-3 text-sm font-medium text-gray-600">Loading ConveneCore...</p>
       </div>
     </div>
   );
