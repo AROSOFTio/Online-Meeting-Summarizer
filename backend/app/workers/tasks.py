@@ -96,10 +96,35 @@ def _local_minutes(text: str):
     }
 
 
+def _organization_settings(db: Session) -> dict[str, str]:
+    rows = {row.key: row.value for row in db.query(SystemSetting).all()}
+    return {
+        "organization_name": rows.get("organization_name") or rows.get("school_name") or settings.SCHOOL_NAME,
+        "organization_type": rows.get("organization_type", "General organization"),
+        "organization_address": rows.get("organization_address", ""),
+        "organization_phone": rows.get("organization_phone", ""),
+        "organization_email": rows.get("organization_email", ""),
+        "organization_website": rows.get("organization_website", ""),
+        "organization_motto": rows.get("organization_motto", ""),
+        "organization_registration": rows.get("organization_registration", ""),
+        "organization_logo_file": rows.get("organization_logo_file") or rows.get("school_logo_file", ""),
+        "minutes_document_title": rows.get("minutes_document_title", "Official Meeting Minutes"),
+        "minutes_style": rows.get("minutes_style", "Standard Professional"),
+        "minutes_language": rows.get("minutes_language", "English"),
+        "agenda_label": rows.get("agenda_label", "Agenda"),
+        "attendance_label": rows.get("attendance_label", "Attendance Register"),
+        "proceedings_label": rows.get("proceedings_label", "Minutes / Proceedings"),
+        "decisions_label": rows.get("decisions_label", "Resolutions / Key Decisions"),
+        "action_items_label": rows.get("action_items_label", "Action Items"),
+        "transcript_appendix_label": rows.get("transcript_appendix_label", "Appendix: Full Transcript"),
+    }
+
+
 def _store_minutes(db: Session, meeting_id: int, full_text: str) -> str:
     from app.services.gemini import gemini_service
+    organization = _organization_settings(db)
     try:
-        result = gemini_service.summarize_transcript(full_text) if gemini_service.enabled else _local_minutes(full_text)
+        result = gemini_service.summarize_transcript(full_text, organization=organization) if gemini_service.enabled else _local_minutes(full_text)
     except Exception as exc:
         print(f"[WARNING] Gemini minutes generation failed; using deterministic fallback: {exc}")
         result = _local_minutes(full_text)
@@ -192,18 +217,6 @@ def _build_generated_minutes_pdf(db: Session, meeting: Meeting, transcript_text:
         for action in action_rows
     ]
 
-    system_settings = {row.key: row.value for row in db.query(SystemSetting).all()}
-    organization = {
-        "name": system_settings.get("school_name", settings.SCHOOL_NAME),
-        "address": system_settings.get("organization_address", ""),
-        "phone": system_settings.get("organization_phone", ""),
-        "email": system_settings.get("organization_email", ""),
-        "website": system_settings.get("organization_website", ""),
-        "motto": system_settings.get("organization_motto", ""),
-        "registration": system_settings.get("organization_registration", ""),
-        "logo_path": system_settings.get("school_logo_file", ""),
-    }
-
     return export_pdf(
         meeting_title=meeting.title,
         meeting_date=meeting.date,
@@ -212,7 +225,7 @@ def _build_generated_minutes_pdf(db: Session, meeting: Meeting, transcript_text:
         decisions=[decision.text for decision in decisions],
         action_items=action_items,
         transcript_text=transcript_text,
-        organization=organization,
+        organization=_organization_settings(db),
         meeting_description=meeting.description or "",
     )
 
