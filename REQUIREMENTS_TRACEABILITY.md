@@ -1,6 +1,6 @@
 # Requirements Traceability Matrix
 
-This matrix reflects the current production architecture. Google Gemini is the production transcription provider.
+This matrix reflects the current ConveneCore production architecture. Google Gemini is the production transcription provider. Starlight Secondary School is the academic case-study/default organization, while runtime organization identity and minutes terminology are configurable.
 
 | ID | Requirement | Main implementation | Verification | Status |
 |---|---|---|---|---|
@@ -33,13 +33,24 @@ This matrix reflects the current production architecture. Google Gemini is the p
 | FR-27 | Database-backed dashboard statistics | stats API/dashboard | health/stats flow | Completed |
 | FR-28 | Security/content audit logs with admin visibility | `core/audit.py`, `/api/system/audit`, Settings UI | `test_system.py` | Completed |
 | FR-29 | Validated backup + restore tooling | `services/backup.py`, `/api/system/backups`, `scripts/restore_backup.py` | `test_system.py` + validation commands | Completed |
-| FR-30 | Configurable school branding/timezone/retention + actual AI status | settings API/UI + `/api/system/status` | `test_settings.py` | Completed |
+| FR-30 | Configurable organization branding/timezone/retention + actual AI status | settings API/UI + `/api/system/status` | `test_settings.py` | Completed |
 | FR-31 | Private authorised recording/backup download | recordings/system endpoints | meeting/system tests | Completed |
 | FR-32 | Helpful errors and recovery actions | processing UI, retry flow, Settings readiness cards | UI flow | Completed |
 | FR-33 | Notification indicator for jobs/tasks | `/api/system/notifications`, `NotificationCenter.tsx` | `test_system.py` | Completed |
 | FR-34 | Local/container deployment | `docker-compose.yml`, Dockerfiles | deployment flow | Completed |
 | FR-35 | Administrator/staff user manual | `docs/user_manual.md` | documentation review | Completed |
+| FR-36 | Fixed ConveneCore product identity separated from organization workspace identity | app shell, public branding endpoint, product assets | Settings/public-branding tests + UI review | Completed |
+| FR-37 | Configurable organization name/type/logo/contact identity | `api/endpoints/settings.py`, Settings UI | `test_settings.py` | Completed |
+| FR-38 | Configurable minutes title/language/style/section labels | settings API/UI, `services/gemini.py` | `test_settings.py` + export review | Completed |
+| FR-39 | Official exports and meeting emails follow current organization settings | `services/export.py`, `api/endpoints/exports.py`, `services/email.py` | export/email tests/manual review | Completed |
+| FR-40 | Multiple isolated organizations in one hosted deployment | future Organization/Workspace tenancy model | future tenant-isolation tests | Planned |
+| FR-41 | Hybrid remote video participation with optional camera | future live media layer | future browser/media tests | Planned |
+| FR-42 | Researched profile-specific minute structures for worldwide use | future minutes-profile layer | research validation + profile tests | Planned |
+
+## Scope boundary
+
+The current global-branding pass makes a ConveneCore deployment/workspace configurable for its organization. It does **not** yet provide tenant isolation for many independent organizations sharing one hosted database. FR-40 must be completed before the system is represented as a multi-tenant SaaS service.
 
 ## Production AI note
 
-`GEMINI_API_KEY` and `GEMINI_MODEL` are deployment environment variables. The Settings page displays the effective provider/model and readiness instead of exposing infrastructure model selection as an ordinary UI preference.
+`GEMINI_API_KEY` and `GEMINI_MODEL` are deployment environment variables. The Settings page displays the effective provider/model and readiness instead of exposing infrastructure model selection as an ordinary UI preference. Organization name/type, minutes style/language and preferred terminology are supplied to the minutes-generation prompt at runtime.
