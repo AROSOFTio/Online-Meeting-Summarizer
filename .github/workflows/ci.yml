@@ -27,9 +27,7 @@ jobs:
       - name: Install FFmpeg and PostgreSQL client tools
         run: sudo apt-get update && sudo apt-get install -y ffmpeg postgresql-client
       - name: Install Python dependencies
-        run: |
-          set -o pipefail
-          pip install -r requirements.txt 2>&1 | tee dependency-output.txt
+        run: pip install -r requirements.txt
       - name: Reject legacy transcription-provider references
         run: python scripts/audit_legacy_transcription_refs.py
       - name: Run backend test suite
@@ -41,13 +39,6 @@ jobs:
           SECRET_KEY: ci-only-secret-key
           MOCK_TRANSCRIPTION: 'true'
         run: pytest -q
-      - name: Upload backend dependency diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: backend-dependency-output
-          path: backend/dependency-output.txt
-          if-no-files-found: ignore
       - name: Report backend verification status
         if: always()
         env:
@@ -81,22 +72,13 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
       - name: Lint
-        run: |
-          set -o pipefail
-          npm run lint 2>&1 | tee lint-output.txt
+        run: npm run lint
       - name: Type check
         run: npx tsc --noEmit
       - name: Production build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:3000
         run: npm run build
-      - name: Upload lint diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-lint-output
-          path: frontend/lint-output.txt
-          if-no-files-found: ignore
       - name: Report frontend verification status
         if: always()
         env:
