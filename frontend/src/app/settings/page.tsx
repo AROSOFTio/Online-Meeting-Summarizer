@@ -44,7 +44,12 @@ export default function SettingsPage(){
   const backupsQuery=useQuery<Backup[]>({queryKey:["system-backups"],queryFn:()=>apiRequest("/api/system/backups"),enabled:user?.role==="admin"});
   const auditQuery=useQuery<Audit[]>({queryKey:["system-audit"],queryFn:()=>apiRequest("/api/system/audit?limit=20"),enabled:user?.role==="admin"});
 
-  useEffect(()=>{if(settingsQuery.data&&!loaded){setFormValues(settingsQuery.data);setLoaded(true);}},[settingsQuery.data,loaded]);
+  useEffect(()=>{
+    if(!settingsQuery.data||loaded)return;
+    const data=settingsQuery.data;
+    const timer=window.setTimeout(()=>{setFormValues(data);setLoaded(true);},0);
+    return()=>window.clearTimeout(timer);
+  },[settingsQuery.data,loaded]);
 
   const saveMutation=useMutation({mutationFn:(values:SettingsData)=>apiRequest("/api/settings/",{method:"PUT",body:JSON.stringify(values)}),onSuccess:()=>{queryClient.invalidateQueries({queryKey:["system-settings"]});setLoaded(false);setMessage("Settings saved successfully.");setError(null);},onError:(mutationError:Error)=>{setError(mutationError.message);setMessage(null);}});
   const backupMutation=useMutation({mutationFn:()=>apiRequest("/api/system/backups",{method:"POST"}),onSuccess:()=>{queryClient.invalidateQueries({queryKey:["system-backups"]});setMessage("Validated database backup created.");setError(null);},onError:(mutationError:Error)=>setError(mutationError.message)});
