@@ -24,7 +24,7 @@ export default function PublicMeetingRoomPage() {
   const code = String(params?.code || "").toUpperCase();
   const [invitation, setInvitation] = useState<Invitation | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [now, setNow] = useState(Date.now());
+  const [now, setNow] = useState<number | null>(null);
 
   const refresh = useCallback(async () => {
     if (!code) return;
@@ -38,10 +38,13 @@ export default function PublicMeetingRoomPage() {
   }, [code]);
 
   useEffect(() => {
-    void refresh();
+    const firstRefresh = window.setTimeout(() => void refresh(), 0);
+    const firstClock = window.setTimeout(() => setNow(Date.now()), 0);
     const poll = window.setInterval(() => void refresh(), 2000);
     const clock = window.setInterval(() => setNow(Date.now()), 1000);
     return () => {
+      window.clearTimeout(firstRefresh);
+      window.clearTimeout(firstClock);
       window.clearInterval(poll);
       window.clearInterval(clock);
     };
@@ -58,7 +61,7 @@ export default function PublicMeetingRoomPage() {
     }
   }, [code, invitation, router, savedName]);
 
-  const remainingSeconds = invitation
+  const remainingSeconds = invitation && now !== null
     ? Math.max(0, Math.floor((new Date(invitation.meeting_date).getTime() - now) / 1000))
     : 0;
   const displayName = invitation?.known_name || savedName || "Guest";
