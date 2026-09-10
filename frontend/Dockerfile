@@ -9,6 +9,15 @@ RUN npm ci
 # Copy source code
 COPY . .
 
+# TURN is optional. When configured, these values are compiled into the browser bundle
+# so WebRTC can relay audio for devices/networks that cannot connect directly with STUN.
+ARG NEXT_PUBLIC_TURN_URLS=""
+ARG NEXT_PUBLIC_TURN_USERNAME=""
+ARG NEXT_PUBLIC_TURN_CREDENTIAL=""
+ENV NEXT_PUBLIC_TURN_URLS=$NEXT_PUBLIC_TURN_URLS
+ENV NEXT_PUBLIC_TURN_USERNAME=$NEXT_PUBLIC_TURN_USERNAME
+ENV NEXT_PUBLIC_TURN_CREDENTIAL=$NEXT_PUBLIC_TURN_CREDENTIAL
+
 # Build production Next.js bundle
 RUN npm run build
 
