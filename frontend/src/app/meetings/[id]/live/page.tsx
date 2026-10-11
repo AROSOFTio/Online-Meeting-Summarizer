@@ -160,6 +160,24 @@ export default function LiveMeetingPage() {
     }
   }, []);
 
+  const changeHostMicrophone = useCallback((nextStream: MediaStream) => {
+    const context = audioContextRef.current;
+    const destination = mixDestinationRef.current;
+    if (!context || !destination) throw new Error("Meeting audio mixer is unavailable.");
+    const replacement = context.createMediaStreamSource(nextStream);
+    try {
+      replacement.connect(destination);
+      const oldSource = mixSourcesRef.current.get("__host__");
+      oldSource?.disconnect();
+      mixSourcesRef.current.set("__host__", replacement);
+      streamRef.current = nextStream;
+      setHostStream(nextStream);
+    } catch (error) {
+      replacement.disconnect();
+      throw error;
+    }
+  }, []);
+
   const sendForMinutes = useCallback(
     async (source: Blob | File, filename: string) => {
       setProcessing(true);
@@ -488,6 +506,7 @@ export default function LiveMeetingPage() {
               providedStream={hostStream}
               autoJoin
               onRemoteStream={attachRemoteStream}
+              onMicrophoneChange={changeHostMicrophone}
             />
           </>
         )}
