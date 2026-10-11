@@ -792,6 +792,13 @@ export default function LiveAudioRoom({
                         {participant.role_title || "Participant"} · {participant.muted ? "Microphone OFF" : "Microphone ON"}
                       </span>
                     </div>
+                    <div className="mt-2">
+                      <AudioLevelMeter
+                        stream={participant.is_self ? localStreamRef.current : remoteStreams[participant.peer_id] || null}
+                        muted={participant.is_self ? localMuted || forcedMuted : participant.muted}
+                        label={participant.is_self ? "Your microphone input" : `${participant.name} received audio`}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -886,4 +893,57 @@ function RemoteAudio({
   }, [enabled, onPlaybackBlocked, stream, unlockToken]);
 
   return <audio ref={audioRef} autoPlay playsInline muted={!enabled} />;
+}
+
+ 
+/** Analyses microphone/received audio locally; no audio is recorded or sent by this meter. */
+function AudioLevelMeter({ stream, muted, label }: { stream: MediaStream | null; muted: boolean; label: string }) {
+  const [level, setLevel] = useState(0);
+
+  useEffect(() => {
+    if (!stream || muted || !stream.getAudioTracks().some((track) => track.readyState === "live" && track.enabled)) {
+      return;
+    }
+    const AudioContextConstructor = window.AudioContext;
+    if (!AudioContextConstructor) return;
+    const context = new AudioContextConstructor();
+    const analyser = context.createAnalyser();
+    analyser.fftSize = 512;
+    analyser.smoothingTimeConstant = 0.65;
+    const source = context.createMediaStreamSource(stream);
+    source.connect(analyser);
+    const samples = new Uint8Array(analyser.fftSize);
+    const timer = window.setInterval(() => {
+      analyser.getByteTimeDomainData(samples);
+      let sum = 0;
+      for (const sample of samples) {
+        const amplitude = (sample - 128) / 128;
+        sum += amplitude * amplitude;
+      }
+      const rms = Math.sqrt(sum / samples.length);
+      setLevel(rms < 0.012 ? 0 : Math.min(1, rms * 7));
+    }, 85);
+    return () => {
+      window.clearInterval(timer);
+      source.disconnect();
+      analyser.disconnect();
+      void context.close();
+    };
+  }, [stream, muted]);
+
+  const active = !muted && level > 0.08;
+  return (
+    <div role="meter" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={muted ? 0 : Math.round(level * 100)} className="flex items-center gap-2">
+      <div className="flex h-5 items-center gap-[3px]" aria-hidden="true">
+        {[0.65, 0.9, 1.1, 0.75, 1.2, 0.85, 0.6].map((factor, index) => (
+          <span
+            key={index}
+            className={`w-[3px] rounded-full transition-[height,background-color] duration-75 ${active ? "bg-green-500" : "bg-slate-300"}`}
+            style={{ height: `${Math.max(2, Math.round((muted ? 0 : level) * 19 * factor))}px` }}
+          />
+        ))}
+      </div>
+      <span className="text-[10px] text-slate-500">{muted ? "Muted" : active ? "Audio detected" : "Silent"}</span>
+    </div>
+  );
 }
