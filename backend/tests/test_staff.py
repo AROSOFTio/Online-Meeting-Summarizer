@@ -1,4 +1,17 @@
 from app.models.models import User, UserRole
+from app.services.email import email_service
+import pytest
+import re
+
+@pytest.fixture(autouse=True)
+def mock_credential_email(monkeypatch):
+    messages = []
+    def send(recipients, subject, text, html_body):
+        messages.append(text)
+        return 1
+    monkeypatch.setattr(email_service, 'send', send)
+    return messages
+
 
 def test_admin_manage_staff(client, db):
     # Login as admin
@@ -45,7 +58,7 @@ def test_admin_manage_staff(client, db):
     deactivated_user = deactivate_resp.json()
     assert deactivated_user["is_active"] is False
 
-def test_staff_cannot_access_staff_apis(client, db):
+def test_staff_cannot_access_staff_apis(client, db, mock_credential_email):
     # Create a staff member using admin
     admin_login = client.post(
         "/api/auth/login",
@@ -58,7 +71,8 @@ def test_staff_cannot_access_staff_apis(client, db):
         "is_active": True,
         "password": "StaffPassword123!"
     }
-    client.post("/api/staff/", json=staff_data)
+    assert client.post("/api/staff/", json=staff_data).status_code == 201
+    temporary_password = re.search(r"temporary password is: ([A-Za-z0-9]{8})", mock_credential_email[0]).group(1)
     
     # Logout admin
     client.post("/api/auth/logout")
@@ -66,9 +80,14 @@ def test_staff_cannot_access_staff_apis(client, db):
     # Login as the newly created staff member
     staff_login = client.post(
         "/api/auth/login",
-        data={"username": "staff_test@starlight.sc.ug", "password": "StaffPassword123!"}
+        data={"username": "staff_test@starlight.sc.ug", "password": temporary_password}
     )
     assert staff_login.status_code == 200
+
+    assert client.get("/api/auth/me").json()["must_change_password"] is True
+    change = client.post("/api/auth/change-password", json={"current_password": temporary_password, "new_password": "Secure#Pass2026"})
+    assert change.status_code == 200
+    assert client.get("/api/auth/me").json()["must_change_password"] is False
 
     # Try to access list staff - should get 403 Forbidden
     list_resp = client.get("/api/staff/")
