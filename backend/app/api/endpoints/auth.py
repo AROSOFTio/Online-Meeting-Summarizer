@@ -1,4 +1,6 @@
+import re
 from datetime import timedelta
+from pydantic import BaseModel
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -12,6 +14,31 @@ from app.models.models import User
 from app.schemas.schemas import Token, UserOut
 
 router = APIRouter()
+
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+@router.post("/change-password")
+def change_password(
+    payload: PasswordChange,
+    request: Request,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+):
+    if not security.verify_password(payload.current_password, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    new = payload.new_password
+    if len(new) < 8 or not re.search(r"[A-Z]", new) or not re.search(r"[a-z]", new) or not re.search(r"[^A-Za-z0-9]", new):
+        raise HTTPException(status_code=400, detail="Use at least 8 characters, uppercase, lowercase and a special character.")
+    if security.verify_password(new, current_user.hashed_password):
+        raise HTTPException(status_code=400, detail="Choose a different password")
+    current_user.hashed_password = security.get_password_hash(new)
+    current_user.must_change_password = False
+    db.commit()
+    log_action(db, action="change_password", details="User changed password", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
+    return {"detail": "Password updated"}
+
 
 
 @router.post("/login", response_model=Token)
