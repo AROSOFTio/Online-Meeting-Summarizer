@@ -1,9 +1,14 @@
+import secrets
+import string
+
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List
 
 from app.core import deps, security
 from app.core.audit import log_action
+from app.core.config import settings
+from app.services.email import email_service
 from app.models.meeting_flow import DirectoryProfile
 from app.models.models import User, UserRole
 from app.schemas.schemas import UserCreate, UserOut, UserUpdate
@@ -50,13 +55,15 @@ def create_staff(
     if existing_user:
         raise HTTPException(status_code=400, detail="The user with this email already exists")
 
-    hashed_password = security.get_password_hash(user_in.password)
+    temporary_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
+    hashed_password = security.get_password_hash(temporary_password)
     new_user = User(
         email=user_in.email,
         hashed_password=hashed_password,
         full_name=user_in.full_name,
         role=user_in.role,
-        is_active=True
+        is_active=True,
+        must_change_password=True,
     )
     db.add(new_user)
     db.flush()
@@ -66,7 +73,25 @@ def create_staff(
         position_title=(user_in.position_title or "").strip() or None,
     )
     db.add(profile)
-    db.commit()
+    try:
+        email_service.send(
+            recipients=[new_user.email],
+            subject="Your temporary Meeting Summarizer password",
+            text=(
+                f"Hello {new_user.full_name},\\n\\nYour temporary password is: {temporary_password}\\n"
+                f"Sign in at {settings.PUBLIC_APP_URL}/login using {new_user.email}.\\n"
+                "You must set your own password immediately. Do not share this password."
+            ),
+            html_body=(
+                f"<p>Hello {new_user.full_name},</p>"
+                f"<p>Your temporary password is: <strong>{temporary_password}</strong></p>"
+                f"<p>Sign in at {settings.PUBLIC_APP_URL}/login and change your password immediately.</p>"
+            ),
+        )
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(status_code=502, detail="Temporary password email failed. Account not created; check SMTP settings.")
     db.refresh(new_user)
 
     log_action(
@@ -112,7 +137,7 @@ def update_staff(
     if user_in.is_active is not None:
         user.is_active = user_in.is_active
     if user_in.password:
-        user.hashed_password = security.get_password_hash(user_in.password)
+        raise HTTPException(status_code=400, detail='Manual password assignment is disabled.')
 
     profile = _profile_for(db, user)
     if profile is None:
