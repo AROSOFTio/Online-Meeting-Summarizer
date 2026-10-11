@@ -16,6 +16,14 @@ from app.models.models import SystemSetting, User, UserRole
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
 
+    with engine.begin() as connection:
+        if settings.is_sqlite:
+            columns = {row[1] for row in connection.execute(text('PRAGMA table_info(users)'))}
+            if 'must_change_password' not in columns:
+                connection.execute(text('ALTER TABLE users ADD COLUMN must_change_password BOOLEAN NOT NULL DEFAULT 0'))
+        else:
+            connection.execute(text('ALTER TABLE users ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN NOT NULL DEFAULT FALSE'))
+
     if not settings.is_sqlite:
         with engine.begin() as connection:
             if connection.execute(text("SELECT to_regtype('userrole') IS NOT NULL")).scalar():
