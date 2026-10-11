@@ -10,6 +10,7 @@ interface User {
   full_name: string;
   role: "admin" | "minute_secretary" | "staff";
   is_active: boolean;
+  must_change_password: boolean;
 }
 
 interface AuthContextType {
@@ -64,7 +65,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const profile = await apiRequest("/api/auth/me");
     setUser(profile);
-    router.push("/dashboard");
+    router.push(profile.must_change_password ? "/change-password" : "/dashboard");
   };
 
   const logout = async () => {
