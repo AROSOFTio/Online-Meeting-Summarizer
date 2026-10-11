@@ -40,10 +40,3 @@ def client(db):
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
-    
-    # Cleanup test db file if it exists
-    if os.path.exists("./test_meeting_summarizer.db"):
-        try:
-            os.remove("./test_meeting_summarizer.db")
-        except Exception:
-            pass
