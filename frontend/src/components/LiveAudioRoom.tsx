@@ -37,6 +37,7 @@ interface LiveAudioRoomProps {
   providedStream?: MediaStream | null;
   autoJoin?: boolean;
   onRemoteStream?: (peerId: string, stream: MediaStream) => void;
+  onMicrophoneChange?: (stream: MediaStream) => void;
 }
 
 const TURN_URLS = (process.env.NEXT_PUBLIC_TURN_URLS || "")
@@ -103,6 +104,7 @@ export default function LiveAudioRoom({
   providedStream = null,
   autoJoin = true,
   onRemoteStream,
+  onMicrophoneChange,
 }: LiveAudioRoomProps) {
   const [joined, setJoined] = useState(false);
   const [joining, setJoining] = useState(false);
@@ -114,6 +116,9 @@ export default function LiveAudioRoom({
   const [isModerator, setIsModerator] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
+  const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
+  const [currentMicrophone, setCurrentMicrophone] = useState("");
+  const [changingMicrophone, setChangingMicrophone] = useState(false);
   const [audioUnlockToken, setAudioUnlockToken] = useState(0);
 
   const peerIdRef = useRef("");
@@ -126,6 +131,22 @@ export default function LiveAudioRoom({
   const pendingIceRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
   const pollingRef = useRef(false);
   const autoJoinAttemptedRef = useRef(false);
+
+  const refreshMicrophones = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      setMicrophones(devices.filter((device) => device.kind === "audioinput" && device.deviceId));
+    } catch (deviceError) {
+      console.warn("Microphone list unavailable:", deviceError);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!navigator.mediaDevices?.addEventListener) return;
+    navigator.mediaDevices.addEventListener("devicechange", refreshMicrophones);
+    return () => navigator.mediaDevices.removeEventListener("devicechange", refreshMicrophones);
+  }, [refreshMicrophones]);
 
   const closePeer = useCallback((remotePeerId: string) => {
     const connection = connectionsRef.current.get(remotePeerId);
@@ -332,6 +353,8 @@ export default function LiveAudioRoom({
 
       localStreamRef.current = stream;
       ownsLocalStreamRef.current = ownsStream;
+      setCurrentMicrophone(stream.getAudioTracks()[0]?.getSettings().deviceId || "");
+      void refreshMicrophones();
 
       const response = (await apiRequest(`/api/live-rooms/${meetingId}/join`, {
         method: "POST",
@@ -362,7 +385,7 @@ export default function LiveAudioRoom({
       joiningRef.current = false;
       setJoining(false);
     }
-  }, [displayName, ensureConnection, inviteCode, meetingId, providedStream]);
+  }, [displayName, ensureConnection, inviteCode, meetingId, providedStream, refreshMicrophones]);
 
   const leaveRoom = useCallback(async () => {
     const peerId = peerIdRef.current;
@@ -400,6 +423,51 @@ export default function LiveAudioRoom({
     setLocalMuted(false);
     setPlaybackBlocked(false);
   }, [meetingId]);
+
+  const changeMicrophone = useCallback(async (deviceId: string) => {
+    const previous = localStreamRef.current;
+    if (!previous || changingMicrophone || !deviceId) return;
+    setChangingMicrophone(true);
+    setError(null);
+    let replacement: MediaStream | null = null;
+    try {
+      replacement = await navigator.mediaDevices.getUserMedia({
+        audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+        video: false,
+      });
+      const newTrack = replacement.getAudioTracks()[0];
+      if (!newTrack) throw new Error("The selected microphone supplied no audio track.");
+      newTrack.enabled = !localMuted && !forcedMuted;
+      const oldTrack = previous.getAudioTracks()[0];
+      const senders = Array.from(connectionsRef.current.values())
+        .flatMap((connection) => connection.getSenders().filter((sender) => sender.track?.kind === "audio"));
+      const switched: RTCRtpSender[] = [];
+      try {
+        for (const sender of senders) {
+          await sender.replaceTrack(newTrack);
+          switched.push(sender);
+        }
+        onMicrophoneChange?.(replacement);
+      } catch (switchError) {
+        await Promise.allSettled(switched.map((sender) => sender.replaceTrack(oldTrack || null)));
+        throw switchError;
+      }
+      localStreamRef.current = replacement;
+      ownsLocalStreamRef.current = true;
+      if (ownsLocalStreamRef.current || previous !== providedStream) {
+        // The caller owns a provided host stream and is informed above before release.
+        previous.getTracks().forEach((track) => track.stop());
+      }
+      setCurrentMicrophone(newTrack.getSettings().deviceId || deviceId);
+      replacement = null;
+      void refreshMicrophones();
+    } catch (deviceError) {
+      replacement?.getTracks().forEach((track) => track.stop());
+      setError(friendlyMediaError(deviceError));
+    } finally {
+      setChangingMicrophone(false);
+    }
+  }, [changingMicrophone, forcedMuted, localMuted, onMicrophoneChange, providedStream, refreshMicrophones]);
 
   const toggleMute = useCallback(() => {
     if (!localStreamRef.current || forcedMuted) return;
@@ -616,8 +684,17 @@ export default function LiveAudioRoom({
                 <h2 className="font-extrabold text-slate-950">Meeting audio connected</h2>
               </div>
               <p className="mt-1 text-xs text-slate-500">
-                {participants.length} connected participant{participants.length === 1 ? "" : "s"}. Microphone selection is automatic.
+                {participants.length} connected participant{participants.length === 1 ? "" : "s"}. Default microphone connected automatically.
               </p>
+              {microphones.length > 1 && (
+                <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
+                  <span>Change mic (optional)</span>
+                  <select aria-label="Change microphone" value={currentMicrophone} disabled={changingMicrophone} onChange={(event) => void changeMicrophone(event.target.value)} className="max-w-48 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs">
+                    {!microphones.some((device) => device.deviceId === currentMicrophone) && <option value="">Current microphone</option>}
+                    {microphones.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>)}
+                  </select>
+                </label>
+              )}
             </div>
 
             <div className="flex flex-wrap gap-2">
