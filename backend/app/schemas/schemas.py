@@ -39,6 +39,7 @@ class UserUpdate(BaseModel):
 
 
 class UserOut(UserBase):
+    must_change_password: bool = False
     id: int
     created_at: datetime
     updated_at: datetime
