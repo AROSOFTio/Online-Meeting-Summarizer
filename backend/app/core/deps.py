@@ -54,6 +54,8 @@ def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Inactive user account"
         )
+    if user.must_change_password and request.url.path not in {'/api/auth/me', '/api/auth/change-password', '/api/auth/logout'}:
+        raise HTTPException(status_code=403, detail='Change your temporary password before using the system')
     return user
 
 def get_admin_user(current_user: User = Depends(get_current_user)) -> User:
