@@ -38,7 +38,7 @@ jobs:
           ADMIN_PASSWORD: TestAdminPass123!
           SECRET_KEY: ci-only-secret-key
           MOCK_TRANSCRIPTION: 'true'
-        run: pytest -q
+        run: python -m pytest -q
       - name: Report backend verification status
         if: always()
         env:
