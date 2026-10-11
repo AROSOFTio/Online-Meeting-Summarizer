@@ -76,8 +76,7 @@ export default function StaffPage() {
       if (!payload.password) delete payload.password;
       updateMutation.mutate({ id: editingUser.id, values: payload });
     } else {
-      if (!data.password) { setFormError("Password is required for new accounts"); return; }
-      createMutation.mutate(data);
+      createMutation.mutate({ ...data, password: "" });
     }
   };
 
@@ -118,7 +117,7 @@ export default function StaffPage() {
               <div><label className="mb-1 block text-sm font-medium text-slate-700">Organisational Group</label><input list="directory-groups" {...register("directory_group")} className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900" placeholder="Staff, Members, Directors..."/><datalist id="directory-groups">{suggestedGroups.map((group) => <option key={group} value={group}/>)}</datalist>{errors.directory_group && <p className="mt-1 text-xs text-red-600">{errors.directory_group.message}</p>}<p className="mt-1 text-xs text-slate-500">This controls meeting-group selection only; it does not grant system permissions.</p></div>
               <div><label className="mb-1 block text-sm font-medium text-slate-700">Title / Position</label><input {...register("position_title")} className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900" placeholder="e.g. Chairperson, Secretary, Teacher"/></div>
               <div><label className="mb-1 block text-sm font-medium text-slate-700">System Access Role</label><select {...register("role")} className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900"><option value="staff">Staff Reader (view only)</option><option value="minute_secretary">Minute Secretary</option><option value="admin">System Administrator</option></select></div>
-              <div><label className="mb-1 block text-sm font-medium text-slate-700">Password {editingUser && "(leave blank to keep current)"}</label><input type="password" {...register("password")} className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-900" placeholder="••••••••"/></div>
+              <p className="rounded-lg bg-blue-50 p-3 text-xs text-blue-800">New users automatically receive an 8-character temporary password by email and must change it on their first login.</p>
               <div className="flex flex-col gap-3 pt-2 sm:flex-row"><button type="submit" disabled={createMutation.isPending || updateMutation.isPending} className="flex-1 rounded bg-blue-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">{editingUser ? "Save Changes" : "Create Account"}</button>{editingUser && <button type="button" onClick={cancelEdit} className="rounded border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700">Cancel</button>}</div>
             </form>
           </div>
