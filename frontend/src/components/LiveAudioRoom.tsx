@@ -388,7 +388,7 @@ export default function LiveAudioRoom({
       setForcedMuted(false);
 
       for (const participant of response.participants) {
-        if (!participant.is_self) await ensureConnection(participant.peer_id, true);
+        if (!participant.is_self) await ensureConnection(participant.peer_id, peerIdRef.current > participant.peer_id);
       }
     } catch (joinError) {
       if (ownsStream) stream?.getTracks().forEach((track) => track.stop());
