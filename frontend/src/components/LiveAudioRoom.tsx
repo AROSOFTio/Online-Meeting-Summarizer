@@ -129,6 +129,7 @@ export default function LiveAudioRoom({
   const ownsLocalStreamRef = useRef(false);
   const connectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
   const pendingIceRef = useRef<Map<string, RTCIceCandidateInit[]>>(new Map());
+  const reconnectingRef = useRef<Set<string>>(new Set());
   const pollingRef = useRef(false);
   const autoJoinAttemptedRef = useRef(false);
 
@@ -159,6 +160,7 @@ export default function LiveAudioRoom({
       connectionsRef.current.delete(remotePeerId);
     }
     pendingIceRef.current.delete(remotePeerId);
+    reconnectingRef.current.delete(remotePeerId);
     setRemoteStreams((current) => {
       if (!current[remotePeerId]) return current;
       const next = { ...current };
@@ -237,21 +239,33 @@ export default function LiveAudioRoom({
       };
 
       connection.oniceconnectionstatechange = () => {
-        if (
-          connection.iceConnectionState === "failed" &&
-          peerIdRef.current &&
-          peerIdRef.current < remotePeerId
-        ) {
+        if (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed") {
+          reconnectingRef.current.delete(remotePeerId);
+          return;
+        }
+        if (connection.iceConnectionState !== "failed" && connection.iceConnectionState !== "disconnected") return;
+        // Only one peer restarts ICE to avoid simultaneous-offer collisions.
+        if (!peerIdRef.current || peerIdRef.current > remotePeerId || reconnectingRef.current.has(remotePeerId)) return;
+        reconnectingRef.current.add(remotePeerId);
+        window.setTimeout(() => {
+          if (connection.signalingState === "closed" || connection.iceConnectionState === "connected" ||
+              connection.iceConnectionState === "completed") {
+            reconnectingRef.current.delete(remotePeerId);
+            return;
+          }
           void (async () => {
             try {
+              if (connection.signalingState !== "stable") return;
               const offer = await connection.createOffer({ iceRestart: true });
               await connection.setLocalDescription(offer);
               await postSignal(remotePeerId, "offer", offer);
             } catch (restartError) {
               console.error("Could not restart meeting audio connection:", restartError);
+            } finally {
+              reconnectingRef.current.delete(remotePeerId);
             }
           })();
-        }
+        }, connection.iceConnectionState === "disconnected" ? 2500 : 250);
       };
 
       if (initiate) {
@@ -570,6 +584,14 @@ export default function LiveAudioRoom({
 
         if (!active) return;
         setParticipants(data.participants || []);
+        for (const participant of (data.participants || []) as LiveParticipant[]) {
+          if (participant.is_self || !peerIdRef.current || !participant.peer_id) continue;
+          if (!connectionsRef.current.has(participant.peer_id) && peerIdRef.current > participant.peer_id) {
+            void ensureConnection(participant.peer_id, true).catch((connectionError) => {
+              console.error("Meeting audio reconnection failed:", connectionError);
+            });
+          }
+        }
 
         if (data.forced_muted) {
           localStreamRef.current?.getAudioTracks().forEach((track) => {
@@ -602,7 +624,7 @@ export default function LiveAudioRoom({
       window.clearInterval(signalTimer);
       window.clearInterval(heartbeatTimer);
     };
-  }, [handleSignal, joined, localMuted, meetingId]);
+  }, [ensureConnection, handleSignal, joined, localMuted, meetingId]);
 
   useEffect(
     () => () => {
