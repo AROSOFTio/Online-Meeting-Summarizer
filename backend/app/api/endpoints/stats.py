@@ -5,7 +5,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core import deps
-from app.models.models import ActionItem, ActionItemStatus, Meeting, ProcessingJob, Recording, User, UserRole
+from app.models.models import ActionItem, ActionItemStatus, Meeting, MeetingStatus, ProcessingJob, Recording, User, UserRole
 
 router = APIRouter()
 
@@ -30,7 +30,7 @@ def get_dashboard_stats(
     pending_jobs = db.query(ProcessingJob).filter(
         ProcessingJob.status.in_(["queued", "converting", "transcribing", "summarising"])
     ).count()
-    failed_jobs = db.query(ProcessingJob).filter(ProcessingJob.status == "failed").count()
+    failed_jobs = db.query(Meeting).filter(Meeting.status == MeetingStatus.failed).count()
 
     open_actions = db.query(ActionItem).filter(ActionItem.status != ActionItemStatus.completed).count()
     completed_actions = db.query(ActionItem).filter(ActionItem.status == ActionItemStatus.completed).count()
