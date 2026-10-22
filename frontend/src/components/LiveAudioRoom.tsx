@@ -63,7 +63,10 @@ if (
 
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: ICE_SERVERS,
-  iceCandidatePoolSize: 4,
+  // The relay is configured on the production server. Prefer it over
+  // unreliable direct paths between mobile/office NAT networks.
+  iceTransportPolicy: TURN_URLS.length > 0 ? "relay" : "all",
+  iceCandidatePoolSize: 2,
 };
 
 async function openBestMicrophone(): Promise<MediaStream> {
@@ -249,6 +252,29 @@ export default function LiveAudioRoom({
         setPeerStates((current) => ({ ...current, [remotePeerId]: connection.connectionState }));
         if (connection.connectionState === "closed") closePeer(remotePeerId);
       };
+
+      const recoverStalledPeer = () => {
+        if (connection.signalingState === "closed" || connection.iceConnectionState === "connected" ||
+            connection.iceConnectionState === "completed" || reconnectingRef.current.has(remotePeerId)) return;
+        if (connection.signalingState !== "stable" || peerIdRef.current > remotePeerId) return;
+        reconnectingRef.current.add(remotePeerId);
+        void (async () => {
+          try {
+            const offer = await connection.createOffer({ iceRestart: true });
+            await connection.setLocalDescription(offer);
+            await postSignal(remotePeerId, "offer", offer);
+          } catch (restartError) {
+            console.error("Could not recover stalled audio peer:", restartError);
+          } finally {
+            reconnectingRef.current.delete(remotePeerId);
+          }
+        })();
+      };
+      // ICE can remain "checking" indefinitely and never fire failed/disconnected.
+      const stalledTimer = window.setInterval(recoverStalledPeer, 9000);
+      connection.addEventListener("signalingstatechange", () => {
+        if (connection.signalingState === "closed") window.clearInterval(stalledTimer);
+      });
 
       connection.oniceconnectionstatechange = () => {
         if (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed") {
