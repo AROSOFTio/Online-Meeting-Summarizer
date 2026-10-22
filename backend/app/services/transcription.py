@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from google.genai import types
 
 from app.core.config import settings
-from app.services.gemini_client import get_gemini_client, resolve_gemini_model
+from app.services.gemini_client import get_gemini_client, resolve_gemini_model, generate_with_retry
 
 
 class TranscriptionService:
@@ -86,7 +86,7 @@ class TranscriptionService:
         try:
             uploaded = client.files.upload(file=audio_path)
             uploaded = self._wait_until_ready(uploaded)
-            response = client.models.generate_content(
+            response = generate_with_retry(
                 model=model,
                 contents=[prompt, uploaded],
                 config=types.GenerateContentConfig(

@@ -4,7 +4,7 @@ from typing import Any
 from google.genai import types
 
 from app.core.config import settings
-from app.services.gemini_client import get_gemini_client, resolve_gemini_model
+from app.services.gemini_client import get_gemini_client, resolve_gemini_model, generate_with_retry
 
 
 class GeminiService:
@@ -55,7 +55,7 @@ class GeminiService:
             "required": ["agenda", "summary", "key_points", "decisions", "action_items"],
             "additionalProperties": False,
         }
-        response = get_gemini_client().models.generate_content(
+        response = generate_with_retry(
             model=resolve_gemini_model(),
             contents=prompt,
             config=types.GenerateContentConfig(
