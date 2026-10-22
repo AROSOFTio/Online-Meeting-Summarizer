@@ -527,7 +527,20 @@ export default function LiveAudioRoom({
 
   const unlockMeetingAudio = useCallback(() => {
     setSpeakerEnabled(true);
-    setPlaybackBlocked(false);
+    // Play directly inside the user's click event. Mobile Safari and Chrome
+    // may reject play() when invoked later from a React effect.
+    const elements = document.querySelectorAll<HTMLAudioElement>("audio[data-meeting-remote-audio]");
+    if (elements.length === 0) {
+      setPlaybackBlocked(false);
+    }
+    elements.forEach((audio) => {
+      audio.muted = false;
+      audio.volume = 1;
+      void audio.play().then(
+        () => setPlaybackBlocked(false),
+        () => setPlaybackBlocked(true),
+      );
+    });
     setAudioUnlockToken((token) => token + 1);
   }, []);
 
@@ -911,7 +924,7 @@ function RemoteAudio({
     };
   }, [enabled, onPlaybackBlocked, stream, unlockToken]);
 
-  return <audio ref={audioRef} autoPlay playsInline preload="auto" />;
+  return <audio ref={audioRef} data-meeting-remote-audio autoPlay playsInline preload="auto" />;
 }
 
  
