@@ -23,6 +23,7 @@ export default function LiveInvitePanel({ meetingId, onClose, onInvited }: { mee
   const [directory, setDirectory] = useState<DirectoryPerson[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [externalEmails, setExternalEmails] = useState<string[]>([]);
+  const [pendingEmail, setPendingEmail] = useState("");
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<InviteResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -35,7 +36,12 @@ export default function LiveInvitePanel({ meetingId, onClose, onInvited }: { mee
   }, []);
 
   const send = async () => {
-    if (selectedUserIds.length === 0 && externalEmails.length === 0) {
+    const pending = pendingEmail.trim().toLowerCase();
+    if (pending && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pending)) {
+      setError("Enter a valid guest email address."); return;
+    }
+    const addresses = Array.from(new Set([...externalEmails, ...(pending ? [pending] : [])]));
+    if (selectedUserIds.length === 0 && addresses.length === 0) {
       setError("Choose at least one staff member or enter one external email address.");
       return;
     }
@@ -44,9 +50,11 @@ export default function LiveInvitePanel({ meetingId, onClose, onInvited }: { mee
     try {
       const data = await apiRequest(`/api/meetings/${meetingId}/invitations`, {
         method: "POST",
-        body: JSON.stringify({ user_ids: selectedUserIds, emails: externalEmails, send_email: true }),
+        body: JSON.stringify({ user_ids: selectedUserIds, emails: addresses, send_email: true }),
       }) as InviteResult;
       setResult(data);
+      setExternalEmails(addresses);
+      setPendingEmail("");
       onInvited?.();
     } catch (inviteError) {
       setError(inviteError instanceof Error ? inviteError.message : "Could not send invitations.");
@@ -78,7 +86,7 @@ export default function LiveInvitePanel({ meetingId, onClose, onInvited }: { mee
             options={directory}
             selectedUserIds={selectedUserIds}
             onSelectedUserIdsChange={setSelectedUserIds}
-            externalEmails={externalEmails}
+            externalEmails={externalEmails} pendingEmail={pendingEmail} onPendingEmailChange={setPendingEmail}
             onExternalEmailsChange={setExternalEmails}
             disabled={sending}
           />

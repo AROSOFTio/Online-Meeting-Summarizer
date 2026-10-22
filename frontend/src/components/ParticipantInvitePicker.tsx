@@ -19,6 +19,8 @@ interface Props {
   externalEmails: string[];
   onExternalEmailsChange: (emails: string[]) => void;
   disabled?: boolean;
+  pendingEmail?: string;
+  onPendingEmailChange?: (email: string) => void;
 }
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -30,9 +32,13 @@ export default function ParticipantInvitePicker({
   externalEmails,
   onExternalEmailsChange,
   disabled = false,
+  pendingEmail,
+  onPendingEmailChange,
 }: Props) {
   const [search, setSearch] = useState("");
-  const [emailDraft, setEmailDraft] = useState("");
+  const [localEmailDraft, setLocalEmailDraft] = useState("");
+  const emailDraft = pendingEmail ?? localEmailDraft;
+  const setEmailDraft = onPendingEmailChange ?? setLocalEmailDraft;
   const [emailError, setEmailError] = useState<string | null>(null);
 
   const selected = useMemo(() => new Set(selectedUserIds), [selectedUserIds]);
@@ -122,6 +128,7 @@ export default function ParticipantInvitePicker({
           placeholder="person@example.com — press Enter"
           type="email"
         />
+        <button type="button" disabled={disabled || !emailDraft.trim()} onClick={captureExternalEmail} className="mt-2 rounded-lg bg-amber-900 px-4 py-2 text-xs font-bold text-white disabled:opacity-40">Add guest email</button>
         {emailError && <div className="mt-2 text-xs font-semibold text-red-700">{emailError}</div>}
         {externalEmails.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{externalEmails.map((email) => <span key={email} className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700">{email}<button type="button" disabled={disabled} onClick={() => onExternalEmailsChange(externalEmails.filter((item) => item !== email))} aria-label={`Remove ${email}`}><X size={13}/></button></span>)}</div>}
       </section>

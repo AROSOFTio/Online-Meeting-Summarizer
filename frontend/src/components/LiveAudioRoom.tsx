@@ -71,15 +71,24 @@ async function openBestMicrophone(): Promise<MediaStream> {
     throw new Error("This browser does not support microphone access.");
   }
 
-  return navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      channelCount: { ideal: 1 },
-    },
-    video: false,
-  });
+  try {
+    return await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: { ideal: 1 },
+      },
+      video: false,
+    });
+  } catch (error) {
+    // Some mobile and USB audio drivers reject processing constraints even
+    // though their default microphone works. Never require manual selection.
+    if (error instanceof DOMException && ["OverconstrainedError", "NotSupportedError", "TypeError"].includes(error.name)) {
+      return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    }
+    throw error;
+  }
 }
 
 function friendlyMediaError(error: unknown) {
@@ -116,7 +125,7 @@ export default function LiveAudioRoom({
   const [isModerator, setIsModerator] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
-  const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
+  const [, setMicrophones] = useState<MediaDeviceInfo[]>([]);
   const [currentMicrophone, setCurrentMicrophone] = useState("");
   const [changingMicrophone, setChangingMicrophone] = useState(false);
   const [audioUnlockToken, setAudioUnlockToken] = useState(0);
@@ -440,15 +449,17 @@ export default function LiveAudioRoom({
 
   const changeMicrophone = useCallback(async (deviceId: string) => {
     const previous = localStreamRef.current;
-    if (!previous || changingMicrophone || !deviceId) return;
+    if (!previous || changingMicrophone) return;
     setChangingMicrophone(true);
     setError(null);
     let replacement: MediaStream | null = null;
     try {
-      replacement = await navigator.mediaDevices.getUserMedia({
-        audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-        video: false,
-      });
+      replacement = deviceId
+        ? await navigator.mediaDevices.getUserMedia({
+            audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+            video: false,
+          })
+        : await openBestMicrophone();
       const newTrack = replacement.getAudioTracks()[0];
       if (!newTrack) throw new Error("The selected microphone supplied no audio track.");
       newTrack.enabled = !localMuted && !forcedMuted;
@@ -466,10 +477,10 @@ export default function LiveAudioRoom({
         await Promise.allSettled(switched.map((sender) => sender.replaceTrack(oldTrack || null)));
         throw switchError;
       }
+      const previousOwned = ownsLocalStreamRef.current;
       localStreamRef.current = replacement;
       ownsLocalStreamRef.current = true;
-      if (ownsLocalStreamRef.current || previous !== providedStream) {
-        // The caller owns a provided host stream and is informed above before release.
+      if (previousOwned || previous !== providedStream) {
         previous.getTracks().forEach((track) => track.stop());
       }
       setCurrentMicrophone(newTrack.getSettings().deviceId || deviceId);
@@ -482,6 +493,17 @@ export default function LiveAudioRoom({
       setChangingMicrophone(false);
     }
   }, [changingMicrophone, forcedMuted, localMuted, onMicrophoneChange, providedStream, refreshMicrophones]);
+
+  // A headset can disconnect, lose OS input access, or be unplugged during
+  // a meeting. Automatically acquire the new system-default input.
+  useEffect(() => {
+    if (!joined) return;
+    const track = localStreamRef.current?.getAudioTracks()[0];
+    if (!track) return;
+    const recover = () => { void changeMicrophone(""); };
+    track.addEventListener("ended", recover);
+    return () => track.removeEventListener("ended", recover);
+  }, [joined, currentMicrophone, changeMicrophone]);
 
   const toggleMute = useCallback(() => {
     if (!localStreamRef.current || forcedMuted) return;
@@ -540,8 +562,11 @@ export default function LiveAudioRoom({
 
   useEffect(() => {
     if (!autoJoin || autoJoinAttemptedRef.current) return;
-    autoJoinAttemptedRef.current = true;
-    const timer = window.setTimeout(() => void joinRoom(), 0);
+    const timer = window.setTimeout(() => {
+      if (autoJoinAttemptedRef.current) return;
+      autoJoinAttemptedRef.current = true;
+      void joinRoom();
+    }, 0);
     return () => window.clearTimeout(timer);
   }, [autoJoin, joinRoom]);
 
@@ -708,15 +733,7 @@ export default function LiveAudioRoom({
               <p className="mt-1 text-xs text-slate-500">
                 {participants.length} connected participant{participants.length === 1 ? "" : "s"}. Default microphone connected automatically.
               </p>
-              {microphones.length > 1 && (
-                <label className="mt-2 flex items-center gap-2 text-xs text-slate-600">
-                  <span>Change mic (optional)</span>
-                  <select aria-label="Change microphone" value={currentMicrophone} disabled={changingMicrophone} onChange={(event) => void changeMicrophone(event.target.value)} className="max-w-48 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-xs">
-                    {!microphones.some((device) => device.deviceId === currentMicrophone) && <option value="">Current microphone</option>}
-                    {microphones.map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `Microphone ${index + 1}`}</option>)}
-                  </select>
-                </label>
-              )}
+
             </div>
 
             <div className="flex flex-wrap gap-2">

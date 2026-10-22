@@ -24,6 +24,7 @@ export default function InviteParticipantsPage() {
   const [directory, setDirectory] = useState<DirectoryPerson[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [externalEmails, setExternalEmails] = useState<string[]>([]);
+  const [pendingEmail, setPendingEmail] = useState("");
   const [result, setResult] = useState<InviteResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -42,13 +43,23 @@ export default function InviteParticipantsPage() {
   }, []);
 
   const generate = async (sendEmail: boolean) => {
+    const pending = pendingEmail.trim().toLowerCase();
+    if (pending && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pending)) {
+      setError("Enter a valid guest email address."); return;
+    }
+    const addresses = Array.from(new Set([...externalEmails, ...(pending ? [pending] : [])]));
+    if (selectedUserIds.length === 0 && addresses.length === 0) {
+      setError("Select staff or enter at least one guest email."); return;
+    }
     setSending(true); setError(null);
     try {
       const data = await apiRequest(`/api/meetings/${meetingId}/invitations`, {
         method: "POST",
-        body: JSON.stringify({ user_ids: selectedUserIds, emails: externalEmails, send_email: sendEmail }),
+        body: JSON.stringify({ user_ids: selectedUserIds, emails: addresses, send_email: sendEmail }),
       }) as InviteResult;
       setResult(data);
+      setExternalEmails(addresses);
+      setPendingEmail("");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create invitations.");
     } finally {
@@ -64,7 +75,7 @@ export default function InviteParticipantsPage() {
     <div className="border-b border-gray-200 pb-5"><Link href={`/meetings/${meetingId}`} className="text-xs font-semibold text-blue-700">← Back to meeting</Link><h1 className="mt-2 text-2xl font-bold text-gray-900">Invite Participants</h1><p className="mt-1 text-sm text-gray-500">{isLoading ? "Loading meeting..." : meeting?.title}</p></div>
 
     <div className="space-y-5 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-      <ParticipantInvitePicker options={directory} selectedUserIds={selectedUserIds} onSelectedUserIdsChange={setSelectedUserIds} externalEmails={externalEmails} onExternalEmailsChange={setExternalEmails} disabled={sending} />
+      <ParticipantInvitePicker options={directory} selectedUserIds={selectedUserIds} onSelectedUserIdsChange={setSelectedUserIds} externalEmails={externalEmails} pendingEmail={pendingEmail} onPendingEmailChange={setPendingEmail} onExternalEmailsChange={setExternalEmails} disabled={sending} />
       {error && <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       <div className="grid gap-3 sm:grid-cols-2"><button disabled={sending} onClick={() => generate(true)} className="flex items-center justify-center gap-2 rounded bg-blue-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"><Mail size={17} />{sending ? "Working..." : "Send Personal Invitations"}</button><button disabled={sending} onClick={() => generate(false)} className="rounded border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50">Generate Links Only</button></div>
     </div>
