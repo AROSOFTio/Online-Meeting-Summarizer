@@ -52,3 +52,14 @@ textarea {
     font-size: 16px;
   }
 }
+
+/* Login-only ambient wave motion. Never animate for reduced-motion users. */
+@keyframes login-wave-drift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(2%, -7px, 0); }
+}
+.login-wave { animation: login-wave-drift 19s ease-in-out infinite; }
+.login-wave-bottom { animation-direction: reverse; animation-duration: 23s; }
+@media (prefers-reduced-motion: reduce) {
+  .login-wave { animation: none; }
+}

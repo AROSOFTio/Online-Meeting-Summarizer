@@ -39,8 +39,20 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-8">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm sm:p-8">
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-8">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <svg className="login-wave login-wave-top absolute -left-[12%] top-[5%] h-[38%] w-[125%] text-blue-700/10" viewBox="0 0 1440 320" fill="none" preserveAspectRatio="none">
+          <path d="M-70 210 C170 50 310 300 570 155 S1000 45 1510 170" stroke="currentColor" strokeWidth="2" />
+          <path d="M-70 238 C170 78 310 328 570 183 S1000 73 1510 198" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M-70 267 C170 107 310 357 570 212 S1000 102 1510 227" stroke="currentColor" strokeWidth="1" />
+        </svg>
+        <svg className="login-wave login-wave-bottom absolute -right-[14%] bottom-[2%] h-[42%] w-[130%] text-sky-700/10" viewBox="0 0 1440 320" fill="none" preserveAspectRatio="none">
+          <path d="M-70 140 C230 310 470 5 760 165 S1130 300 1510 95" stroke="currentColor" strokeWidth="2" />
+          <path d="M-70 170 C230 340 470 35 760 195 S1130 330 1510 125" stroke="currentColor" strokeWidth="1.5" />
+          <path d="M-70 200 C230 370 470 65 760 225 S1130 360 1510 155" stroke="currentColor" strokeWidth="1" />
+        </svg>
+      </div>
+      <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200/80 bg-white/95 p-7 shadow-[0_16px_50px_rgba(15,23,42,0.07)] sm:p-8">
         <div className="mb-7 text-center">
           {!logoFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
