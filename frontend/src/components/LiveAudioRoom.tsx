@@ -714,13 +714,14 @@ export default function LiveAudioRoom({
         </div>
       ) : (
         <div className="space-y-5">
-          {playbackBlocked && speakerEnabled && Object.keys(remoteStreams).length > 0 && (
+          {speakerEnabled && (
             <button
               type="button"
               onClick={unlockMeetingAudio}
-              className="w-full rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-extrabold text-amber-900 hover:bg-amber-100"
+              className={`w-full rounded-xl border px-4 py-3 text-sm font-extrabold ${playbackBlocked ? "border-amber-400 bg-amber-100 text-amber-950" : "border-blue-300 bg-blue-50 text-blue-900"}`}
             >
-              Tap once to enable meeting audio on this device
+              <Volume2 size={17} className="mr-2 inline-block" />
+              {playbackBlocked ? "Sound blocked by browser: TAP TO HEAR EVERYONE" : "Tap to enable / test meeting sound"}
             </button>
           )}
 
@@ -888,6 +889,7 @@ function RemoteAudio({
 
     audio.srcObject = stream;
     audio.muted = !enabled;
+    audio.volume = 1;
 
     const play = () => {
       if (!enabled) return;
@@ -909,7 +911,7 @@ function RemoteAudio({
     };
   }, [enabled, onPlaybackBlocked, stream, unlockToken]);
 
-  return <audio ref={audioRef} autoPlay playsInline muted={!enabled} />;
+  return <audio ref={audioRef} autoPlay playsInline preload="auto" />;
 }
 
  
