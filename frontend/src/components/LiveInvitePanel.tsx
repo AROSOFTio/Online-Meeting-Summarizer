@@ -28,6 +28,8 @@ export default function LiveInvitePanel({ meetingId, onClose, onInvited }: { mee
   const [result, setResult] = useState<InviteResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copying, setCopying] = useState(false);
+  const [guestLink, setGuestLink] = useState("");
 
   useEffect(() => {
     apiRequest("/api/meetings/directory/staff-options")
@@ -64,10 +66,28 @@ export default function LiveInvitePanel({ meetingId, onClose, onInvited }: { mee
   };
 
   const copyGeneral = async () => {
-    if (!result?.general_link) return;
-    await navigator.clipboard.writeText(result.general_link);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1200);
+    if (copying) return;
+    setCopying(true);
+    setError(null);
+    try {
+      let link = guestLink || result?.general_link;
+      if (!link) {
+        const data = await apiRequest(`/api/meetings/${meetingId}/invitations`, {
+          method: "POST",
+          body: JSON.stringify({ user_ids: [], emails: [], send_email: false }),
+        }) as InviteResult;
+        link = data.general_link;
+        setGuestLink(link);
+      }
+      if (!link) throw new Error("Meeting invitation link is unavailable.");
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch (copyError) {
+      setError(copyError instanceof Error ? copyError.message : "Could not copy invite link.");
+    } finally {
+      setCopying(false);
+    }
   };
 
   return (
@@ -82,6 +102,14 @@ export default function LiveInvitePanel({ meetingId, onClose, onInvited }: { mee
         </div>
 
         <div className="space-y-5 p-5 sm:p-6">
+          <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+            <div className="text-sm font-bold text-slate-900">Share meeting link</div>
+            <p className="mt-1 text-xs text-slate-600">Copy a link for any guest to join, including people without an account. No email address required.</p>
+            <button type="button" onClick={() => void copyGeneral()} disabled={copying} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">
+              <Copy size={16}/>{copying ? "Preparing link..." : copied ? "Link copied!" : "Copy Invite Link"}
+            </button>
+          </div>
+
           <ParticipantInvitePicker
             options={directory}
             selectedUserIds={selectedUserIds}

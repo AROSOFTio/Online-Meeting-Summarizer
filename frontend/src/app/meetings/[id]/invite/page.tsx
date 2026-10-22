@@ -67,6 +67,28 @@ export default function InviteParticipantsPage() {
     }
   };
 
+  const [copyingInvite, setCopyingInvite] = useState(false);
+  const [inviteCopied, setInviteCopied] = useState(false);
+  const copyInviteLink = async () => {
+    if (copyingInvite) return;
+    setCopyingInvite(true); setError(null);
+    try {
+      let link = result?.general_link;
+      if (!link) {
+        const data = await apiRequest(`/api/meetings/${meetingId}/invitations`, {
+          method: "POST",
+          body: JSON.stringify({ user_ids: [], emails: [], send_email: false }),
+        }) as InviteResult;
+        link = data.general_link;
+      }
+      if (!link) throw new Error("Invite link unavailable.");
+      await navigator.clipboard.writeText(link);
+      setInviteCopied(true);
+      window.setTimeout(() => setInviteCopied(false), 1800);
+    } catch (err) { setError(err instanceof Error ? err.message : "Could not copy invite link."); }
+    finally { setCopyingInvite(false); }
+  };
+
   const copy = async (value: string) => {
     await navigator.clipboard.writeText(value); setCopied(value); setTimeout(() => setCopied(null), 1200);
   };
@@ -75,6 +97,7 @@ export default function InviteParticipantsPage() {
     <div className="border-b border-gray-200 pb-5"><Link href={`/meetings/${meetingId}`} className="text-xs font-semibold text-blue-700">← Back to meeting</Link><h1 className="mt-2 text-2xl font-bold text-gray-900">Invite Participants</h1><p className="mt-1 text-sm text-gray-500">{isLoading ? "Loading meeting..." : meeting?.title}</p></div>
 
     <div className="space-y-5 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4"><p className="text-sm font-bold text-gray-900">Share meeting with anyone</p><p className="mt-1 text-xs text-gray-600">Copy a guest link. Recipients do not need an account.</p><button type="button" disabled={copyingInvite} onClick={() => void copyInviteLink()} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-bold text-white disabled:opacity-50"><Copy size={16}/>{copyingInvite ? "Preparing..." : inviteCopied ? "Copied!" : "Copy Invite Link"}</button></div>
       <ParticipantInvitePicker options={directory} selectedUserIds={selectedUserIds} onSelectedUserIdsChange={setSelectedUserIds} externalEmails={externalEmails} pendingEmail={pendingEmail} onPendingEmailChange={setPendingEmail} onExternalEmailsChange={setExternalEmails} disabled={sending} />
       {error && <div className="rounded border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
       <div className="grid gap-3 sm:grid-cols-2"><button disabled={sending} onClick={() => generate(true)} className="flex items-center justify-center gap-2 rounded bg-blue-700 px-4 py-3 text-sm font-semibold text-white disabled:opacity-50"><Mail size={17} />{sending ? "Working..." : "Send Personal Invitations"}</button><button disabled={sending} onClick={() => generate(false)} className="rounded border border-gray-300 px-4 py-3 text-sm font-semibold text-gray-700 disabled:opacity-50">Generate Links Only</button></div>
