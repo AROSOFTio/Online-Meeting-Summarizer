@@ -247,35 +247,49 @@ export default function LiveAudioRoom({
         if (connection.connectionState === "closed") closePeer(remotePeerId);
       };
 
-      connection.oniceconnectionstatechange = () => {
-        if (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed") {
-          reconnectingRef.current.delete(remotePeerId);
-          return;
-        }
-        if (connection.iceConnectionState !== "failed" && connection.iceConnectionState !== "disconnected") return;
-        // Only one peer restarts ICE to avoid simultaneous-offer collisions.
-        if (!peerIdRef.current || peerIdRef.current > remotePeerId || reconnectingRef.current.has(remotePeerId)) return;
+      // The same (larger peer ID) must initiate both the initial offer
+      // and recovery offers. Switching initiators produces negotiation glare.
+      let restartTimer: number | null = null;
+      let connectingTimer: number | null = null;
+      const restartIce = () => {
+        if (!peerIdRef.current || peerIdRef.current < remotePeerId ||
+            reconnectingRef.current.has(remotePeerId) ||
+            connection.signalingState === "closed") return;
+        if (connection.iceConnectionState === "connected" ||
+            connection.iceConnectionState === "completed") return;
+        if (connection.signalingState !== "stable") return;
         reconnectingRef.current.add(remotePeerId);
-        window.setTimeout(() => {
-          if (connection.signalingState === "closed" || connection.iceConnectionState === "connected" ||
-              connection.iceConnectionState === "completed") {
+        void (async () => {
+          try {
+            const offer = await connection.createOffer({ iceRestart: true });
+            await connection.setLocalDescription(offer);
+            await postSignal(remotePeerId, "offer", offer);
+          } catch (restartError) {
+            console.error("Meeting ICE recovery error:", restartError);
+          } finally {
             reconnectingRef.current.delete(remotePeerId);
-            return;
           }
-          void (async () => {
-            try {
-              if (connection.signalingState !== "stable") return;
-              const offer = await connection.createOffer({ iceRestart: true });
-              await connection.setLocalDescription(offer);
-              await postSignal(remotePeerId, "offer", offer);
-            } catch (restartError) {
-              console.error("Could not restart meeting audio connection:", restartError);
-            } finally {
-              reconnectingRef.current.delete(remotePeerId);
-            }
-          })();
-        }, connection.iceConnectionState === "disconnected" ? 2500 : 250);
+        })();
       };
+      connection.oniceconnectionstatechange = () => {
+        if (restartTimer) window.clearTimeout(restartTimer);
+        if (connectingTimer) window.clearTimeout(connectingTimer);
+        restartTimer = null;
+        connectingTimer = null;
+        const state = connection.iceConnectionState;
+        if (state === "connected" || state === "completed") {
+          reconnectingRef.current.delete(remotePeerId);
+        } else if (state === "failed" || state === "disconnected") {
+          restartTimer = window.setTimeout(restartIce, state === "failed" ? 400 : 2500);
+        } else if (state === "checking") {
+          connectingTimer = window.setTimeout(restartIce, 12000);
+        }
+      };
+      connection.addEventListener("signalingstatechange", () => {
+        if (connection.signalingState !== "closed") return;
+        if (restartTimer) window.clearTimeout(restartTimer);
+        if (connectingTimer) window.clearTimeout(connectingTimer);
+      });
 
       if (initiate) {
         const offer = await connection.createOffer();
