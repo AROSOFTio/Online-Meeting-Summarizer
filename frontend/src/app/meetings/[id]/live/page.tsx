@@ -336,6 +336,25 @@ export default function LiveMeetingPage() {
     );
   }
 
+  if (meeting.lifecycle === "ended" && meeting.status === "draft") {
+    return (
+      <DashboardLayout>
+        <div className="mx-auto max-w-2xl rounded-2xl border border-amber-200 bg-white p-8 text-center shadow-sm">
+          <h1 className="text-2xl font-extrabold text-slate-950">Meeting ended, but no recording was uploaded</h1>
+          <p className="mt-3 text-sm text-slate-600">Minutes processing has not started. Upload the original meeting audio to generate the transcript and minutes for this meeting.</p>
+          {canManageMeeting && (
+            <label className="mt-6 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-700 px-5 py-3 text-sm font-bold text-white hover:bg-blue-800">
+              <Upload size={17} />{processing ? "Uploading recording..." : "Upload meeting recording"}
+              <input type="file" className="hidden" disabled={processing} accept=".wav,.mp3,.m4a,.mp4,.webm,.ogg,audio/*,video/*" onChange={(event) => uploadExisting(event.target.files?.[0])} />
+            </label>
+          )}
+          {error && <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+          <div className="mt-5"><Link href={`/meetings/${meeting.id}`} className="text-sm font-bold text-blue-700">Open meeting details</Link></div>
+        </div>
+      </DashboardLayout>
+    );
+  }
+
   if (meeting.status === "processing" || meeting.status === "completed" || meeting.lifecycle === "ended") {
     return (
       <DashboardLayout>
