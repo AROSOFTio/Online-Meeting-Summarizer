@@ -63,10 +63,7 @@ if (
 
 const RTC_CONFIG: RTCConfiguration = {
   iceServers: ICE_SERVERS,
-  // The relay is configured on the production server. Prefer it over
-  // unreliable direct paths between mobile/office NAT networks.
-  iceTransportPolicy: TURN_URLS.length > 0 ? "relay" : "all",
-  iceCandidatePoolSize: 2,
+  iceCandidatePoolSize: 4,
 };
 
 async function openBestMicrophone(): Promise<MediaStream> {
@@ -132,8 +129,6 @@ export default function LiveAudioRoom({
   const [currentMicrophone, setCurrentMicrophone] = useState("");
   const [changingMicrophone, setChangingMicrophone] = useState(false);
   const [audioUnlockToken, setAudioUnlockToken] = useState(0);
-  const [repairingAudio, setRepairingAudio] = useState(false);
-  const [peerStates, setPeerStates] = useState<Record<string, string>>({});
 
   const peerIdRef = useRef("");
   const sessionKeyRef = useRef("");
@@ -249,32 +244,8 @@ export default function LiveAudioRoom({
       };
 
       connection.onconnectionstatechange = () => {
-        setPeerStates((current) => ({ ...current, [remotePeerId]: connection.connectionState }));
         if (connection.connectionState === "closed") closePeer(remotePeerId);
       };
-
-      const recoverStalledPeer = () => {
-        if (connection.signalingState === "closed" || connection.iceConnectionState === "connected" ||
-            connection.iceConnectionState === "completed" || reconnectingRef.current.has(remotePeerId)) return;
-        if (connection.signalingState !== "stable" || peerIdRef.current > remotePeerId) return;
-        reconnectingRef.current.add(remotePeerId);
-        void (async () => {
-          try {
-            const offer = await connection.createOffer({ iceRestart: true });
-            await connection.setLocalDescription(offer);
-            await postSignal(remotePeerId, "offer", offer);
-          } catch (restartError) {
-            console.error("Could not recover stalled audio peer:", restartError);
-          } finally {
-            reconnectingRef.current.delete(remotePeerId);
-          }
-        })();
-      };
-      // ICE can remain "checking" indefinitely and never fire failed/disconnected.
-      const stalledTimer = window.setInterval(recoverStalledPeer, 9000);
-      connection.addEventListener("signalingstatechange", () => {
-        if (connection.signalingState === "closed") window.clearInterval(stalledTimer);
-      });
 
       connection.oniceconnectionstatechange = () => {
         if (connection.iceConnectionState === "connected" || connection.iceConnectionState === "completed") {
@@ -573,27 +544,6 @@ export default function LiveAudioRoom({
     setAudioUnlockToken((token) => token + 1);
   }, []);
 
-  const repairAudio = useCallback(async () => {
-    if (repairingAudio || !joinedRef.current) return;
-    setRepairingAudio(true);
-    setError(null);
-    try {
-      const track = localStreamRef.current?.getAudioTracks()[0];
-      if (!track || track.readyState !== "live") {
-        await changeMicrophone("");
-      }
-      for (const peer of participants.filter((person) => !person.is_self)) {
-        closePeer(peer.peer_id);
-        await ensureConnection(peer.peer_id, true);
-      }
-      unlockMeetingAudio();
-    } catch (repairError) {
-      setError(friendlyMediaError(repairError));
-    } finally {
-      setRepairingAudio(false);
-    }
-  }, [repairingAudio, participants, changeMicrophone, closePeer, ensureConnection, unlockMeetingAudio]);
-
   const handlePlaybackBlocked = useCallback(() => {
     setPlaybackBlocked(true);
   }, []);
@@ -826,15 +776,6 @@ export default function LiveAudioRoom({
 
               <button
                 type="button"
-                onClick={() => void repairAudio()}
-                disabled={repairingAudio}
-                className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-2.5 text-xs font-bold text-amber-900 disabled:opacity-50"
-              >
-                {repairingAudio ? "Reconnecting audio..." : "Repair audio connection"}
-              </button>
-
-              <button
-                type="button"
                 onClick={() => void leaveRoom()}
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700"
               >
@@ -883,11 +824,6 @@ export default function LiveAudioRoom({
                       </span>
                     </div>
                     <div className="mt-2">
-                      {!participant.is_self && (
-                        <p className="mb-1 text-[10px] text-slate-500">
-                          Audio link: {peerStates[participant.peer_id] || "connecting"} · {remoteStreams[participant.peer_id]?.getAudioTracks().some((track) => track.readyState === "live") ? "track received" : "waiting for track"}
-                        </p>
-                      )}
                       <AudioLevelMeter
                         stream={participant.is_self ? localStreamRef.current : remoteStreams[participant.peer_id] || null}
                         muted={participant.is_self ? localMuted || forcedMuted : participant.muted}
