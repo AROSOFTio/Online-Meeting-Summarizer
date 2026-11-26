@@ -217,7 +217,7 @@ def register_browser(path,data,sender=mail):
     if not data.get("slug"):
         stem=re.sub(r"[^a-z0-9]+","-",str(data.get("name","")).lower()).strip("-")[:28].rstrip("-")
         if not stem or not stem[0].isalpha():stem="org-"+stem
-        data={**data,"slug":stem+"-"+secrets.token_hex(4),"plan":"starter"}
+        data={**data,"slug":stem[:28].rstrip("-")+"-"+secrets.token_hex(4),"plan":"starter"}
     data=validate(data)
     now=int(time.time())
     ref=secrets.token_hex(16)
