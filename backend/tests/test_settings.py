@@ -3,20 +3,20 @@ def test_settings_read_and_update(client, db):
     get_resp = client.get("/api/settings/")
     assert get_resp.status_code == 200
     settings = get_resp.json()
-    assert settings["school_name"] == "Starlight Secondary School"
+    assert settings["school_name"] == "ConveneCore"
     assert settings["timezone"] == "Africa/Kampala"
     retired_model_key = "whis" + "per_model"
     assert retired_model_key not in settings
 
     update_data = {
-        "school_name": "Starlight Secondary School Amuria",
+        "school_name": "Example Organization",
         "timezone": "Africa/Kampala",
         "retention_period_days": "730",
     }
     put_resp = client.put("/api/settings/", json=update_data)
     assert put_resp.status_code == 200
     updated = put_resp.json()
-    assert updated["school_name"] == "Starlight Secondary School Amuria"
+    assert updated["school_name"] == "Example Organization"
     assert updated["retention_period_days"] == "730"
 
     status_resp = client.get("/api/system/status")

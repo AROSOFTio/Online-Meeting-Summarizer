@@ -3,7 +3,6 @@ import os
 import re
 from datetime import datetime
 from html import escape
-from pathlib import Path
 from typing import Any, List, Optional
 
 
@@ -251,7 +250,7 @@ def export_pdf(
 
     def branded_page(canvas, document):
         canvas.saveState()
-        # No logo watermark. The exact crest remains in the official header;
+        # No logo watermark. The configured organization logo remains in the official header;
         # removing the centre watermark keeps minutes readable and professional.
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(colors.HexColor("#6B7280"))

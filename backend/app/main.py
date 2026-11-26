@@ -41,6 +41,8 @@ async def lifespan(app: FastAPI):
 
         admin = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
         if not admin:
+            if not settings.ADMIN_PASSWORD:
+                raise RuntimeError("Configure ADMIN_PASSWORD before creating the first workspace administrator")
             admin = User(
                 email=settings.ADMIN_EMAIL,
                 hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
@@ -54,7 +56,8 @@ async def lifespan(app: FastAPI):
             # This is a single-organisation deployment. The configured admin
             # account is authoritative so changing ADMIN_PASSWORD/ADMIN_EMAIL
             # in production does not leave a stale database credential behind.
-            admin.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
+            if settings.ADMIN_PASSWORD:
+                admin.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
             admin.full_name = admin.full_name or "Workspace Administrator"
             admin.role = UserRole.admin
             admin.is_active = True

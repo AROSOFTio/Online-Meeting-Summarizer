@@ -1,5 +1,5 @@
-const CACHE = "starlight-meeting-summarizer-v7";
-const OFFLINE_ASSETS = ["/manifest.webmanifest", "/starlight-logo.jpg"];
+const CACHE = "convenecore-v1";
+const OFFLINE_ASSETS = ["/manifest.webmanifest", "/convenecore.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(OFFLINE_ASSETS)));
