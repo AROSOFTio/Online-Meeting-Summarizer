@@ -1,4 +1,8 @@
 import tempfile
+import threading
+from http.client import HTTPConnection
+from urllib.parse import urlencode
+import re
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -63,6 +67,54 @@ class PlatformAdminTests(unittest.TestCase):
         self.assertIn("&lt;script&gt;",page)
         self.assertIn("configuration only",page)
         self.assertNotIn("DB_PASSWORD",page)
+
+
+    def test_http_login_csrf_and_logout(self):
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            password="Test-only-long-platform-password"
+            server=admin.Console(root,0,admin.password_record(password))
+            thread=threading.Thread(target=server.serve_forever,daemon=True)
+            thread.start()
+            def send(method,path,body=None,cookie=None,origin=None,host=None):
+                conn=HTTPConnection("127.0.0.1",server.server_port,timeout=4)
+                headers={}
+                if cookie:headers["Cookie"]=cookie
+                if origin:headers["Origin"]=origin
+                if host:headers["Host"]=host
+                if body is not None:
+                    body=urlencode(body)
+                    headers["Content-Type"]="application/x-www-form-urlencoded"
+                conn.request(method,path,body=body,headers=headers)
+                res=conn.getresponse()
+                result=(res.status,res.read().decode(),res.getheader("Set-Cookie"))
+                conn.close()
+                return result
+            try:
+                status,body,_=send("GET","/")
+                self.assertEqual(status,200)
+                self.assertIn("Platform password",body)
+                self.assertNotIn("Organization management",body)
+                self.assertEqual(send("GET","/",host="unknown.example")[0],421)
+                self.assertEqual(send("POST","/login",{"password":password},origin="https://customer.example")[0],403)
+                self.assertEqual(send("POST","/login",{"password":"wrong"},origin=server.origin)[0],401)
+                status,_,cookie=send("POST","/login",{"password":password},origin=server.origin)
+                self.assertEqual(status,303)
+                self.assertIn("HttpOnly",cookie)
+                self.assertIn("SameSite=Strict",cookie)
+                cookie=cookie.split(";")[0]
+                status,body,_=send("GET","/",cookie=cookie)
+                self.assertEqual(status,200)
+                self.assertIn("Organization management",body)
+                csrf=re.search(r'name="csrf" value="([^"]+)"',body).group(1)
+                self.assertEqual(send("POST","/action",{"action":"logout","csrf":"invalid"},cookie,server.origin)[0],403)
+                self.assertEqual(send("POST","/action",{"action":"logout","csrf":csrf},cookie,"https://customer.example")[0],403)
+                self.assertEqual(send("POST","/action",{"action":"logout","csrf":csrf},cookie,server.origin)[0],200)
+                self.assertIn("Platform password",send("GET","/",cookie=cookie)[1])
+            finally:
+                server.shutdown()
+                server.server_close()
+                thread.join(timeout=3)
 
 
 if __name__=="__main__":

@@ -175,7 +175,10 @@ def dispatch(root,rows,form):
     row["profile"]=p
     try:
         if action=="configure":
-            p.update(clean_profile(form))
+            updated=clean_profile(form)
+            if one(form,"apply_preset")=="yes":
+                updated["limits"]=dict(PLANS[updated["plan"]])
+            p.update(updated)
         elif action=="activate":
             if p["expiry"] and date.fromisoformat(p["expiry"])<date.today():
                 raise ValueError("Subscription expiry is in the past. Update the configuration first.")
@@ -296,7 +299,7 @@ def dashboard(rows,events,csrf,query="",filter_state="",message=""):
                 # An explicit confirmation checkbox prevents accidental stop.
                 buttons+=form_start(csrf,action,slug)+'<label class="check"><input type="checkbox" name="confirm" value="yes" required> Confirm stop</label><button class="warn">Suspend</button></form>'
             else:buttons+=form_start(csrf,action,slug)+f'<button>{esc(label)}</button></form>'
-        body+=f'<tr><td><strong>{esc(p["name"])}</strong><small>{esc(p["sector"])} · {esc(slug)}</small><a href="https://{esc(row["host"])}" rel="noreferrer">{esc(row["host"])}</a></td><td><span class="pill {esc(status)}">{esc(status)}</span></td><td>{esc(p["plan"].title())}<small>Expiry: {esc(expiry)}{" · Expired" if expired else ""}</small></td><td class="usage">{usage}</td><td><div class="actions">{buttons}</div><details><summary>Configure workspace</summary>'+form_start(csrf,"configure",slug)+'<div class="formgrid">'+settings_fields(p)+'</div><button class="primary">Save configuration</button></form></details></td></tr>'
+        body+=f'<tr><td><strong>{esc(p["name"])}</strong><small>{esc(p["sector"])} · {esc(slug)}</small><a href="https://{esc(row["host"])}" rel="noreferrer">{esc(row["host"])}</a></td><td><span class="pill {esc(status)}">{esc(status)}</span></td><td>{esc(p["plan"].title())}<small>Expiry: {esc(expiry)}{" · Expired" if expired else ""}</small></td><td class="usage">{usage}</td><td><div class="actions">{buttons}</div><details><summary>Configure workspace</summary>'+form_start(csrf,"configure",slug)+'<div class="formgrid">'+settings_fields(p)+'</div><button class="primary">Save configuration</button> <button name="apply_preset" value="yes">Save with plan defaults</button></form></details></td></tr>'
     body+='</tbody></table></div></section><section class="panel"><h2>Provision an organization</h2><p class="muted">Creates an isolated workspace definition and credentials. Starting the stack and configuring public DNS/TLS are separate operations.</p>'+form_start(csrf,"provision")+'<div class="formgrid">'+field("Workspace identifier","slug")+field("HTTPS hostname","host")+field("Administrator email","email","","email")+field("Unused loopback port","port","","number")+settings_fields({"name":"","sector":"Other","plan":"starter","expiry":"","features":list(FEATURES),"limits":PLANS["starter"]})+'</div><button class="primary">Create organization</button></form></section>'
     body+='<section class="panel"><h2>Plan reference</h2><p class="muted">Illustrative default allowances; configure actual limits on each organization.</p><div class="scroll"><table><thead><tr><th>Plan</th><th>Users</th><th>Storage GiB</th><th>AI minutes/month</th></tr></thead><tbody>'+''.join(f'<tr><td>{esc(k.title())}</td><td>{v["users"]}</td><td>{v["storage_gib"]}</td><td>{v["ai_minutes"]}</td></tr>' for k,v in PLANS.items())+'</tbody></table></div></section>'
     body+='<section class="panel"><h2>Platform activity</h2><div class="scroll"><table><thead><tr><th>Time UTC</th><th>Operation</th><th>Workspace</th><th>Result</th></tr></thead><tbody>'+''.join('<tr>'+''.join('<td>'+esc(e.get(k,""))+'</td>' for k in ("timestamp","action","organization","outcome"))+'</tr>' for e in events)+'</tbody></table></div></section></main><footer>ConveneCore · Private operator console · No customer meeting content is displayed.</footer>'
@@ -309,11 +312,15 @@ class Console(HTTPServer):
         self.record=record
         self.sessions={}
         self.attempts=[]
-        self.origin=f"http://127.0.0.1:{port}"
         super().__init__(("127.0.0.1",port),Handler)
+        self.origin=f"http://127.0.0.1:{self.server_port}"
 
 
 class Handler(BaseHTTPRequestHandler):
+    def setup(self):
+        super().setup()
+        self.connection.settimeout(15)
+
     def log_message(self,*args):
         # Never write URL query strings, headers or credentials to logs.
         pass
@@ -362,7 +369,7 @@ class Handler(BaseHTTPRequestHandler):
         _,session=self.session()
         if not session:return self.send_html(login_page())
         q=parse_qs(u.query)
-        self.show_dashboard(session,query=one(q,"q")[:150],state=one(q,"state"))
+        self.show_dashboard(session,message=session.pop("flash",""),query=one(q,"q")[:150],state=one(q,"state"))
 
     def do_POST(self):
         if not self.valid_host() or self.headers.get("Origin")!=self.server.origin:
@@ -396,7 +403,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
         token,s=self.session()
-        if path!="/action" or not s or not hmac.compare_digest(one(form,"csrf"),s["csrf"]):
+        if path!="/action" or not s or not hmac.compare_digest(one(form,"csrf").encode("utf-8"),s["csrf"].encode("utf-8")):
             return self.send_html(page("Denied","Authentication and a valid CSRF token are required"),403)
         action=one(form,"action")
         if action=="logout":
@@ -409,7 +416,11 @@ class Handler(BaseHTTPRequestHandler):
                 message=dispatch(self.server.root,rows,form)
         except (ValueError,OSError):
             message="Invalid or unavailable organization configuration. Check the inputs and existing registry."
-        return self.show_dashboard(s,message)
+        s["flash"]=message
+        self.send_response(303)
+        self.send_header("Location","/")
+        self.send_header("Cache-Control","no-store")
+        self.end_headers()
 
 
 def main():
