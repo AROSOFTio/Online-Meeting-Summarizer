@@ -1,6 +1,6 @@
 import re
 from datetime import timedelta
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, EmailStr
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
@@ -8,6 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core import deps, security
+from app.core.initial_setup import consume
 from app.core.audit import log_action
 from app.core.config import settings
 from app.models.models import User
@@ -128,3 +129,19 @@ def logout(
 @router.get("/me", response_model=UserOut)
 def read_users_me(current_user: User = Depends(deps.get_current_user)):
     return current_user
+
+
+class InitialSetup(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=43,max_length=43)
+    password: str = Field(min_length=12,max_length=128)
+
+@router.post("/setup")
+def initial_setup(body:InitialSetup,db:Session=Depends(deps.get_db)):
+    try:
+        success=consume(db,str(body.email).lower(),body.code,body.password)
+    except ValueError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    if not success:
+        raise HTTPException(400,"Invalid, expired or already-used setup code")
+    return {"detail":"Administrator password set"}

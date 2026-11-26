@@ -5,6 +5,7 @@ services:
   backend:
     environment:
       TENANT_ID: ${TENANT_ID:?Set TENANT_ID}
+      ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Workspace Administrator}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:?Set tenant HTTPS URL}
       SMTP_VERIFY_TLS: "true"
   worker:

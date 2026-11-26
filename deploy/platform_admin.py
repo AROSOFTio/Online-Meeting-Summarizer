@@ -18,6 +18,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import tenantctl
+import onboarding
+import operator_onboarding
 
 SECTORS=("Education","Government","Healthcare","Corporate","NGO & nonprofit","Association","Community","Research","Faith-based","Other")
 FEATURES={"live":"Live meetings","recording":"Recording uploads","ai":"AI transcription & minutes","templates":"Custom minute formats","exports":"PDF & Word exports","actions":"Action tracking","audit":"Audit and backups"}
@@ -266,7 +268,7 @@ def login_page(message=""):
     return page("Platform sign in",'<main class="login panel"><h1>ConveneCore</h1><p class="muted">Private platform administration</p>'+('<p class="notice">'+esc(message)+'</p>' if message else '')+'<form action="/login" method="post"><label>Platform password<input type="password" name="password" autocomplete="current-password" required maxlength="256"></label><button class="primary">Sign in</button></form><p class="fine">Operator access only. Customer workspace credentials are not accepted.</p></main>')
 
 
-def dashboard(rows,events,csrf,query="",filter_state="",message=""):
+def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=()):
     profiles=[profile(r) for r in rows.values()]
     snapshots=[p["usage"] for p in profiles if p["usage"]]
     active=sum(bool(r.get("enabled")) for r in rows.values())
@@ -277,6 +279,14 @@ def dashboard(rows,events,csrf,query="",filter_state="",message=""):
     if message:body+='<p role="status" class="notice">'+esc(message)+'</p>'
     body+='<div class="stats">'+''.join(f'<div class="stat"><span class="muted">{esc(k)}</span><b>{esc(v)}</b></div>' for k,v in totals)+'</div>'
     body+='<div class="notice">Usage is refreshed on demand; '+str(len(snapshots))+' of '+str(len(rows))+' workspaces have snapshots. Subscription limits and feature switches are configuration only, not enforced. AI job counts are not billed AI minutes.</div>'
+    body+='<section class="panel"><h2>Registration inbox</h2><p class="muted">Review email-verified applications before creating a workspace.</p>'
+    for app in applications:
+        body+='<div class="notice"><strong>'+esc(app["name"])+'</strong> · '+esc(app["sector"])+' · '+esc(app["plan"])+'<p>'+esc(app["contact"])+' · '+esc(app["email"])+' · '+esc(app["slug"])+' · '+esc(app["status"])+'</p>'
+        if app["status"]=="verified":
+            body+=form_start(csrf,"approve_registration")+hidden("ref",app["ref"])+'<div class="formgrid">'+field("Approved HTTPS hostname","host")+field("Unused loopback port","port","","number")+'</div><button class="primary">Approve and provision</button></form>'+form_start(csrf,"reject_registration")+hidden("ref",app["ref"])+'<label class="check"><input type="checkbox" name="confirm" value="yes" required> Confirm decline</label><button class="warn">Decline</button></form>'
+        body+='</div>'
+    if not applications:body+='<p class="muted">No verified applications available.</p>'
+    body+='</section>'
     body+='<section class="panel"><h2>Organizations</h2><form method="get" class="toolbar"><label>Search<input name="q" value="'+esc(query)+'" placeholder="Name, type or domain"></label>'+dropdown("Lifecycle","state",[("","All"),("enabled","Enabled"),("disabled","Not enabled")],filter_state)+'<button>Filter</button><a href="/">Reset</a></form><div class="scroll"><table><thead><tr><th>Organization</th><th>Lifecycle</th><th>Subscription</th><th>Usage snapshot</th><th>Operations</th></tr></thead><tbody>'
     for slug,row in sorted(rows.items()):
         p=profile(row)
@@ -299,6 +309,8 @@ def dashboard(rows,events,csrf,query="",filter_state="",message=""):
                 # An explicit confirmation checkbox prevents accidental stop.
                 buttons+=form_start(csrf,action,slug)+'<label class="check"><input type="checkbox" name="confirm" value="yes" required> Confirm stop</label><button class="warn">Suspend</button></form>'
             else:buttons+=form_start(csrf,action,slug)+f'<button>{esc(label)}</button></form>'
+        if row.get("registration_ref") and row.get("enabled"):
+            buttons+=form_start(csrf,"send_setup",slug)+'<label class="check"><input type="checkbox" name="confirm" value="yes" required> DNS/TLS route verified</label><button>Send setup invitation</button></form>'
         body+=f'<tr><td><strong>{esc(p["name"])}</strong><small>{esc(p["sector"])} · {esc(slug)}</small><a href="https://{esc(row["host"])}" rel="noreferrer">{esc(row["host"])}</a></td><td><span class="pill {esc(status)}">{esc(status)}</span></td><td>{esc(p["plan"].title())}<small>Expiry: {esc(expiry)}{" · Expired" if expired else ""}</small></td><td class="usage">{usage}</td><td><div class="actions">{buttons}</div><details><summary>Configure workspace</summary>'+form_start(csrf,"configure",slug)+'<div class="formgrid">'+settings_fields(p)+'</div><button class="primary">Save configuration</button> <button name="apply_preset" value="yes">Save with plan defaults</button></form></details></td></tr>'
     body+='</tbody></table></div></section><section class="panel"><h2>Provision an organization</h2><p class="muted">Creates an isolated workspace definition and credentials. Starting the stack and configuring public DNS/TLS are separate operations.</p>'+form_start(csrf,"provision")+'<div class="formgrid">'+field("Workspace identifier","slug")+field("HTTPS hostname","host")+field("Administrator email","email","","email")+field("Unused loopback port","port","","number")+settings_fields({"name":"","sector":"Other","plan":"starter","expiry":"","features":list(FEATURES),"limits":PLANS["starter"]})+'</div><button class="primary">Create organization</button></form></section>'
     body+='<section class="panel"><h2>Plan reference</h2><p class="muted">Illustrative default allowances; configure actual limits on each organization.</p><div class="scroll"><table><thead><tr><th>Plan</th><th>Users</th><th>Storage GiB</th><th>AI minutes/month</th></tr></thead><tbody>'+''.join(f'<tr><td>{esc(k.title())}</td><td>{v["users"]}</td><td>{v["storage_gib"]}</td><td>{v["ai_minutes"]}</td></tr>' for k,v in PLANS.items())+'</tbody></table></div></section>'
@@ -357,7 +369,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def show_dashboard(self,session,message="",query="",state=""):
         with tenantctl.registry(self.server.root) as rows:
-            body=dashboard(rows,audit_tail(self.server.root),session["csrf"],query,state,message)
+            path=operator_onboarding.inbox_path()
+            applications=onboarding.inbox(path) if path else []
+            body=dashboard(rows,audit_tail(self.server.root),session["csrf"],query,state,message,applications)
         self.send_html(body)
 
     def do_GET(self):
@@ -413,8 +427,29 @@ class Handler(BaseHTTPRequestHandler):
             return self.show_dashboard(s,"Confirm suspension before stopping a workspace.")
         try:
             with tenantctl.registry(self.server.root) as rows:
-                message=dispatch(self.server.root,rows,form)
-        except (ValueError,OSError):
+                if action in {"approve_registration","reject_registration","send_setup"}:
+                    path=operator_onboarding.inbox_path()
+                    if not path:raise ValueError("Registration inbox not configured.")
+                    if action=="approve_registration":
+                        row=operator_onboarding.approve(path,self.server.root,rows,one(form,"ref"),one(form,"host").strip().lower(),int(one(form,"port")),defaults,PLANS,FEATURES)
+                        audit(self.server.root,action,row["slug"],"success")
+                        message="Verified application approved and provisioned. Start the workspace and configure DNS/TLS before sending setup."
+                    elif action=="reject_registration":
+                        if one(form,"confirm")!="yes":raise ValueError("Confirm decline.")
+                        app=onboarding.application(path,one(form,"ref"))
+                        onboarding.transition(path,app["ref"],"verified","rejected")
+                        audit(self.server.root,action,app["slug"],"success")
+                        message="Application declined."
+                    else:
+                        if one(form,"confirm")!="yes":raise ValueError("Confirm public routing.")
+                        row=rows.get(one(form,"slug"))
+                        if not row:raise ValueError("Unknown workspace.")
+                        operator_onboarding.send_setup(path,self.server.root,row,safe_compose)
+                        audit(self.server.root,action,row["slug"],"success")
+                        message="Single-use setup invitation sent to the verified administrator."
+                else:
+                    message=dispatch(self.server.root,rows,form)
+        except Exception:
             message="Invalid or unavailable organization configuration. Check the inputs and existing registry."
         s["flash"]=message
         self.send_response(303)

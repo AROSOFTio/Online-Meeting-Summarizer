@@ -50,7 +50,7 @@ async def lifespan(app: FastAPI):
             admin = User(
                 email=settings.ADMIN_EMAIL,
                 hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
-                full_name="Workspace Administrator",
+                full_name=settings.ADMIN_FULL_NAME,
                 role=UserRole.admin,
                 is_active=True,
                 must_change_password=bool(settings.TENANT_ID),

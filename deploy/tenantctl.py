@@ -83,7 +83,7 @@ def dotenv(values):
     return "".join(f"{k}='{v}'\n" for k,v in values.items())
 
 
-def provision(root, rows, slug, host, email, port):
+def provision(root, rows, slug, host, email, port, organization_name=None, admin_name=None):
     validate(slug, host, email, port)
     if slug in rows or any(r["host"] == host or r["port"] == port for r in rows.values()):
         raise ValueError("Organization slug, hostname and frontend port must each be unique")
@@ -92,7 +92,11 @@ def provision(root, rows, slug, host, email, port):
     directory = root / slug
     directory.mkdir(mode=0o700, exist_ok=False)
     row = {"slug":slug,"host":host,"port":port,"admin_email":email,"enabled":False}
-    private_write(directory / "tenant.env", dotenv(compose_env(row)))
+    env=compose_env(row)
+    # Compose dotenv literal values cannot contain single quotes; use defaults if needed.
+    if organization_name and not any(c in organization_name for c in ("\n","\r","\x27")):env["SCHOOL_NAME"]=organization_name
+    if admin_name and not any(c in admin_name for c in ("\n","\r","\x27")):env["ADMIN_FULL_NAME"]=admin_name
+    private_write(directory / "tenant.env", dotenv(env))
     rows[slug] = row
     return row
 

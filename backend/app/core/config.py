@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./meeting_summarizer.db"
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    ADMIN_FULL_NAME: str = "Workspace Administrator"
     ADMIN_EMAIL: EmailStr = "admin@example.com"
     ADMIN_PASSWORD: str = ""
 

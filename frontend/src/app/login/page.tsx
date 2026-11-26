@@ -64,6 +64,7 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-slate-500">Meeting Summarizer</p>
         </div>
 
+        <Link href="/setup" className="mb-4 block text-center text-sm text-blue-700">First-time organization setup</Link>
         {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
