@@ -130,7 +130,9 @@ def verified_page(state):
     if host and onboarding.SLUG.fullmatch(host.split(".")[0]) and re.fullmatch(r"[a-z0-9.-]+",host):
         if state["status"]=="activated":return page("Registration complete",'<section class="otp-card"><h2>Your organization is ready</h2><p>Sign in using the email and password you chose during registration.</p><a class="ms-button" href="https://'+esc(host)+'/login">Open your organization</a></section>')
         return page("Workspace ready",'<section><p>Your workspace is ready. Use the setup invitation sent to your email to finish activating your account.</p><a href="https://'+esc(host)+'/setup">Open workspace</a></section>')
-    return page("Email verified",'<section class="otp-card"><h2>Email verified</h2><p>Your email is verified. We are preparing your organization. Open this page again to continue when it is ready.</p></section>')
+    if state.get("password_ready"):
+        return page("Preparing your organization",'<section class="otp-card"><h2>Email verified</h2><p>Your organization is being prepared. This page will continue automatically when it is ready. We will also email your sign-in link.</p><a class="ms-button ms-button-outline" href="/verify">Continue</a></section>').replace("</title>","</title><meta http-equiv=\"refresh\" content=\"10;url="+BASE+"/verify\">",1)
+    return page("Email verified",'<section class="otp-card"><h2>Email verified</h2><p>This registration was made before password creation was available. Register again to choose your password, or contact support if your organization is already active.</p><a class="ms-button" href="/">Register</a></section>')
 
 class Server(HTTPServer):
     def __init__(self,path,port,origin):

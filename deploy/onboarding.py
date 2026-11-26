@@ -284,7 +284,7 @@ def browser_state(path,ref,key):
     if not REF.fullmatch(ref) or not TOKEN.fullmatch(key):return None
     with database(path) as conn:
         row=browser_row(conn,ref,key)
-        return dict(status=row["status"],email=row["email"],host=row["host"] if row["status"] in ("setup_sent","activated") else None) if row else None
+        return dict(status=row["status"],email=row["email"],host=row["host"] if row["status"] in ("setup_sent","activated") else None,password_ready=bool(conn.execute("SELECT 1 FROM registration_passwords WHERE ref=?",(ref,)).fetchone())) if row else None
 
 def verify_browser(path,ref,key,code):
     if not re.fullmatch(r"[0-9]{6}",code):return False

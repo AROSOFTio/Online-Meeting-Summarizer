@@ -101,7 +101,7 @@ def install_registration_password(root,row,password_hash):
     if result.returncode or "Initial administrator ready" not in result.stdout:
         raise RuntimeError("Initial administrator could not be activated.")
 
-def finish_password(path,root,row,sender=onboarding.mail):
+def finish_password(path,root,row,sender=onboarding.mail,rows=None):
     ref=row.get("registration_ref")
     if not ref or not row.get("enabled"):raise ValueError("Workspace must be running.")
     app=onboarding.application(path,ref)
@@ -111,8 +111,9 @@ def finish_password(path,root,row,sender=onboarding.mail):
     password_hash=onboarding.pending_password(path,ref)
     if not password_hash:return False
     # Start the trial only when the workspace is running and its HTTPS route is ready.
-    trial_policy.start(root,row)
     install_registration_password(root,row,password_hash)
+    trial_policy.start(root,row)
+    if rows is not None:tenantctl.private_write(root/"registry.json",json.dumps(rows,indent=2)+"\n")
     onboarding.finish_registration(path,ref,row["host"])
     try:
         sender(app["email"],"Your MinuteSeal organization is ready","Sign in at https://"+row["host"]+"/login using the password you chose during registration.")

@@ -1,0 +1,24 @@
+# Reuse tested pilot images; never build a complete stack for every signup.
+services:
+  db:
+    mem_limit: 384m
+    cpus: 0.50
+  redis:
+    mem_limit: 96m
+    cpus: 0.20
+  backend:
+    image: cc-minuteseal-backend:latest
+    pull_policy: never
+    mem_limit: 512m
+    cpus: 0.75
+  worker:
+    image: cc-minuteseal-worker:latest
+    pull_policy: never
+    mem_limit: 768m
+    cpus: 0.75
+    command: ["celery","-A","app.workers.tasks","worker","--loglevel=info","--concurrency=1"]
+  frontend:
+    image: cc-minuteseal-frontend:latest
+    pull_policy: never
+    mem_limit: 384m
+    cpus: 0.50

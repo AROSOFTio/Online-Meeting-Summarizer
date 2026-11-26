@@ -12,9 +12,19 @@ def days(root):
     if type(value) is not int or not 1<=value<=365:raise ValueError("Invalid trial duration")
     return value
 
-def configure(root,value):
+def capacity(root):
+    path=root/"trial-policy.json"
+    if not path.exists():return 2
+    days(root)
+    value=json.loads(path.read_text()).get("capacity",2)
+    if type(value) is not int or not 0<=value<=10:raise ValueError("Invalid automatic workspace capacity")
+    return value
+
+def configure(root,value,maximum=None):
     if type(value) is not int or not 1<=value<=365:raise ValueError("Trial duration must be 1–365 days.")
-    tenantctl.private_write(root/"trial-policy.json",json.dumps({"days":value})+"\n")
+    maximum=capacity(root) if maximum is None else maximum
+    if type(maximum) is not int or not 0<=maximum<=10:raise ValueError("Automatic workspace capacity must be 0–10.")
+    tenantctl.private_write(root/"trial-policy.json",json.dumps({"days":value,"capacity":maximum})+"\n")
 
 def start(root,row,clock=None):
     p=row["profile"]
