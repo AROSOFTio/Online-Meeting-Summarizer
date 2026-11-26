@@ -27,7 +27,7 @@ export default function ChangePasswordPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Password change failed"); }
     finally { setBusy(false); }
   }
-  return <AuthShell image="/images/heroes/password.webp">
+  return <AuthShell image="/images/heroes/password.webp" heroTitle="Change password" active="/change-password">
     <form onSubmit={submit} className="space-y-3">
       <h1 className="text-xl font-bold">Change your temporary password</h1>
       <p className="text-sm text-slate-600">Required before accessing your account.</p>

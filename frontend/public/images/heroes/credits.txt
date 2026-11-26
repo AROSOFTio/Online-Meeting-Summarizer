@@ -10,3 +10,6 @@ password.webp: https://www.pexels.com/photo/12902921/
 join.webp: https://www.pexels.com/photo/7710139/
 invitation.webp: https://www.pexels.com/photo/7640434/
 room.webp: https://www.pexels.com/photo/6949523/
+register.webp: https://www.pexels.com/photo/3184291/
+verify.webp: https://www.pexels.com/photo/3184360/
+status.webp: https://www.pexels.com/photo/3184339/

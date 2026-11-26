@@ -39,7 +39,7 @@ export default function LoginPage() {
     }
   };
 
-  return <AuthShell image="/images/heroes/login.webp">
+  return <AuthShell image="/images/heroes/login.webp" heroTitle="Sign in" active="/login">
     <h1 className="text-2xl font-bold tracking-tight text-slate-950">Sign in to MinuteSeal</h1>
     <p className="mt-1 text-sm text-slate-600">Access your organization workspace.</p>
     {error && <p role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">{error}</p>}

@@ -1,5 +1,6 @@
 "use client";
 import PageHero from "@/components/PageHero";
+import PublicNav,{PublicFooter} from "@/components/PublicNav";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -68,19 +69,13 @@ export default function PublicMeetingRoomPage() {
   const displayName = invitation?.known_name || savedName || "Guest";
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-4 sm:py-6">
-      <div className="mx-auto mb-5 w-full max-w-3xl overflow-hidden rounded-md"><PageHero image="/images/heroes/room.webp" title="Meeting room" eyebrow="MinuteSeal" compact heading="p"/></div>
+    <main className="ms-page">
+      <PublicNav active=""/>
+      <PageHero image="/images/heroes/room.webp" title="Meeting room" eyebrow="MinuteSeal" compact heading="p"/>
+      <div className="ms-public-content flex-1 py-5">
       <div className="mx-auto w-full max-w-3xl space-y-5">
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <header className="border-b border-slate-200 px-6 py-6 text-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/minuteseal.svg"
-              alt="MinuteSeal"
-              className="mx-auto h-auto max-h-28 w-auto max-w-[230px] object-contain"
-            />
-            <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Meeting Room</p>
-          </header>
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          
 
           <div className="p-6 sm:p-8">
             {error && (
@@ -154,6 +149,8 @@ export default function PublicMeetingRoomPage() {
           />
         )}
       </div>
+      </div>
+      <PublicFooter/>
     </main>
   );
 }

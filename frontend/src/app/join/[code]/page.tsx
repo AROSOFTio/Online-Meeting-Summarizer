@@ -1,5 +1,6 @@
 "use client";
 import PageHero from "@/components/PageHero";
+import PublicNav,{PublicFooter} from "@/components/PublicNav";
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -110,14 +111,12 @@ export default function PublicJoinPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-4 sm:py-6">
-      <div className="mx-auto mb-5 w-full max-w-xl overflow-hidden rounded-md"><PageHero image="/images/heroes/invitation.webp" title="Meeting invitation" eyebrow="MinuteSeal" compact heading="p"/></div>
-      <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <header className="border-b border-slate-200 px-6 py-6 text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/minuteseal.svg" alt="MinuteSeal" className="mx-auto h-auto max-h-32 w-auto max-w-[240px] object-contain" />
-          <h1 className="mt-3 text-lg font-extrabold text-blue-950">MINUTESEAL</h1>
-        </header>
+    <main className="ms-page">
+      <PublicNav active=""/>
+      <PageHero image="/images/heroes/invitation.webp" title="Meeting invitation" eyebrow="MinuteSeal" compact heading="p"/>
+      <div className="ms-public-content flex-1 py-5">
+      <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        
 
         <div className="p-6 sm:p-8">
           {loading && <div className="py-12 text-center text-sm text-slate-600">Opening meeting invitation...</div>}
@@ -161,6 +160,8 @@ export default function PublicJoinPage() {
           </>}
         </div>
       </div>
+      </div>
+      <PublicFooter/>
     </main>
   );
 }

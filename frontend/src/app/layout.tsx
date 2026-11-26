@@ -21,6 +21,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <head><link rel="stylesheet" href="/minuteseal-public.css?v=2"/></head>
     <body className="min-h-full flex flex-col bg-[#f9fafb]"><Providers>{children}</Providers></body>
   </html>;
 }

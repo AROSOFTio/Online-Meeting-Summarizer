@@ -4,29 +4,46 @@ import argparse
 import html
 import os
 import re
+from datetime import datetime,timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs,urlsplit
 
 import onboarding
 
-CSS="""*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:#16243a;font:15px system-ui,sans-serif}header{background:#14263f;color:#fff;padding:20px 5%;font-weight:700}main{max-width:900px;margin:36px auto;padding:0 18px}h1{font-size:32px;letter-spacing:-.7px;margin:8px 0}p{line-height:1.6;color:#52647a}nav{display:flex;flex-wrap:wrap;gap:18px;margin:20px 0}a{color:#2159bc}section{background:white;border:1px solid #dce4ef;border-radius:12px;padding:24px;margin:20px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}label{display:block;font-size:13px;font-weight:600}input,select{display:block;width:100%;border:1px solid #cbd5e1;border-radius:7px;padding:12px;margin:7px 0 12px;font:inherit;color:#16243a}button{border:0;background:#2359bd;color:white;border-radius:7px;padding:12px 20px;font:inherit;font-weight:600;cursor:pointer}code{overflow-wrap:anywhere;display:block;background:#eef3fa;padding:12px;border-radius:6px;margin:5px 0 16px}.note{font-size:13px}footer{max-width:900px;margin:20px auto;padding:0 18px;color:#64748b;font-size:13px}"""
+CSS="""*{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;background:#fff;color:#0f172a}a{color:#1d4ed8}main.ms-public-content{flex:1;padding-top:20px;padding-bottom:30px}.reg-nav{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px}.reg-nav a{padding:8px 12px;border:1px solid #e2e8f0;border-radius:5px;font-size:13px;font-weight:600;text-decoration:none}.reg-nav a[aria-current=page]{background:#eff6ff;border-color:#bfdbfe}.reg-body>p{margin:0 0 12px;color:#475569}.reg-body section{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:20px;margin:14px 0;max-width:100%}.reg-body .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 18px}.reg-body label{display:block;font-size:13px;font-weight:600;min-width:0}.reg-body input,.reg-body select{display:block;width:100%;min-width:0;border:1px solid #94a3b8;border-radius:5px;padding:9px 11px;margin:5px 0 9px;font:inherit;font-size:14px;color:#0f172a;background:#fff}.reg-body button{border:1px solid #1d4ed8;background:#1d4ed8;color:#fff;border-radius:5px;padding:10px 16px;font:600 14px system-ui;cursor:pointer}.reg-body code{overflow-wrap:anywhere;display:block;background:#f1f5f9;padding:12px;border-radius:5px;margin:5px 0 16px}.reg-body .note{font-size:13px;color:#475569}.reg-body p[role=status]{padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:5px}.reg-body section>p{margin-top:0;color:#475569}.reg-body section form{margin:0}.reg-body section form>button{margin-top:6px}@media(max-width:639px){.reg-body .grid{grid-template-columns:1fr;gap:5px}.reg-body section{padding:15px}.reg-body input,.reg-body select{font-size:16px}.reg-nav{gap:5px}.reg-nav a{padding:7px 8px;font-size:12px}}"""
 BASE=""
 def esc(v):return html.escape(str(v),quote=True)
 def field(label,name,kind="text",maxlength=150):
     return f'<label>{esc(label)}<input name="{esc(name)}" type="{kind}" required maxlength="{maxlength}"></label>'
 def select(label,name,options):
     return '<label>'+esc(label)+'<select name="'+name+'" required>'+''.join('<option value="'+esc(x)+'">'+esc(x.title() if name=="plan" else x)+'</option>' for x in options)+'</select></label>'
+PUBLIC_LINKS=(("/", "Home"),("/features","Features"),("/solutions","Solutions"),("/how-it-works","How it works"),("/templates","Templates"))
+
+def brand_header():
+    links=''.join('<a href="'+href+'">'+label+'</a>' for href,label in PUBLIC_LINKS)
+    return '<header class="ms-header"><div class="ms-shell-inner ms-header-row"><a href="/" class="ms-brand"><img src="/minuteseal.svg" alt="" width="40" height="40"><span>Minute<b>Seal</b></span></a><nav class="ms-primary-nav" aria-label="Main navigation">'+links+'</nav><div class="ms-header-actions"><a href="/login" class="ms-button ms-button-outline">Sign in</a><a href="'+BASE+'/" class="ms-button ms-register-desktop" aria-current="page">Register organization</a><details class="ms-mobile-menu"><summary class="ms-menu-toggle" aria-label="Open navigation"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></summary><nav class="ms-mobile-links" aria-label="Mobile navigation">'+links+'<a href="'+BASE+'/" class="ms-button" aria-current="page">Register organization</a><a href="/setup">Activate workspace</a></nav></details></div></div></header>'
+
+def brand_footer():
+    links=''.join('<a href="'+href+'">'+label+'</a>' for href,label in PUBLIC_LINKS[1:])
+    return '<footer class="ms-footer"><div class="ms-shell-inner ms-footer-row"><span>© '+str(datetime.now(timezone.utc).year)+' MinuteSeal</span><nav class="ms-footer-nav" aria-label="Footer navigation">'+links+'<a href="'+BASE+'/">Register organization</a><a href="/join-meeting">Join a meeting</a><a href="/login">Sign in</a></nav></div></footer>'
+
 def page(title,body):
-    # Prefix only local form and navigation URLs; customer HTTPS links remain unchanged.
+    # Only registration-owned links are prefixed; public navigation is separate.
     body=re.sub(r'\b(href|action|formaction)="/([^"]*)"',lambda m:m.group(1)+'="'+BASE+"/"+m.group(2)+'"',body)
     if BASE:
         body=body.replace('action="'+BASE+'/register"','action="'+BASE+'/"')
-    return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><style>'+CSS+'</style><header>MinuteSeal · Organization registration</header><main><h1>'+esc(title)+'</h1><nav><a href="'+BASE+'/">Create organization</a><a href="'+BASE+'/verify">Verify email</a><a href="'+BASE+'/status">Track registration</a><a href="https://minuteseal.arosoftlabs.com/">Home</a></nav>'+body+'</main><footer>Organization registration · Never submit meeting recordings or confidential documents here.</footer></html>'
+    group="verify" if title in ("Verify your email","Email verified","Verification unsuccessful","Verification request") else "status" if title in ("Track registration","Registration status","Registration unavailable","Registration received") else "register"
+    description={"register":"Create a workspace for your organization.","verify":"Confirm your administrator email.","status":"Check your application progress."}[group]
+    nav_links=[("register",BASE+"/","Create organization"),("verify",BASE+"/verify","Verify email"),("status",BASE+"/status","Track registration")]
+    nav='<nav class="reg-nav" aria-label="Registration navigation">'+''.join('<a href="'+href+'"'+(' aria-current="page"' if key==group else '')+'>'+label+'</a>' for key,href,label in nav_links)+'</nav>'
+    hero='<section data-page-hero="true" class="ms-public-hero"><img class="ms-hero-image" src="/images/heroes/'+group+'.webp" alt="" aria-hidden="true"><div class="ms-hero-overlay" aria-hidden="true"></div><div class="ms-hero-content"><h1 class="ms-hero-title">'+esc(title)+'</h1><p class="ms-hero-description">'+esc(description)+'</p></div></section>'
+    return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><link rel="icon" href="/minuteseal.svg"><link rel="stylesheet" href="/minuteseal-public.css?v=2"><style>'+CSS+'</style></head><body class="ms-page">'+brand_header()+hero+'<main class="ms-public-content">'+nav+'<div class="reg-body">'+body+'</div></main>'+brand_footer()+'</body></html>'
+
 def registration():
     email_ready=bool(os.environ.get("CC_ONBOARD_SMTP_HOST") and os.environ.get("CC_ONBOARD_SMTP_FROM"))
-    notice="" if email_ready else '<p class="note" role="status">Email verification is not yet available. You may submit an application and save your tracking reference, but your workspace cannot be activated until email verification is restored.</p>'
-    return page("Create your organization",'<p>Request a dedicated meeting workspace for your institution. Email verification and platform approval are required before activation.</p>'+notice+'<section><form method="post" action="/register"><div class="grid">'+field("Official organization name","name")+field("Administrator name","contact",maxlength=100)+field("Administrator email","email","email",254)+field("Preferred workspace identifier","slug",maxlength=40)+select("Organization type","sector",onboarding.SECTORS)+select("Requested subscription","plan",onboarding.PLANS)+'</div><p class="note">The requested plan and workspace identifier are subject to review. No payment is collected here. Your information will be used to verify and process this application.</p><button>Request workspace</button></form></section>')
+    notice="" if email_ready else '<p class="note" role="status">Email verification is temporarily unavailable. Submit your application and save your tracking reference.</p>'
+    return page("Create your organization",'<p>Email verification and approval are required before activation.</p>'+notice+'<section><form method="post" action="/register"><div class="grid">'+field("Official organization name","name")+field("Administrator name","contact",maxlength=100)+field("Administrator email","email","email",254)+field("Preferred workspace identifier","slug",maxlength=40)+select("Organization type","sector",onboarding.SECTORS)+select("Requested subscription","plan",onboarding.PLANS)+'</div><p class="note">No payment is collected here. Your details are used to review your application.</p><button>Request workspace</button></form></section>')
 def verify_page():
     return page("Verify your email",'<section><p>Enter the reference and single-use verification code from your email.</p><form method="post" action="/verify">'+field("Registration reference","ref",maxlength=32)+field("Verification code","code","password",43)+'<button>Verify email</button></form></section>')
 def status_page():
@@ -45,7 +62,7 @@ class Handler(BaseHTTPRequestHandler):
     def respond(self,body,status=200):
         raw=body.encode()
         self.send_response(status)
-        for k,v in {"Content-Type":"text/html; charset=utf-8","Content-Length":str(len(raw)),"Cache-Control":"no-store","Referrer-Policy":"no-referrer","X-Frame-Options":"DENY","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"}.items():
+        for k,v in {"Content-Type":"text/html; charset=utf-8","Content-Length":str(len(raw)),"Cache-Control":"no-store","Referrer-Policy":"no-referrer","X-Frame-Options":"DENY","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; style-src 'self' 'unsafe-inline'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"}.items():
             self.send_header(k,v)
         self.end_headers()
         self.wfile.write(raw)
