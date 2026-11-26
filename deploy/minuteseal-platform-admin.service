@@ -6,7 +6,7 @@ Requires=docker.service
 Type=simple
 User=root
 WorkingDirectory=/opt/minuteseal-pilot
-ExecStart=/usr/bin/python3 /opt/minuteseal-pilot/deploy/platform_admin.py --root /var/lib/minuteseal-pilot --port 18790
+ExecStart=/usr/bin/python3 /opt/minuteseal-pilot/deploy/platform_admin.py --root /var/lib/minuteseal-pilot --port 18790 --origin https://admin-minuteseal.arosoftlabs.com
 Restart=on-failure
 RestartSec=5
 Environment=CC_ONBOARD_INBOX=/var/lib/minuteseal-registration/inbox.db

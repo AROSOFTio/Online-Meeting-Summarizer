@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""MinuteSeal private operator console. Bind to loopback; access via SSH tunnel."""
+"""MinuteSeal operator console. Loopback listener behind a dedicated HTTPS origin."""
 import argparse
 import platform_mfa
+import platform_web_enroll as web_enroll
 import getpass
 import hashlib
 import hmac
@@ -279,8 +280,18 @@ def page(title,body):
     return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><style>'+CSS+'</style>'+body+'</html>'
 
 
-def setup_required_page():
-    return page("First-time setup",'<main class="login panel"><h1>MinuteSeal</h1><p>Platform administrator setup required.</p><p>Enroll your password and authenticator from the trusted operator terminal. Public enrollment is disabled.</p></main>')
+def setup_required_page(available=False,message=""):
+    body='<main class="login panel"><h1>MinuteSeal</h1><p class="muted">Platform administrator setup required.</p>'
+    if message:body+='<p class="notice" role="alert">'+esc(message)+'</p>'
+    if available:
+        body+='<p>Use your privately issued, one-time enrollment key. Choose a unique password and then enroll your authenticator.</p><form method="post" action="/setup"><label>Private enrollment key<input name="key" type="password" autocomplete="off" maxlength="128" required></label><label>New platform password<input name="password" type="password" autocomplete="new-password" minlength="16" maxlength="256" required></label><label>Confirm password<input name="confirm" type="password" autocomplete="new-password" minlength="16" maxlength="256" required></label><button class="primary">Continue to authenticator</button></form>'
+    else:
+        body+='<p>First-time access is locked. An authorized operator must enable a private enrollment key or complete setup at a trusted terminal.</p>'
+    return page("First-time setup",body+'<p class="fine">This is not customer registration. No default password or public administrator signup is available.</p></main>')
+
+
+def enrollment_code_page(challenge,message=""):
+    return page("Confirm authenticator",'<main class="login panel"><h1>Set up MFA</h1>'+('<p role="alert" class="notice">'+esc(message)+'</p>' if message else '')+'<p>In your authenticator app, add a time-based account named MinuteSeal Platform. Enter the following setup key (6 digits, 30 seconds).</p><p style="font:600 15px monospace;overflow-wrap:anywhere;background:#eef3fa;padding:12px">'+esc(challenge["secret"])+'</p><form method="post" action="/setup/confirm">'+hidden("csrf",challenge["csrf"])+'<label>Current authenticator code<input name="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><button class="primary">Finish setup</button></form><p class="fine">This step expires in five minutes. Keep your authenticator key private and save a secure recovery copy offline.</p></main>')
 
 
 def login_page(message=""):
@@ -445,12 +456,20 @@ def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=
 
 
 class Console(HTTPServer):
-    def __init__(self,root,port):
+    def __init__(self,root,port,origin=None):
+        if origin:
+            u=urlsplit(origin)
+            if u.scheme!="https" or not u.hostname or u.netloc!=u.hostname or not re.fullmatch(r"[a-z0-9.-]+",u.hostname) or u.path or u.query or u.fragment:
+                raise ValueError("Provide a dedicated HTTPS origin without a trailing slash.")
         self.root=root
         self.sessions={}
         self.attempts=[]
+        self.setup_attempts=[]
+        self.enrollment=None
+        self.secure=bool(origin)
+        self.cookie_name="__Host-minuteseal-platform" if self.secure else COOKIE
         super().__init__(("127.0.0.1",port),Handler)
-        self.origin=f"http://127.0.0.1:{self.server_port}"
+        self.origin=origin or f"http://127.0.0.1:{self.server_port}"
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -479,10 +498,13 @@ class Handler(BaseHTTPRequestHandler):
     def valid_host(self):
         return self.headers.get("Host")==urlsplit(self.server.origin).netloc
 
+    def session_cookie(self,token,clear=False):
+        return f"{self.server.cookie_name}={token}; Path=/; HttpOnly; SameSite=Strict"+("; Secure" if self.server.secure else "")+("; Max-Age=0" if clear else "")
+
     def session(self):
         try:
             cookie=SimpleCookie(self.headers.get("Cookie",""))
-            token=cookie[COOKIE].value
+            token=cookie[self.server.cookie_name].value
         except (KeyError,ValueError):
             return None,None
         s=self.server.sessions.get(token)
@@ -508,7 +530,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_html(page("Denied","Invalid host"),421)
         u=urlsplit(self.path)
         _,session=self.session()
-        if not session:return self.send_html(login_page() if platform_mfa.enrolled(self.server.root) else setup_required_page())
+        if not session:
+            if platform_mfa.enrolled(self.server.root):return self.send_html(login_page())
+            return self.send_html(setup_required_page(self.server.secure and web_enroll.available(self.server.root)))
         q=parse_qs(u.query)
         if u.path=="/billing/document":
             try:
@@ -518,6 +542,50 @@ class Handler(BaseHTTPRequestHandler):
             except (KeyError,ValueError):return self.send_html(page("Not found","Document unavailable"),404)
         if u.path!="/":return self.send_html(page("Not found","Not found"),404)
         self.show_dashboard(session,message=session.pop("flash",""),query=one(q,"q")[:150],state=one(q,"state"))
+
+    def enrollment_post(self,path,form):
+        root=self.server.root
+        if not self.server.secure or platform_mfa.enrolled(root) or not web_enroll.available(root):
+            return self.send_html(setup_required_page(),403)
+        clock=time.monotonic()
+        self.server.setup_attempts=[t for t in self.server.setup_attempts if clock-t<60]
+        if len(self.server.setup_attempts)>=5:
+            return self.send_html(setup_required_page(True,"Too many attempts. Retry in one minute."),429)
+        self.server.setup_attempts.append(clock)
+        if path=="/setup":
+            try:
+                if one(form,"password")!=one(form,"confirm"):
+                    raise ValueError("Passwords do not match.")
+                challenge=web_enroll.begin(root,one(form,"key"),one(form,"password"),password_record)
+            except ValueError:
+                return self.send_html(setup_required_page(True,"Invalid enrollment key or password. Use at least 16 characters."),400)
+            self.server.enrollment=challenge
+            return self.send_html(enrollment_code_page(challenge),cookie=web_enroll.cookie(challenge["nonce"]))
+        challenge=self.server.enrollment
+        try:
+            cookie=SimpleCookie(self.headers.get("Cookie",""))
+            nonce=cookie[web_enroll.COOKIE].value
+        except (KeyError,ValueError):
+            nonce=""
+        if not challenge or not web_enroll.valid_challenge(challenge,nonce,one(form,"csrf")):
+            self.server.enrollment=None
+            return self.send_html(setup_required_page(True,"Enrollment expired. Start again."),403,cookie=web_enroll.cookie("",clear=True))
+        challenge["attempts"]+=1
+        step=platform_mfa.match(challenge["secret"],one(form,"otp"))
+        if step is None:
+            if challenge["attempts"]>=5:
+                self.server.enrollment=None
+                return self.send_html(setup_required_page(True,"Start again with your private enrollment key."),429,cookie=web_enroll.cookie("",clear=True))
+            return self.send_html(enrollment_code_page(challenge,"Incorrect authenticator code."),401)
+        try:
+            web_enroll.finish(root,challenge,step)
+        except ValueError:
+            self.server.enrollment=None
+            return self.send_html(setup_required_page(web_enroll.available(root),"Enrollment unavailable. Start again."),403,cookie=web_enroll.cookie("",clear=True))
+        self.server.enrollment=None
+        self.server.setup_attempts.clear()
+        audit(root,"enroll","platform","success")
+        return self.send_html(login_page("Administrator created. Sign in with a fresh authenticator code."),cookie=web_enroll.cookie("",clear=True))
 
     def do_POST(self):
         if not self.valid_host() or self.headers.get("Origin")!=self.server.origin:
@@ -531,6 +599,8 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError,UnicodeError):
             return self.send_html(page("Invalid request","Invalid form"),400)
         path=urlsplit(self.path).path
+        if path in ("/setup","/setup/confirm"):
+            return self.enrollment_post(path,form)
         if path=="/login":
             clock=time.monotonic()
             self.server.attempts=[t for t in self.server.attempts if clock-t<60]
@@ -538,7 +608,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_html(login_page("Too many attempts. Retry after one minute."),429)
             self.server.attempts.append(clock)
             if not platform_mfa.enrolled(self.server.root):
-                return self.send_html(setup_required_page(),503)
+                return self.send_html(setup_required_page(self.server.secure and web_enroll.available(self.server.root)),503)
             if not platform_mfa.verify(self.server.root,one(form,"password"),one(form,"otp"),check_password):
                 audit(self.server.root,"login","platform","rejected")
                 return self.send_html(login_page("Incorrect password or authenticator code."),401)
@@ -551,7 +621,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(303)
             self.send_header("Location","/")
             self.send_header("Cache-Control","no-store")
-            self.send_header("Set-Cookie",f"{COOKIE}={token}; Path=/; HttpOnly; SameSite=Strict")
+            self.send_header("Set-Cookie",self.session_cookie(token))
             self.end_headers()
             return
         token,s=self.session()
@@ -560,7 +630,8 @@ class Handler(BaseHTTPRequestHandler):
         action=one(form,"action")
         if action=="logout":
             self.server.sessions.pop(token,None)
-            return self.send_html(login_page(),cookie=f"{COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0")
+            audit(self.server.root,"logout","platform","success")
+            return self.send_html(login_page(),cookie=self.session_cookie("",clear=True))
         if action=="suspend" and one(form,"confirm")!="yes":
             return self.show_dashboard(s,"Confirm suspension before stopping a workspace.")
         try:
@@ -602,6 +673,7 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root",type=Path,default=tenantctl.DEFAULT_ROOT)
     parser.add_argument("--port",type=int,default=18790)
+    parser.add_argument("--origin",default=None,help="Dedicated HTTPS reverse proxy origin.")
     parser.add_argument("--init-password",action="store_true")
     args=parser.parse_args()
     root=args.root.resolve()
@@ -611,8 +683,8 @@ def main():
         return
     with tenantctl.registry(root):
         platform_mfa.enrolled(root)
-    server=Console(root,args.port)
-    print(f"Private MinuteSeal console listening on {server.origin}; access via SSH tunnel only.")
+    server=Console(root,args.port,args.origin)
+    print(f"MinuteSeal console bound to loopback; allowed origin {server.origin}.")
     server.serve_forever()
 
 
