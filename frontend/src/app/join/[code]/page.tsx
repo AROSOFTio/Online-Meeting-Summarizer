@@ -113,8 +113,8 @@ export default function PublicJoinPage() {
       <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <header className="border-b border-slate-200 px-6 py-6 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/api/settings/logo" alt="Starlight Secondary School" className="mx-auto h-auto max-h-32 w-auto max-w-[240px] object-contain" />
-          <h1 className="mt-3 text-lg font-extrabold text-blue-950">STARLIGHT SECONDARY SCHOOL</h1>
+          <img src="/convenecore.svg" alt="ConveneCore" className="mx-auto h-auto max-h-32 w-auto max-w-[240px] object-contain" />
+          <h1 className="mt-3 text-lg font-extrabold text-blue-950">CONVENECORE</h1>
         </header>
 
         <div className="p-6 sm:p-8">

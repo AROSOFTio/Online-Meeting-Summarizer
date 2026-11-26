@@ -34,7 +34,7 @@ interface MeetingReportProps {
 
 export const MeetingReport: React.FC<MeetingReportProps> = ({
   meetingTitle,
-  schoolName = "Starlight Secondary School",
+  schoolName = "ConveneCore",
   dateStr = new Date().toLocaleDateString(),
   summaryText,
   keyPoints = [],

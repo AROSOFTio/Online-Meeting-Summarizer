@@ -23,7 +23,7 @@ export default function JoinMeetingPage() {
       <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
         <div className="mb-7 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/api/settings/logo" alt="Starlight Secondary School" className="mx-auto mb-4 h-auto max-h-32 w-auto max-w-[220px] object-contain" />
+          <img src="/convenecore.svg" alt="ConveneCore" className="mx-auto mb-4 h-auto max-h-32 w-auto max-w-[220px] object-contain" />
           <h1 className="text-xl font-extrabold text-slate-950">Join Meeting</h1>
           <p className="mt-1 text-sm text-slate-500">Paste your invitation link or enter the code from the invitation.</p>
         </div>

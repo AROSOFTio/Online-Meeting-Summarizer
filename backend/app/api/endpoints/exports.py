@@ -63,7 +63,7 @@ def _gather_export_data(meeting_id: int, db: Session):
     setting_rows = db.query(SystemSetting).all()
     settings = {row.key: row.value for row in setting_rows}
     organization = {
-        "name": settings.get("school_name", "Starlight Secondary School"),
+        "name": settings.get("school_name", "ConveneCore"),
         "address": settings.get("organization_address", ""),
         "phone": settings.get("organization_phone", ""),
         "email": settings.get("organization_email", ""),

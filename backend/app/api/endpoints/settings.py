@@ -14,17 +14,16 @@ from app.models.models import SystemSetting, User
 
 router = APIRouter()
 LOGO_SETTING_KEY = "school_logo_file"
-BUNDLED_LOGO = Path(__file__).resolve().parents[2] / "static" / "starlight-logo.jpg"
 ALLOWED_LOGO_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
 
 DEFAULT_SETTINGS = {
-    "school_name": "Starlight Secondary School",
+    "school_name": settings.SCHOOL_NAME,
     "school_logo_url": "/api/settings/logo",
-    "organization_address": "Amuria District, Uganda",
+    "organization_address": "",
     "organization_phone": "",
     "organization_email": "",
     "organization_website": settings.PUBLIC_APP_URL,
-    "organization_motto": "RISE AND SHINE",
+    "organization_motto": "",
     "organization_registration": "",
     "timezone": "Africa/Kampala",
     "retention_period_days": "365",
@@ -91,9 +90,7 @@ def get_logo(db: Session = Depends(deps.get_db)):
     custom = db.query(SystemSetting).filter(SystemSetting.key == LOGO_SETTING_KEY).first()
     if custom and os.path.isfile(custom.value) and not custom.value.lower().endswith(".svg"):
         return FileResponse(custom.value)
-    if BUNDLED_LOGO.is_file():
-        return FileResponse(BUNDLED_LOGO, media_type="image/jpeg")
-    raise HTTPException(status_code=404, detail="School logo is not available")
+    raise HTTPException(status_code=404, detail="Organization logo is not available")
 
 
 @router.put("", include_in_schema=False)

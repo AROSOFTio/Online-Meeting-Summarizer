@@ -64,7 +64,7 @@ class EmailService:
 
         message = EmailMessage()
         message["Subject"] = subject
-        message["From"] = f"Starlight Secondary School <{settings.SMTP_FROM_EMAIL}>"
+        message["From"] = f"ConveneCore <{settings.SMTP_FROM_EMAIL}>"
         if len(unique_recipients) == 1:
             message["To"] = unique_recipients[0]
         else:
@@ -81,13 +81,11 @@ class EmailService:
 
     @staticmethod
     def _brand_header() -> str:
-        logo = f"{settings.PUBLIC_APP_URL}/api/settings/logo"
         return (
             '<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#1f2937">'
             '<div style="text-align:center;border-bottom:3px solid #173ea5;padding:18px 0">'
-            f'<img src="{html.escape(logo)}" alt="Starlight S.S" width="110" style="max-width:110px;height:auto">'
-            '<h2 style="margin:8px 0 2px;color:#173ea5">STARLIGHT SECONDARY SCHOOL</h2>'
-            '<div style="font-size:12px;color:#4b5563">RISE AND SHINE</div></div>'
+            '<h2 style="margin:8px 0 2px;color:#173ea5">CONVENECORE</h2>'
+            '</div>'
         )
 
     def send_meeting_invitation(self, recipient: str, meeting_title: str, meeting_date: datetime, invitation_url: str, organization_name: str) -> int:

@@ -73,8 +73,8 @@ export default function PublicMeetingRoomPage() {
           <header className="border-b border-slate-200 px-6 py-6 text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/api/settings/logo"
-              alt="Starlight Secondary School"
+              src="/convenecore.svg"
+              alt="ConveneCore"
               className="mx-auto h-auto max-h-28 w-auto max-w-[230px] object-contain"
             />
             <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Meeting Room</p>

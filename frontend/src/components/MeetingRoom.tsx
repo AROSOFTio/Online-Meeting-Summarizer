@@ -47,7 +47,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       setSummary(
         `The meeting "${meetingTitle}" convened with ${participants.length} attendees. The agenda items were reviewed, decisions recorded, and action plans approved.`,
       );
-      setDecisions([{ text: "Approved academic action plan for Starlight Secondary School." }]);
+      setDecisions([{ text: "Sample decision — not an official resolution." }]);
       setActionItems([
         {
           description: "Prepare District performance report",
@@ -73,7 +73,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
           </div>
           {joinCode && (
             <p className="font-mono text-xs text-slate-400">
-              Join Link: <span className="font-bold text-indigo-400">starlightsecondaryschool.com/join/{joinCode}</span>
+              Join Link: <span className="font-bold text-indigo-400">/join/{joinCode}</span>
             </p>
           )}
         </div>

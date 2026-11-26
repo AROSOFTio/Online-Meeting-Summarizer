@@ -56,11 +56,11 @@ export default function LoginPage() {
         <div className="mb-7 text-center">
           {!logoFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src="/api/settings/logo?v=official" alt="Starlight Secondary School" onError={() => setLogoFailed(true)} className="mx-auto mb-4 h-28 w-28 object-contain" />
+            <img src="/convenecore.svg" alt="ConveneCore" onError={() => setLogoFailed(true)} className="mx-auto mb-4 h-28 w-28 object-contain" />
           ) : (
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-800 text-xl font-black tracking-tight text-white shadow-sm">SS</div>
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-800 text-xl font-black tracking-tight text-white shadow-sm">CC</div>
           )}
-          <h1 className="text-xl font-extrabold text-slate-950">STARLIGHT SECONDARY SCHOOL</h1>
+          <h1 className="text-xl font-extrabold text-slate-950">CONVENECORE</h1>
           <p className="mt-1 text-sm text-slate-500">Meeting Summarizer</p>
         </div>
 
@@ -68,7 +68,7 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <label className="block text-sm font-medium text-slate-700">Email Address
-            <input type="email" autoComplete="username" {...register("email")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="name@starlightsecondaryschool.com" />
+            <input type="email" autoComplete="username" {...register("email")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="name@example.com" />
             {errors.email && <span className="mt-1 block text-xs text-red-600">{errors.email.message}</span>}
           </label>
           <label className="block text-sm font-medium text-slate-700">Password
@@ -81,6 +81,7 @@ export default function LoginPage() {
         <div className="my-6 flex items-center gap-3 text-xs text-slate-400"><span className="h-px flex-1 bg-slate-200" />OR<span className="h-px flex-1 bg-slate-200" /></div>
         <Link href="/join-meeting" className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800 hover:bg-blue-100"><Users size={17} />Join an Invited Meeting</Link>
         <p className="mt-2 text-center text-xs text-slate-400">Invitees do not need a staff login.</p>
+        <Link href="/templates" className="mt-5 block text-center text-sm font-semibold text-blue-700">Browse free meeting formats</Link>
       </div>
     </main>
   );

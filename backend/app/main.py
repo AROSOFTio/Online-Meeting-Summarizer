@@ -44,7 +44,7 @@ async def lifespan(app: FastAPI):
             admin = User(
                 email=settings.ADMIN_EMAIL,
                 hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
-                full_name="Starlight Administrator",
+                full_name="Workspace Administrator",
                 role=UserRole.admin,
                 is_active=True,
             )
@@ -55,7 +55,7 @@ async def lifespan(app: FastAPI):
             # account is authoritative so changing ADMIN_PASSWORD/ADMIN_EMAIL
             # in production does not leave a stale database credential behind.
             admin.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
-            admin.full_name = admin.full_name or "Starlight Administrator"
+            admin.full_name = admin.full_name or "Workspace Administrator"
             admin.role = UserRole.admin
             admin.is_active = True
 
