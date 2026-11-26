@@ -9,6 +9,8 @@ WorkingDirectory=/opt/minuteseal-pilot
 ExecStart=/usr/bin/python3 /opt/minuteseal-pilot/deploy/platform_admin.py --root /var/lib/minuteseal-pilot --port 18790
 Restart=on-failure
 RestartSec=5
+Environment=CC_ONBOARD_INBOX=/var/lib/minuteseal-registration/inbox.db
+EnvironmentFile=-/etc/minuteseal/onboarding.env
 UMask=0077
 NoNewPrivileges=true
 PrivateTmp=true

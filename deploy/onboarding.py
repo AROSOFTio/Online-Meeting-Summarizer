@@ -120,6 +120,9 @@ def register(path,data,origin,sender=mail):
     status_key=secrets.token_urlsafe(32)
     with database(path) as conn:
         conn.execute("BEGIN IMMEDIATE")
+        conn.execute("DELETE FROM applications WHERE status=\'unverified\' AND created<?",(now-7*TTL,))
+        if conn.execute("SELECT count(*) FROM applications WHERE status=\'unverified\'").fetchone()[0]>=1000:
+            raise ValueError("Registration queue is temporarily full. Try again later.")
         reserve_mail(conn,data["email"],now)
         # Do not expose whether someone else has requested this workspace.
         conn.execute("""INSERT INTO applications

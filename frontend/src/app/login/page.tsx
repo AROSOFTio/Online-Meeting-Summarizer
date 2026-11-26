@@ -51,5 +51,6 @@ export default function LoginPage() {
     </form>
     <p className="mt-4 text-center text-sm text-slate-600">First time here? <Link href="/setup" className="font-semibold text-blue-700">Set up workspace</Link></p>
     <div className="mt-4 border-t border-slate-200 pt-4"><Link href="/join-meeting" className="flex items-center justify-center gap-2 rounded-md border border-blue-700 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"><Users size={17}/>Join an invited meeting</Link><p className="mt-2 text-center text-xs text-slate-600">Invitees do not need a staff login.</p></div>
-  </AuthShell>;
+  <p className="mt-3 text-center text-sm text-slate-600">New organization? <a href="/register/" className="font-semibold text-blue-700">Register here</a></p>
+    </AuthShell>;
 }

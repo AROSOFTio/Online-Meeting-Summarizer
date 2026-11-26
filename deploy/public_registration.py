@@ -3,6 +3,7 @@
 import argparse
 import html
 import os
+import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs,urlsplit
@@ -10,15 +11,22 @@ from urllib.parse import parse_qs,urlsplit
 import onboarding
 
 CSS="""*{box-sizing:border-box}body{margin:0;background:#f4f7fb;color:#16243a;font:15px system-ui,sans-serif}header{background:#14263f;color:#fff;padding:20px 5%;font-weight:700}main{max-width:900px;margin:36px auto;padding:0 18px}h1{font-size:32px;letter-spacing:-.7px;margin:8px 0}p{line-height:1.6;color:#52647a}nav{display:flex;flex-wrap:wrap;gap:18px;margin:20px 0}a{color:#2159bc}section{background:white;border:1px solid #dce4ef;border-radius:12px;padding:24px;margin:20px 0}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:15px}label{display:block;font-size:13px;font-weight:600}input,select{display:block;width:100%;border:1px solid #cbd5e1;border-radius:7px;padding:12px;margin:7px 0 12px;font:inherit;color:#16243a}button{border:0;background:#2359bd;color:white;border-radius:7px;padding:12px 20px;font:inherit;font-weight:600;cursor:pointer}code{overflow-wrap:anywhere;display:block;background:#eef3fa;padding:12px;border-radius:6px;margin:5px 0 16px}.note{font-size:13px}footer{max-width:900px;margin:20px auto;padding:0 18px;color:#64748b;font-size:13px}"""
+BASE=""
 def esc(v):return html.escape(str(v),quote=True)
 def field(label,name,kind="text",maxlength=150):
     return f'<label>{esc(label)}<input name="{esc(name)}" type="{kind}" required maxlength="{maxlength}"></label>'
 def select(label,name,options):
     return '<label>'+esc(label)+'<select name="'+name+'" required>'+''.join('<option value="'+esc(x)+'">'+esc(x.title() if name=="plan" else x)+'</option>' for x in options)+'</select></label>'
 def page(title,body):
-    return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><style>'+CSS+'</style><header>MinuteSeal · Professional meeting management</header><main><h1>'+esc(title)+'</h1><nav><a href="/">Create organization</a><a href="/verify">Verify email</a><a href="/status">Track registration</a></nav>'+body+'</main><footer>Organization registration · Never submit meeting recordings or confidential documents here.</footer></html>'
+    # Prefix only local form and navigation URLs; customer HTTPS links remain unchanged.
+    body=re.sub(r'\b(href|action|formaction)="/([^"]*)"',lambda m:m.group(1)+'="'+BASE+"/"+m.group(2)+'"',body)
+    if BASE:
+        body=body.replace('action="'+BASE+'/register"','action="'+BASE+'/"')
+    return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><style>'+CSS+'</style><header>MinuteSeal · Organization registration</header><main><h1>'+esc(title)+'</h1><nav><a href="'+BASE+'/">Create organization</a><a href="'+BASE+'/verify">Verify email</a><a href="'+BASE+'/status">Track registration</a><a href="https://minuteseal.arosoftlabs.com/">Home</a></nav>'+body+'</main><footer>Organization registration · Never submit meeting recordings or confidential documents here.</footer></html>'
 def registration():
-    return page("Create your organization",'<p>Request a dedicated meeting workspace for your institution. Email verification and platform approval are required before activation.</p><section><form method="post" action="/register"><div class="grid">'+field("Official organization name","name")+field("Administrator name","contact",maxlength=100)+field("Administrator email","email","email",254)+field("Preferred workspace identifier","slug",maxlength=40)+select("Organization type","sector",onboarding.SECTORS)+select("Requested subscription","plan",onboarding.PLANS)+'</div><p class="note">The requested plan and workspace identifier are subject to review. No payment is collected here. Your information will be used to verify and process this application.</p><button>Request workspace</button></form></section>')
+    email_ready=bool(os.environ.get("CC_ONBOARD_SMTP_HOST") and os.environ.get("CC_ONBOARD_SMTP_FROM"))
+    notice="" if email_ready else '<p class="note" role="status">Email verification is not yet available. You may submit an application and save your tracking reference, but your workspace cannot be activated until email verification is restored.</p>'
+    return page("Create your organization",'<p>Request a dedicated meeting workspace for your institution. Email verification and platform approval are required before activation.</p>'+notice+'<section><form method="post" action="/register"><div class="grid">'+field("Official organization name","name")+field("Administrator name","contact",maxlength=100)+field("Administrator email","email","email",254)+field("Preferred workspace identifier","slug",maxlength=40)+select("Organization type","sector",onboarding.SECTORS)+select("Requested subscription","plan",onboarding.PLANS)+'</div><p class="note">The requested plan and workspace identifier are subject to review. No payment is collected here. Your information will be used to verify and process this application.</p><button>Request workspace</button></form></section>')
 def verify_page():
     return page("Verify your email",'<section><p>Enter the reference and single-use verification code from your email.</p><form method="post" action="/verify">'+field("Registration reference","ref",maxlength=32)+field("Verification code","code","password",43)+'<button>Verify email</button></form></section>')
 def status_page():
@@ -41,10 +49,16 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header(k,v)
         self.end_headers()
         self.wfile.write(raw)
+    def route_path(self):
+        path=urlsplit(self.path).path
+        if BASE and (path==BASE or path.startswith(BASE+"/")):
+            return path[len(BASE):] or "/"
+        if BASE:return None
+        return path
     def do_GET(self):
         if self.headers.get("Host")!=self.server.hostname:
             return self.respond(page("Unavailable","Invalid host"),421)
-        view={"/":registration,"/verify":verify_page,"/status":status_page}.get(urlsplit(self.path).path)
+        view={"/":registration,"/verify":verify_page,"/status":status_page}.get(self.route_path())
         return self.respond(view() if view else page("Not found","Page not found"),200 if view else 404)
     def do_POST(self):
         if self.headers.get("Host")!=self.server.hostname or self.headers.get("Origin")!=self.server.origin:
@@ -54,15 +68,15 @@ class Handler(BaseHTTPRequestHandler):
             if not 0<length<=8192 or self.headers.get("Content-Type","").split(";")[0]!="application/x-www-form-urlencoded":
                 raise ValueError("Invalid form.")
             f={k:v[0] for k,v in parse_qs(self.rfile.read(length).decode(),keep_blank_values=True,max_num_fields=16).items()}
-            path=urlsplit(self.path).path
-            if path=="/register":
-                ref,key,sent=onboarding.register(self.server.inbox,f,self.server.origin)
+            path=self.route_path()
+            if path=="/register" or (BASE and path=="/"):
+                ref,key,sent=onboarding.register(self.server.inbox,f,self.server.origin+BASE)
                 return self.respond(page("Registration received",'<section><p>'+("Check your email for the verification code." if sent else "Email delivery could not be confirmed. Use the tracking key to retry after one minute.")+'</p><strong>Registration reference</strong><code>'+esc(ref)+'</code><strong>Private tracking key</strong><code>'+esc(key)+'</code><p>Save both securely. The tracking key is not recoverable from the service.</p><a href="/verify">Verify email</a> · <a href="/status">Track registration</a></section>'))
             if path=="/verify":
                 ok=onboarding.verify(self.server.inbox,f.get("ref",""),f.get("code",""))
                 return self.respond(page("Email verified" if ok else "Verification unsuccessful",'<section><p>'+("Your application is awaiting platform approval." if ok else "Invalid, expired or already-used code. Check your registration or request a new code.")+'</p></section>'),200 if ok else 400)
             if path=="/resend":
-                onboarding.resend(self.server.inbox,f.get("ref",""),f.get("key",""),self.server.origin)
+                onboarding.resend(self.server.inbox,f.get("ref",""),f.get("key",""),self.server.origin+BASE)
                 return self.respond(page("Verification request",'<section><p>If the reference and key are valid and eligible, a new verification email has been requested.</p></section>'))
             if path=="/status":
                 row=onboarding.get_status(self.server.inbox,f.get("ref",""),f.get("key",""))
@@ -82,7 +96,11 @@ def main():
     p.add_argument("--inbox",type=Path,required=True)
     p.add_argument("--origin",required=True)
     p.add_argument("--port",type=int,default=18791)
+    p.add_argument("--prefix",default="")
     args=p.parse_args()
+    global BASE
+    if args.prefix not in ("","/register"):p.error("Unsupported registration prefix")
+    BASE=args.prefix
     u=urlsplit(args.origin)
     if u.scheme!="https" or not u.hostname or u.username or u.password or u.path or u.query or u.fragment:
         p.error("Provide a dedicated HTTPS origin without a trailing slash.")

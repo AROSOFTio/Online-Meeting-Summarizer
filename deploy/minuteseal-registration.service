@@ -1,0 +1,24 @@
+[Unit]
+Description=MinuteSeal public organization registration
+After=network.target
+[Service]
+Type=simple
+DynamicUser=true
+StateDirectory=minuteseal-registration
+StateDirectoryMode=0700
+WorkingDirectory=/opt/minuteseal-pilot/deploy
+ExecStart=/usr/bin/python3 /opt/minuteseal-pilot/deploy/public_registration.py --inbox /var/lib/minuteseal-registration/inbox.db --origin https://minuteseal.arosoftlabs.com --prefix /register --port 18791
+EnvironmentFile=-/etc/minuteseal/onboarding.env
+UMask=0077
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+[Install]
+WantedBy=multi-user.target

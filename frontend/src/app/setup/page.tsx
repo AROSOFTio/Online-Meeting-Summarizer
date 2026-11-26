@@ -60,5 +60,6 @@ export default function SetupPage() {
         </form>
         <p className="mt-4 text-center text-sm text-slate-600">Already activated? <Link href="/login" className="font-semibold text-blue-700">Sign in</Link></p>
       </>}
-  </AuthShell>;
+  <p className="mt-3 text-center text-sm text-slate-600">New organization? <a href="/register/" className="font-semibold text-blue-700">Register here</a></p>
+    </AuthShell>;
 }
