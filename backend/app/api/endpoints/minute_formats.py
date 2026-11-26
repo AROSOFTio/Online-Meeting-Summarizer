@@ -13,7 +13,8 @@ router = APIRouter()
 
 
 def meeting_access(db, meeting_id, user, write=False):
-    meeting = db.get(Meeting, meeting_id)
+    query = db.query(Meeting).filter(Meeting.id == meeting_id)
+    meeting = query.with_for_update().first() if write else query.first()
     if not meeting:
         raise HTTPException(404, "Meeting not found")
     if user.role != UserRole.admin and meeting.owner_id != user.id:
@@ -79,7 +80,7 @@ class Values(BaseModel):
 @router.put("/meeting/{meeting_id}/values")
 def edit_values(meeting_id:int,body:Values,db:Session=Depends(deps.get_db),user:User=Depends(deps.get_minutes_editor)):
     meeting_access(db,meeting_id,user,True)
-    snapshot=get_snapshot(db,meeting_id)
+    snapshot=get_snapshot(db,meeting_id,lock=True)
     if not snapshot:
         raise HTTPException(404,"No format selected")
     row,definition,_=snapshot

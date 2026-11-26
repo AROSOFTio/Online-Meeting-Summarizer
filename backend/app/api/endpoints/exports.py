@@ -186,7 +186,8 @@ def finalize_and_share_minutes(
     current_user: User = Depends(deps.get_admin_user),
 ):
     meeting, participants, summary_text, decisions, action_items, transcript_text, organization = _gather_export_data(meeting_id, db)
-    snapshot = get_snapshot(db, meeting_id)
+    db.query(Meeting).filter(Meeting.id == meeting_id).with_for_update().first()
+    snapshot = get_snapshot(db, meeting_id, lock=True)
     if snapshot:
         row, definition, values = snapshot
         if meeting.status.value != "completed":
@@ -218,7 +219,12 @@ def finalize_and_share_minutes(
     temporary.replace(path)
     if snapshot:
         row.status = "final"
-        db.commit()
+        try:
+            db.commit()
+        except Exception:
+            path.unlink(missing_ok=True)
+            db.rollback()
+            raise
 
     recipients = sorted({p.email.strip() for p in meeting.participants if p.email and p.email.strip()})
     delivered = 0

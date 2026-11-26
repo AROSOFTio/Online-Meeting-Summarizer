@@ -17,6 +17,7 @@ def test_formats_validate_and_render():
     fmt=definition()
     values=validate_values(fmt,{"a":"Approve the report","b":"Review budget\tFinance lead\t2026-12-15\tPending"})
     assert not missing_required(fmt,values)
+    assert validate_values(fmt,{"b":"Review budget\t\t\t"})["b"].endswith("\t\t\t")
     pdf=render_pdf(fmt,values,{"name":"Example Committee"})
     assert pdf.startswith(b"%PDF")
     doc=Document(io.BytesIO(render_docx(fmt,values,{"name":"Example Committee"})))

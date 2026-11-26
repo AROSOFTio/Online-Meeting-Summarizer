@@ -65,7 +65,9 @@ def validate_values(definition, values):
         value = values.get(f.id, "")
         if not isinstance(value, str) or len(value) > 30000:
             raise ValueError("Invalid section value")
-        value = value.strip()
+        value = value.strip("\r\n") if f.kind == "table" else value.strip()
+        if not value.strip():
+            value = ""
         if value and f.kind == "date":
             date.fromisoformat(value)
         if value and f.kind == "time":
@@ -150,21 +152,24 @@ def generate_values(db, meeting, definition, transcript):
     return validate_values(definition, values)
 
 
-def get_snapshot(db, meeting_id):
-    row = db.get(MeetingMinuteFormat, meeting_id)
+def get_snapshot(db, meeting_id, lock=False):
+    query = db.query(MeetingMinuteFormat).filter(MeetingMinuteFormat.meeting_id == meeting_id)
+    row = query.with_for_update().first() if lock else query.first()
     if not row:
         return None
     return row, FormatDefinition.model_validate_json(row.definition), json.loads(row.values_json)
 
 
 def generate_snapshot(db, meeting, transcript):
-    snapshot = get_snapshot(db, meeting.id)
+    snapshot = get_snapshot(db, meeting.id, lock=True)
     if not snapshot:
         return None
-    row, definition, _ = snapshot
+    row, definition, previous = snapshot
     if row.status == "final":
         raise ValueError("Final minutes cannot be regenerated")
     values = generate_values(db, meeting, definition, transcript)
+    values = {f.id: values.get(f.id) or previous.get(f.id, "") for f in definition.fields}
+    values = validate_values(definition, values)
     row.values_json = json.dumps(values, ensure_ascii=False)
     db.commit()
     return values

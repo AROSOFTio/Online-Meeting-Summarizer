@@ -70,6 +70,7 @@ class Meeting(Base):
     processing_jobs = relationship("ProcessingJob", back_populates="meeting", cascade="all, delete-orphan")
     exports = relationship("Export", back_populates="meeting", cascade="all, delete-orphan")
     invitations = relationship("MeetingInvitation", back_populates="meeting", cascade="all, delete-orphan")
+    minute_format_snapshot = relationship("MeetingMinuteFormat", uselist=False, cascade="all, delete-orphan")
 
 class MeetingInvitation(Base):
     __tablename__ = "meeting_invitations"
