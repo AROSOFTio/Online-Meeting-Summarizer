@@ -49,6 +49,7 @@ def system_status(
         "smtp_username": settings.SMTP_USERNAME or "",
         "smtp_from_email": str(settings.SMTP_FROM_EMAIL),
         "public_app_url": settings.PUBLIC_APP_URL,
+        "tenant_id": settings.TENANT_ID or None,
         "database": "SQLite" if settings.is_sqlite else "PostgreSQL",
         "queue": "Redis + Celery",
         "timezone": timezone_setting.value if timezone_setting else settings.TIMEZONE,

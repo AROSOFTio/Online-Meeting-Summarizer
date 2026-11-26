@@ -120,6 +120,7 @@ def nginx_config(rows):
         parts.append(f"""server {{
     listen 80;
     server_name {h};
+    if ($host != {h}) {{ return 421; }}
     return 308 https://{h}$request_uri;
 }}
 server {{

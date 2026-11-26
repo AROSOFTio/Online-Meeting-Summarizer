@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.tenant_boundary import bind_or_verify_database, bind_or_verify_storage
 from app.models.models import (
     ActionItem, ActionItemPriority, ActionItemStatus, Decision, JobStatus, Meeting,
     MeetingStatus, ProcessingJob, Recording, Summary, SystemSetting, Transcript,
@@ -220,6 +221,12 @@ def _build_generated_minutes_pdf(db: Session, meeting: Meeting, transcript_text:
 @celery_app.task(name="tasks.transcribe_meeting")
 def transcribe_meeting(meeting_id: int, job_id: str):
     db: Session = SessionLocal()
+    try:
+        bind_or_verify_database(db)
+        bind_or_verify_storage()
+    except Exception:
+        db.close()
+        raise
     normalized_path = os.path.join(settings.UPLOAD_DIR, f"normalised_{meeting_id}.wav")
     try:
         meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
@@ -229,6 +236,8 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             raise RuntimeError(f"Meeting {meeting_id} was not found")
         if not recording:
             raise RuntimeError("Recording file record not found")
+        if settings.TENANT_ID and (not job or job.meeting_id != meeting_id):
+            return
         if not job:
             job = ProcessingJob(id=job_id, meeting_id=meeting_id, status=JobStatus.queued, progress=0)
             db.add(job)

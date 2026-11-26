@@ -9,6 +9,7 @@ from app.api.endpoints import action_items, attendance, auth, exports, health, l
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.security import get_password_hash
+from app.core.tenant_boundary import bind_or_verify_database, bind_or_verify_storage
 from app.models.meeting_flow import DirectoryProfile, MeetingRuntime  # noqa: F401
 from app.models.models import SystemSetting, User, UserRole
 
@@ -37,6 +38,8 @@ async def lifespan(app: FastAPI):
 
     db = SessionLocal()
     try:
+        bind_or_verify_database(db, initialize=True)
+        bind_or_verify_storage(initialize=True)
         retired_model_key = "whis" + "per_model"
         db.query(SystemSetting).filter(SystemSetting.key == retired_model_key).delete(synchronize_session=False)
 
@@ -50,10 +53,11 @@ async def lifespan(app: FastAPI):
                 full_name="Workspace Administrator",
                 role=UserRole.admin,
                 is_active=True,
+                must_change_password=bool(settings.TENANT_ID),
             )
             db.add(admin)
             db.flush()
-        else:
+        elif not settings.TENANT_ID:
             # This is a single-organisation deployment. The configured admin
             # account is authoritative so changing ADMIN_PASSWORD/ADMIN_EMAIL
             # in production does not leave a stale database credential behind.

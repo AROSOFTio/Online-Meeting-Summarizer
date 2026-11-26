@@ -58,7 +58,7 @@ class Settings(BaseSettings):
                 raise ValueError("Managed tenants require an HTTPS origin")
             if self.DATABASE_URL.startswith("sqlite"):
                 raise ValueError("Managed tenants require a dedicated PostgreSQL database")
-            if len(self.SECRET_KEY) < 48:
+            if "SECRET_KEY" not in self.model_fields_set or len(self.SECRET_KEY) < 48:
                 raise ValueError("Managed tenants require a dedicated signing key")
         return self
 

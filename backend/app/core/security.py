@@ -36,7 +36,7 @@ def decode_access_token(token: str) -> Optional[dict]:
     try:
         kwargs = {"issuer": "convenecore:" + settings.TENANT_ID, "options": {"require_iss": True}} if settings.TENANT_ID else {}
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM], **kwargs)
-        if not settings.TENANT_ID and payload.get("iss", "").startswith("convenecore:"):
+        if not settings.TENANT_ID and str(payload.get("iss", "")).startswith("convenecore:"):
             return None
         return payload
     except JWTError:
