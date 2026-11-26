@@ -22,6 +22,42 @@ jobs:
       - name: Verify isolated tenant provisioning
         run: python -m unittest discover -s deploy -p "test_*.py" -v
 
+  two-organization-isolation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      TENANT_TEST_ROOT: ${{ runner.temp }}/convenecore-isolation
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Provision two disposable organizations
+        run: |
+          set -eu
+          python deploy/tenantctl.py --root "$TENANT_TEST_ROOT" provision alpha --host alpha.example.com --admin-email admin@example.com --port 19081
+          python deploy/tenantctl.py --root "$TENANT_TEST_ROOT" provision bravo --host bravo.example.com --admin-email admin@example.com --port 19082
+      - name: Start isolated stacks
+        run: |
+          set -eu
+          python deploy/tenantctl.py --root "$TENANT_TEST_ROOT" start alpha
+          python deploy/tenantctl.py --root "$TENANT_TEST_ROOT" start bravo
+      - name: Verify infrastructure boundaries and application isolation
+        run: |
+          set -eu
+          python deploy/verify_isolated_infrastructure.py --root "$TENANT_TEST_ROOT" alpha bravo
+          python deploy/smoke_isolation.py --root "$TENANT_TEST_ROOT" alpha bravo
+      - name: Remove disposable staging stacks
+        if: always()
+        run: |
+          for tenant in alpha bravo; do
+            if [ -f "$TENANT_TEST_ROOT/$tenant/tenant.env" ]; then
+              docker compose --project-name "cc-$tenant" --env-file "$TENANT_TEST_ROOT/$tenant/tenant.env" -f docker-compose.yml -f deploy/compose.tenant.yml down --volumes --remove-orphans
+            fi
+          done
+
   backend:
     runs-on: ubuntu-latest
     defaults:
