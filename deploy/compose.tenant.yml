@@ -1,0 +1,20 @@
+# Always use with docker-compose.yml and a unique --project-name from tenantctl.
+# No host ports for databases, brokers, or backends. Only the frontend is
+# reachable through the host's trusted reverse proxy.
+services:
+  backend:
+    environment:
+      TENANT_ID: ${TENANT_ID:?Set TENANT_ID}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:?Set tenant HTTPS URL}
+      SMTP_VERIFY_TLS: "true"
+  worker:
+    environment:
+      TENANT_ID: ${TENANT_ID:?Set TENANT_ID}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:?Set tenant HTTPS URL}
+      SMTP_VERIFY_TLS: "true"
+    depends_on:
+      backend:
+        condition: service_healthy
+  frontend:
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:?Set FRONTEND_PORT}:3000"

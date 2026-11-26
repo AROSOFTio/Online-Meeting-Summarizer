@@ -43,14 +43,14 @@ services:
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
-      SMTP_HOST: ${SMTP_HOST:-stalwart}
+      SMTP_HOST: ${SMTP_HOST-stalwart}
       SMTP_PORT: ${SMTP_PORT:-465}
-      SMTP_USERNAME: ${SMTP_USERNAME:-notifications@example.com}
+      SMTP_USERNAME: ${SMTP_USERNAME-notifications@example.com}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-notifications@example.com}
       SMTP_USE_SSL: ${SMTP_USE_SSL:-true}
       SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-false}
-      SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-false}
+      SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-true}
     expose:
       - "8000"
     volumes:

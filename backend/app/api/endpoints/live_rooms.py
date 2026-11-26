@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from jose import JWTError, jwt
+from jose import JWTError
+from app.core.security import decode_access_token
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -96,7 +97,7 @@ def _runtime_for(meeting: Meeting, db: Session) -> MeetingRuntime:
 
 
 def _optional_user(request: Request, db: Session) -> Optional[User]:
-    token = request.cookies.get("session_token")
+    token = request.cookies.get(settings.session_cookie_name)
     if not token:
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
@@ -104,7 +105,9 @@ def _optional_user(request: Request, db: Session) -> Optional[User]:
     if not token:
         return None
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = decode_access_token(token)
+        if not payload:
+            return None
         email = payload.get("sub")
         if not email:
             return None

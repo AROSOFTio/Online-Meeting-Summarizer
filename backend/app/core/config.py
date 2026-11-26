@@ -2,12 +2,13 @@ from pathlib import Path
 from secrets import token_urlsafe
 from typing import Optional
 
-from pydantic import EmailStr, field_validator
+from pydantic import EmailStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "ConveneCore"
+    TENANT_ID: str = ""
     SECRET_KEY: str = token_urlsafe(48)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
@@ -40,6 +41,26 @@ class Settings(BaseSettings):
     STORAGE_DIR: str = "storage"
     UPLOAD_DIR: str = "storage/recordings"
     EXPORT_DIR: str = "storage/exports"
+
+    @property
+    def session_cookie_name(self) -> str:
+        return "__Host-convenecore-session" if self.TENANT_ID else "session_token"
+
+    @model_validator(mode="after")
+    def managed_tenant_requirements(self):
+        if self.TENANT_ID:
+            import re
+            from urllib.parse import urlsplit
+            url = urlsplit(self.PUBLIC_APP_URL)
+            if not re.fullmatch(r"[a-z][a-z0-9-]{1,39}", self.TENANT_ID):
+                raise ValueError("Invalid tenant identifier")
+            if url.scheme != "https" or not url.hostname or url.username or url.password or url.path or url.query or url.fragment:
+                raise ValueError("Managed tenants require an HTTPS origin")
+            if self.DATABASE_URL.startswith("sqlite"):
+                raise ValueError("Managed tenants require a dedicated PostgreSQL database")
+            if len(self.SECRET_KEY) < 48:
+                raise ValueError("Managed tenants require a dedicated signing key")
+        return self
 
     @property
     def is_sqlite(self) -> bool:

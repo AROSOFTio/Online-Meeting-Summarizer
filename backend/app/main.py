@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
@@ -56,7 +57,7 @@ async def lifespan(app: FastAPI):
             # This is a single-organisation deployment. The configured admin
             # account is authoritative so changing ADMIN_PASSWORD/ADMIN_EMAIL
             # in production does not leave a stale database credential behind.
-            if settings.ADMIN_PASSWORD:
+            if settings.ADMIN_PASSWORD and not settings.TENANT_ID:
                 admin.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
             admin.full_name = admin.full_name or "Workspace Administrator"
             admin.role = UserRole.admin
@@ -80,11 +81,24 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.PUBLIC_APP_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[settings.PUBLIC_APP_URL] if settings.TENANT_ID else [settings.PUBLIC_APP_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def tenant_origin_guard(request: Request, call_next):
+    if settings.TENANT_ID and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        origin = request.headers.get("origin")
+        fetch_site = request.headers.get("sec-fetch-site")
+        if (origin and origin != settings.PUBLIC_APP_URL) or fetch_site in {"cross-site", "same-site"}:
+            return JSONResponse({"detail": "Cross-origin workspace mutation denied"}, status_code=403)
+    response = await call_next(request)
+    if settings.TENANT_ID and request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(staff.router, prefix="/api/staff", tags=["Staff Management"])

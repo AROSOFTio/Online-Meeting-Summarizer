@@ -84,7 +84,7 @@ def login_access_token(
     )
 
     response.set_cookie(
-        key="session_token",
+        key=settings.session_cookie_name,
         value=access_token,
         httponly=True,
         max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
@@ -113,7 +113,7 @@ def logout(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
-    response.delete_cookie("session_token", path="/", samesite="lax")
+    response.delete_cookie(settings.session_cookie_name, path="/", samesite="lax", secure=settings.PUBLIC_APP_URL.startswith("https://"), httponly=True)
     log_action(
         db,
         action="logout",

@@ -1,10 +1,11 @@
 from typing import Generator
 from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
-from jose import jwt, JWTError
+from jose import JWTError
 from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.core.security import decode_access_token
 from app.models.models import User, UserRole
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login", auto_error=False)
@@ -27,7 +28,7 @@ def get_current_user(
     )
     
     # 1. Try to read from HTTP-Only cookie 'session_token'
-    token = request.cookies.get("session_token")
+    token = request.cookies.get(settings.session_cookie_name)
     
     # 2. Try to read from Authorization: Bearer header if cookie is missing
     if not token:
@@ -39,7 +40,9 @@ def get_current_user(
         raise credentials_exception
         
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = decode_access_token(token)
+        if not payload:
+            raise credentials_exception
         email: str = payload.get("sub")
         if email is None:
             raise credentials_exception
