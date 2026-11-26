@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { Users } from "lucide-react";
+import { Users, Eye, EyeOff } from "lucide-react";
+import AuthShell from "@/components/AuthShell";
 
 import { useAuth } from "@/context/AuthContext";
 
@@ -20,7 +21,7 @@ export default function LoginPage() {
   const { login } = useAuth();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [logoFailed, setLogoFailed] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -38,52 +39,17 @@ export default function LoginPage() {
     }
   };
 
-  return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 px-4 py-8">
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-        <svg className="login-wave login-wave-top absolute -left-[12%] top-[5%] h-[38%] w-[125%] text-blue-700/10" viewBox="0 0 1440 320" fill="none" preserveAspectRatio="none">
-          <path d="M-70 210 C170 50 310 300 570 155 S1000 45 1510 170" stroke="currentColor" strokeWidth="2" />
-          <path d="M-70 238 C170 78 310 328 570 183 S1000 73 1510 198" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M-70 267 C170 107 310 357 570 212 S1000 102 1510 227" stroke="currentColor" strokeWidth="1" />
-        </svg>
-        <svg className="login-wave login-wave-bottom absolute -right-[14%] bottom-[2%] h-[42%] w-[130%] text-sky-700/10" viewBox="0 0 1440 320" fill="none" preserveAspectRatio="none">
-          <path d="M-70 140 C230 310 470 5 760 165 S1130 300 1510 95" stroke="currentColor" strokeWidth="2" />
-          <path d="M-70 170 C230 340 470 35 760 195 S1130 330 1510 125" stroke="currentColor" strokeWidth="1.5" />
-          <path d="M-70 200 C230 370 470 65 760 225 S1130 360 1510 155" stroke="currentColor" strokeWidth="1" />
-        </svg>
-      </div>
-      <div className="relative z-10 w-full max-w-md rounded-2xl border border-slate-200/80 bg-white/95 p-7 shadow-[0_16px_50px_rgba(15,23,42,0.07)] sm:p-8">
-        <div className="mb-7 text-center">
-          {!logoFailed ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src="/minuteseal.svg" alt="MinuteSeal" onError={() => setLogoFailed(true)} className="mx-auto mb-4 h-28 w-28 object-contain" />
-          ) : (
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-800 text-xl font-black tracking-tight text-white shadow-sm">MS</div>
-          )}
-          <h1 className="text-xl font-extrabold text-slate-950">MINUTESEAL</h1>
-          <p className="mt-1 text-sm text-slate-600">Professional meeting minutes &amp; decisions</p>
-        </div>
-
-        <Link href="/setup" className="mb-4 block text-center text-sm text-blue-700">First-time organization setup</Link>
-        {error && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <label className="block text-sm font-medium text-slate-700">Email Address
-            <input type="email" autoComplete="username" {...register("email")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="name@example.com" />
-            {errors.email && <span className="mt-1 block text-xs text-red-600">{errors.email.message}</span>}
-          </label>
-          <label className="block text-sm font-medium text-slate-700">Password
-            <input type="password" autoComplete="current-password" {...register("password")} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm text-slate-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600" placeholder="••••••••" />
-            {errors.password && <span className="mt-1 block text-xs text-red-600">{errors.password.message}</span>}
-          </label>
-          <button type="submit" disabled={isSubmitting} className="w-full rounded-lg bg-blue-700 py-3 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">{isSubmitting ? "Signing in..." : "Sign In"}</button>
-        </form>
-
-        <div className="my-6 flex items-center gap-3 text-xs text-slate-600"><span className="h-px flex-1 bg-slate-200" />OR<span className="h-px flex-1 bg-slate-200" /></div>
-        <Link href="/join-meeting" className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800 hover:bg-blue-100"><Users size={17} />Join an Invited Meeting</Link>
-        <p className="mt-2 text-center text-xs text-slate-600">Invitees do not need a staff login.</p>
-        <Link href="/templates" className="mt-5 block text-center text-sm font-semibold text-blue-700">Browse free meeting formats</Link>
-      </div>
-    </main>
-  );
+  return <AuthShell>
+    <h1 className="text-2xl font-bold tracking-tight text-slate-950">Sign in to MinuteSeal</h1>
+    <p className="mt-1 text-sm text-slate-600">Access your organization workspace.</p>
+    {error && <p role="alert" className="mt-3 rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">{error}</p>}
+    <form onSubmit={handleSubmit(onSubmit)} className="mt-5 space-y-3">
+      <label className="block text-sm font-medium text-slate-800">Email address<input type="email" autoComplete="username" {...register("email")} placeholder="name@organization.com" className="mt-1 w-full rounded-md border border-slate-500 bg-white px-3 py-2.5 text-sm text-slate-900"/></label>
+      {errors.email && <p className="text-xs text-red-700">{errors.email.message}</p>}
+      <div><label htmlFor="login-password" className="block text-sm font-medium text-slate-800">Password</label><div className="relative mt-1"><input id="login-password" type={showPassword?"text":"password"} autoComplete="current-password" {...register("password")} className="w-full rounded-md border border-slate-500 bg-white px-3 py-2.5 pr-12 text-sm text-slate-900"/><button type="button" onClick={()=>setShowPassword(v=>!v)} aria-label={showPassword?"Hide password":"Show password"} aria-pressed={showPassword} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-2 text-slate-700">{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button></div>{errors.password && <p className="mt-1 text-xs text-red-700">{errors.password.message}</p>}</div>
+      <button type="submit" disabled={isSubmitting} className="w-full rounded-md bg-blue-700 py-2.5 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">{isSubmitting?"Signing in…":"Sign in"}</button>
+    </form>
+    <p className="mt-4 text-center text-sm text-slate-600">First time here? <Link href="/setup" className="font-semibold text-blue-700">Set up workspace</Link></p>
+    <div className="mt-4 border-t border-slate-200 pt-4"><Link href="/join-meeting" className="flex items-center justify-center gap-2 rounded-md border border-blue-700 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"><Users size={17}/>Join an invited meeting</Link><p className="mt-2 text-center text-xs text-slate-600">Invitees do not need a staff login.</p></div>
+  </AuthShell>;
 }
