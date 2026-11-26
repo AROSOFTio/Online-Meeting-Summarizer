@@ -27,7 +27,7 @@ def feature_enabled(feature):
     return p is None or (rules.state(p)!="expired" and feature in p["features"])
 def check_request(path,method):
     if not settings.TENANT_ID or not path.startswith("/api/"):return
-    if path.rstrip("/") in {"/api/health","/api/auth/login","/api/auth/logout","/api/auth/me","/api/auth/change-password","/api/auth/setup"}:return
+    if path.rstrip("/") in {"/api/health","/api/auth/login","/api/auth/logout","/api/auth/me","/api/auth/change-password","/api/auth/setup","/api/auth/setup/request-code"}:return
     p=policy()
     if rules.state(p)=="expired" and not rules.allowed_when_expired(path,method):raise SubscriptionDenied(402,"Subscription expired. Existing records remain available; renew to make changes.")
     if not rules.route_features(path,method)<=set(p["features"]):raise SubscriptionDenied(403,"Feature not included in subscription.")

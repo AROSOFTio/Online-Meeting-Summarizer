@@ -1,4 +1,5 @@
 import re
+import logging
 from datetime import timedelta
 from pydantic import BaseModel, Field, EmailStr
 
@@ -8,7 +9,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core import deps, security
-from app.core.initial_setup import consume
+from app.core.initial_setup import consume, issue_otp
+from app.services.email import email_service
 from app.core.audit import log_action
 from app.core.config import settings
 from app.models.models import User
@@ -131,9 +133,27 @@ def read_users_me(current_user: User = Depends(deps.get_current_user)):
     return current_user
 
 
+class SetupEmail(BaseModel):
+    email: EmailStr
+
+@router.post("/setup/request-code")
+def request_setup_code(body:SetupEmail,db:Session=Depends(deps.get_db)):
+    if not email_service.enabled:
+        raise HTTPException(503,"Email delivery is not configured. Contact your platform administrator.")
+    email=str(body.email).lower()
+    code=issue_otp(db,email)
+    if code:
+        try:
+            email_service.send([email],"MinuteSeal administrator verification",
+                f"Your MinuteSeal verification code is {code}. It expires in 10 minutes. If you did not request it, ignore this message.",
+                f"<h2>MinuteSeal verification</h2><p>Your one-time code:</p><h1>{code}</h1><p>Expires in 10 minutes. Do not share this code.</p>")
+        except Exception:
+            logging.getLogger(__name__).warning("Initial setup email delivery failed")
+    return {"detail":"If this is an eligible administrator email, a code has been requested. Check your inbox and spam folder."}
+
 class InitialSetup(BaseModel):
     email: EmailStr
-    code: str = Field(min_length=43,max_length=43)
+    code: str = Field(min_length=6,max_length=43)
     password: str = Field(min_length=8,max_length=128)
 
 @router.post("/setup")
