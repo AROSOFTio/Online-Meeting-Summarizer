@@ -60,3 +60,8 @@
 @media(min-width:1024px){.ms-public-content{width:70%;padding-inline:0}.ms-shell-inner,.ms-hero-content{width:88%;padding-inline:0}.ms-hero-content{min-height:225px}.ms-hero-home .ms-hero-content{min-height:390px}}
 @media(min-width:1280px){.ms-primary-nav{display:flex}.ms-register-desktop{display:inline-flex}.ms-mobile-menu{display:none}}
 @media(max-width:360px){.ms-header-row{gap:6px}.ms-shell-inner{padding-inline:10px}.ms-brand{font-size:17px;gap:5px}.ms-brand img{width:30px;height:30px}.ms-header-actions{gap:5px}.ms-header-actions .ms-button{padding-inline:10px}.ms-public-content{padding-inline:12px}}
+
+/* Align hero copy, header, main content and footer to the same center line. Full-bleed bands remain full width. */
+@media(min-width:768px){.ms-shell-inner,.ms-hero-content{width:85%;padding-inline:0}}
+@media(min-width:1024px){.ms-shell-inner,.ms-hero-content{width:70%;padding-inline:0}}
+@media(min-width:1280px){.ms-primary-nav{gap:12px;font-size:13px}.ms-header-actions{gap:6px}.ms-header-actions .ms-button{padding-inline:10px}.ms-brand{font-size:20px}.ms-brand img{width:34px;height:34px}}

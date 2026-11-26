@@ -51,6 +51,26 @@ body.ms-page{background:#f8fafc;font-family:Arial,system-ui,sans-serif}
 .wizard-legal{font-size:12px;color:#64748b;margin:16px 0 0;line-height:1.5}
 .wizard-fallback{padding:0 28px 20px}
 @media(max-width:639px){.reg-nav{justify-content:flex-start;gap:12px;margin-bottom:12px}.reg-nav a{padding:5px 0;font-size:12px}.wizard-top{padding:18px 16px 0}.wizard-top h2{font-size:19px}.wizard-steps{gap:5px;margin-top:18px}.wizard-steps button{flex-direction:column;align-items:center;gap:5px;font-size:11px;line-height:1.3;text-align:center;padding-bottom:10px}.wizard-panel{padding:20px 16px}.wizard-panel>p{margin-bottom:17px}.reg-body .wizard-panel .grid{gap:15px}.reg-body .wizard-panel input,.reg-body .wizard-panel select{font-size:16px}.wizard-actions{padding:15px 16px;gap:8px}.wizard-actions .wizard-next,.wizard-actions .wizard-submit{min-width:0}.wizard-actions .wizard-count{font-size:11px}.wizard-fallback{padding-inline:16px}}
+
+body.ms-page{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.reg-body{max-width:none}
+.reg-body .wizard-card{display:grid;grid-template-columns:minmax(0,.78fr) minmax(0,1.22fr);min-height:385px}
+.wizard-visual{position:relative;isolation:isolate;min-width:0;display:flex;flex-direction:column;justify-content:flex-end;background:#103a91;color:white;padding:26px;overflow:hidden}
+.wizard-visual img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
+.wizard-visual:before{content:"";position:absolute;inset:0;background:rgba(16,58,145,.68);z-index:-1}
+.wizard-visual h2{font-size:26px;font-weight:650;line-height:1.2;letter-spacing:-.5px;margin:0;max-width:250px}
+.wizard-visual p{font-size:13px;line-height:1.5;margin:10px 0 0;color:#eff6ff}
+.wizard-form-side{min-width:0;background:#fff}
+.wizard-form-side .wizard-panel .grid{grid-template-columns:minmax(0,1fr);gap:15px}
+.wizard-top{padding:22px 24px 0}
+.wizard-panel{padding:20px 24px}
+.wizard-panel>p{margin-bottom:16px}
+.wizard-actions{padding:15px 24px}
+.wizard-steps button{font-family:inherit;gap:6px;font-size:12px}
+.reg-body .wizard-panel input,.reg-body .wizard-panel select{font-family:inherit}
+.wizard-form-side .wizard-notice{margin:0 24px 10px}
+@media(max-width:950px){.reg-body .wizard-card{grid-template-columns:1fr}.wizard-visual{display:none}.wizard-form-side .wizard-panel .grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:639px){.wizard-form-side .wizard-panel .grid{grid-template-columns:1fr}.wizard-top{padding:18px 16px 0}.wizard-panel{padding:18px 16px}.wizard-actions{padding:15px 16px}.wizard-form-side .wizard-notice{margin-inline:16px}.wizard-steps button{font-size:11px}.wizard-steps .step-no{flex-basis:28px}}
 """
 BASE=""
 def esc(v):return html.escape(str(v),quote=True)
@@ -77,8 +97,8 @@ def page(title,body):
     description={"register":"Create a workspace for your organization.","verify":"Confirm your administrator email.","status":"Check your application progress."}[group]
     nav_links=[("register",BASE+"/","Create organization"),("verify",BASE+"/verify","Verify email"),("status",BASE+"/status","Track registration")]
     nav='<nav class="reg-nav" aria-label="Registration navigation">'+''.join('<a href="'+href+'"'+(' aria-current="page"' if key==group else '')+'>'+label+'</a>' for key,href,label in nav_links)+'</nav>'
-    hero='<section data-page-hero="true" class="ms-public-hero"><img class="ms-hero-image" src="/images/heroes/'+group+'.webp" alt="" aria-hidden="true"><div class="ms-hero-overlay" aria-hidden="true"></div><div class="ms-hero-content"><h1 class="ms-hero-title">'+esc(title)+'</h1><p class="ms-hero-description">'+esc(description)+'</p></div></section>'
-    return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><link rel="icon" href="/minuteseal.svg"><link rel="stylesheet" href="/minuteseal-public.css?v=3"><script src="/minuteseal-menu.js?v=1" defer></script><script src="/minuteseal-registration.js?v=1" defer></script><style>'+CSS+'</style></head><body class="ms-page">'+brand_header()+hero+'<main class="ms-public-content">'+nav+'<div class="reg-body">'+body+'</div></main>'+brand_footer()+'</body></html>'
+    hero='<section data-page-hero="true" class="ms-public-hero ms-hero-compact"><img class="ms-hero-image" src="/images/heroes/'+group+'.webp" alt="" aria-hidden="true"><div class="ms-hero-overlay" aria-hidden="true"></div><div class="ms-hero-content"><h1 class="ms-hero-title">'+esc(title)+'</h1><p class="ms-hero-description">'+esc(description)+'</p></div></section>'
+    return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><link rel="icon" href="/minuteseal.svg"><link rel="stylesheet" href="/minuteseal-public.css?v=4"><script src="/minuteseal-menu.js?v=1" defer></script><script src="/minuteseal-registration.js?v=1" defer></script><style>'+CSS+'</style></head><body class="ms-page">'+brand_header()+hero+'<main class="ms-public-content">'+nav+'<div class="reg-body">'+body+'</div></main>'+brand_footer()+'</body></html>'
 
 def wizard_field(label,name,placeholder,kind="text",maxlength=150,extra=""):
     return f'<label>{esc(label)}<input name="{esc(name)}" type="{kind}" required maxlength="{maxlength}" placeholder="{esc(placeholder)}" {extra}></label>'
@@ -90,7 +110,7 @@ def registration():
     organization='<div class="wizard-panel" data-step="0"><h3 tabindex="-1">Organization details</h3><p>Tell us about your organization.</p><div class="grid">'+wizard_field("Organization name","name","e.g. Kampala Business Group",extra='autocomplete="organization" minlength="2"')+select("Organization type","sector",onboarding.SECTORS)+'</div></div>'
     administrator='<div class="wizard-panel" data-step="1"><h3 tabindex="-1">Administrator details</h3><p>Who will manage the workspace?</p><div class="grid">'+wizard_field("Full name","contact","Full name",maxlength=100,extra='autocomplete="name" minlength="2"')+wizard_field("Work email","email","name@organization.com","email",254,extra='autocomplete="email"')+'</div><p class="wizard-legal">This email will be used for verification and account activation.</p></div>'
     workspace='<div class="wizard-panel" data-step="2"><h3 tabindex="-1">Workspace preferences</h3><p>Choose an identifier and a subscription.</p><div class="grid">'+wizard_field("Workspace identifier","slug","e.g. kampala-group",maxlength=40,extra='pattern="[a-z][a-z0-9\\-]{1,39}" title="2–40 lowercase letters, numbers or hyphens; start with a letter." autocapitalize="none" spellcheck="false" minlength="2"')+select("Requested subscription","plan",onboarding.PLANS)+'</div><span class="wizard-hint">The identifier will be used in your workspace address, subject to approval.</span><div class="wizard-review" hidden><h4>Review your details</h4><dl><dt>Organization</dt><dd data-review="name"></dd><dt>Administrator</dt><dd data-review="contact"></dd><dt>Email</dt><dd data-review="email"></dd></dl></div><p class="wizard-legal">No payment is collected now. Email verification and approval are required before activation.</p></div>'
-    return page("Create your organization",notice+'<section class="wizard-card"><div class="wizard-top"><h2>Register your workspace</h2><p>Complete your application in three steps.</p>'+steps+'</div><form method="post" action="/register" data-wizard>'+organization+administrator+workspace+'<div class="wizard-actions" hidden><button type="button" class="wizard-back">Back</button><span class="wizard-count" aria-live="polite">Step 1 of 3</span><button type="button" class="wizard-next">Continue →</button><button type="submit" class="wizard-submit" hidden>Request workspace</button></div><div class="wizard-fallback"><button type="submit">Request workspace</button></div></form></section>')
+    return page("Create your organization",'<section class="wizard-card"><aside class="wizard-visual" aria-label="MinuteSeal workspace"><img src="/images/heroes/register.webp" alt=""><h2>Better meetings start here.</h2><p>One workspace for minutes, decisions and follow-up.</p></aside><div class="wizard-form-side"><div class="wizard-top"><h2>Register your workspace</h2><p>Complete your application in three steps.</p>'+steps+'</div>'+notice+'<form method="post" action="/register" data-wizard>'+organization+administrator+workspace+'<div class="wizard-actions" hidden><button type="button" class="wizard-back">Back</button><span class="wizard-count" aria-live="polite">Step 1 of 3</span><button type="button" class="wizard-next">Continue →</button><button type="submit" class="wizard-submit" hidden>Request workspace</button></div><div class="wizard-fallback"><button type="submit">Request workspace</button></div></form></div></section>')
 def verify_page():
     return page("Verify your email",'<section><p>Enter the reference and single-use verification code from your email.</p><form method="post" action="/verify">'+field("Registration reference","ref",maxlength=32)+field("Verification code","code","password",43)+'<button>Verify email</button></form></section>')
 def status_page():
