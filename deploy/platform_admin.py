@@ -370,7 +370,11 @@ class Handler(BaseHTTPRequestHandler):
     def show_dashboard(self,session,message="",query="",state=""):
         with tenantctl.registry(self.server.root) as rows:
             path=operator_onboarding.inbox_path()
-            applications=onboarding.inbox(path) if path else []
+            try:
+                applications=onboarding.inbox(path) if path else []
+            except Exception:
+                applications=[]
+                message=(message+" Registration inbox unavailable.").strip()
             body=dashboard(rows,audit_tail(self.server.root),session["csrf"],query,state,message,applications)
         self.send_html(body)
 

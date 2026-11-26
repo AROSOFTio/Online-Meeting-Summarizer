@@ -1,0 +1,21 @@
+# Organization registration and onboarding
+
+Public registration is a separate process from the private platform console and each customer workspace. Applicants provide organization name/type, administrator name/email, preferred slug and requested plan. There is no payment, immediate activation or public Docker operation.
+
+## Operator deployment
+
+Create a dedicated unprivileged OS service account for the registration listener. Give it access only to the registration inbox directory and onboarding SMTP credentials. The inbox must be outside the operator tenant registry; use a private directory accessible to the registration service and trusted operator (for example, an explicitly configured shared group). Do not give the public process Docker group membership, platform password, tenant environment files or access to the tenant registry. Precreate the SQLite file with restricted group write permissions and set a restrictive umask. SQLite needs permission to create its journal in the same directory. Back up the inbox securely and implement a retention/deletion policy before accepting real applicants.
+
+Configure SMTP in the service environment: CC_ONBOARD_SMTP_HOST, CC_ONBOARD_SMTP_PORT (default 465), CC_ONBOARD_SMTP_FROM, CC_ONBOARD_SMTP_USER, CC_ONBOARD_SMTP_PASSWORD. TLS certificate verification is required (implicit TLS on port 465; STARTTLS otherwise). Configure the same onboarding SMTP variables separately for the private operator console.
+
+Run the public service on loopback, for example:
+    python3 deploy/public_registration.py --inbox /var/lib/convenecore-registration/inbox.db --origin https://register.example.com --port 18791
+
+Install a dedicated TLS virtual host for that hostname in the trusted reverse proxy. Preserve the exact Host header, enforce HTTPS, limit request body to 8 KiB, rate-limit public requests, and never route requests to the private operator console. The public service validates the exact host and request origin, and limits verification email attempts globally and per email. The example hostname is a placeholder. No public DNS or TLS has been configured by this code change.
+
+Set CC_ONBOARD_INBOX=/var/lib/convenecore-registration/inbox.db for the existing private platform console. Verified applications appear in its registration inbox. The operator verifies suitability and selects an approved hostname and unused port before provisioning. Approval reserves a tenant but does not start it. The operator starts the tenant, installs and verifies DNS/TLS routing, then explicitly sends the setup invitation. Bootstrap credentials are never displayed in the public service. The customer receives an hour-limited code and opens the workspace's /setup page to choose a password. Only the initial active administrator can use that code; it is consumed transactionally and cannot be reissued after initial setup. Code digests, not plaintext, are persisted. If email fails, the operator may reissue a fresh code, which supersedes the old one. The applicant can sign in after setup and configure organization settings and team members using existing functions.
+
+## Registration tracking
+The applicant receives a registration reference and a private tracking key after submission, plus a separate verification code by email. Verification expires in 24 hours and is single use; resend rotates the code (one-minute cooldown, up to five attempts per registration, additional global/per-email rate limits). Status lookup and resend require the private tracking key. Tracking keys cannot be recovered. The public status shows verified, provisioned, setup invitation sent or declined; it does not yet confirm password setup completion. No plaintext tokens or permanent passwords are stored in the inbox. The operator explicitly controls workspace approval and activation. Plans are requests, not billing commitments. Quota enforcement and payments remain separate development.
+
+The inbox is trusted only as an application queue, not a credential authority; operators must review before provisioning. A compromised public service could manipulate its own inbox, but cannot start a tenant, access tenant secrets, or access the private console. Production requires external rate limiting, privacy notice/retention policy, SMTP verification, operator MFA, and full staging tests. Test on disposable workspaces only.
