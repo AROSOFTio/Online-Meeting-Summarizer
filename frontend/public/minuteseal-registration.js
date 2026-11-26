@@ -12,7 +12,7 @@
   back.disabled=i===0;back.style.visibility=i===0?'hidden':'visible';
   next.hidden=i===panels.length-1;submit.hidden=i!==panels.length-1;
   count.textContent='Step '+(i+1)+' of '+panels.length;
-  if(i===2){review.hidden=false;review.querySelectorAll('[data-review]').forEach(el=>{el.textContent=form.elements.namedItem(el.dataset.review).value.trim();});}
+  if(review&&i===panels.length-1){review.hidden=false;review.querySelectorAll('[data-review]').forEach(el=>{el.textContent=form.elements.namedItem(el.dataset.review).value.trim();});}
   if(focus)panels[i].querySelector('h3').focus({preventScroll:true});
  }
  steps.hidden=false;actions.hidden=false;form.querySelector('.wizard-fallback').hidden=true;
@@ -22,10 +22,10 @@
  tabs.forEach((tab,i)=>tab.addEventListener('click',()=>{if(i<=current){show(i);return;}for(let n=current;n<i;n++)if(!valid(n))return;show(i);}));
  form.addEventListener('submit',event=>{
   if(submitting){event.preventDefault();return;}
-  if(current<2){event.preventDefault();if(valid(current))show(current+1);return;}
+  if(current<panels.length-1){event.preventDefault();if(valid(current))show(current+1);return;}
   for(let i=0;i<panels.length;i++){if(Array.from(panels[i].querySelectorAll('input,select')).some(f=>!f.checkValidity())){event.preventDefault();show(i);valid(i);return;}}
   submitting=true;submit.disabled=true;submit.textContent='Submitting…';
  });
- window.addEventListener('pageshow',()=>{submitting=false;submit.disabled=false;submit.textContent='Request workspace';});
+ window.addEventListener('pageshow',()=>{submitting=false;submit.disabled=false;submit.textContent='Register';});
  show(0,false);
 })();

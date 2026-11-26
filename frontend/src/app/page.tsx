@@ -18,7 +18,7 @@ const content="ms-public-content";
 export default function Home(){return <main className="ms-page">
  <PublicNav active="/"/>
  <PageHero home title="Meetings. Minutes. Actions." description="Record meetings, prepare minutes and track decisions." image="/meeting.webp">
-   <div className="mt-5 flex flex-wrap gap-2.5"><a href="/register/" className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-blue-800 hover:bg-blue-50">Register organization <ArrowRight size={16}/></a><Link href="/login" className="rounded-md border border-white px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10">Sign in</Link></div>
+   <div className="mt-5 flex flex-wrap gap-2.5"><a href="/register/" className="inline-flex items-center gap-2 rounded-md bg-white px-4 py-2.5 text-sm font-bold text-blue-800 hover:bg-blue-50">Register <ArrowRight size={16}/></a><Link href="/login" className="rounded-md border border-white px-4 py-2.5 text-sm font-semibold text-white hover:bg-white/10">Sign in</Link></div>
  </PageHero>
  <div data-home-content="true" className={content+" space-y-10 py-8 sm:space-y-14 sm:py-12 lg:space-y-16 lg:py-16"}>
   <section aria-labelledby="home-features">

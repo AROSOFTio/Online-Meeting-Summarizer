@@ -41,11 +41,11 @@ export default function SetupPage() {
       setMessage(err instanceof Error ? err.message : "Setup could not be completed.");
     } finally { setBusy(false); }
   }
-  return <AuthShell image="/images/heroes/setup.webp" heroTitle="Activate workspace" active="/setup" wide>
-    <h1 className="text-2xl font-bold tracking-tight text-slate-950">Set up your workspace</h1>
+  return <AuthShell image="/images/heroes/setup.webp" heroTitle="Create your password" active="/setup" wide>
+    <h1 className="text-2xl font-bold tracking-tight text-slate-950">Create your password</h1>
     {done ? <div className="mt-4 space-y-4"><p role="status" className="text-sm text-slate-700">Your administrator password has been set.</p><Link href="/login" className="block rounded-md bg-blue-700 p-3 text-center text-sm font-semibold text-white">Sign in</Link></div> :
       <>
-        <p className="mt-1 text-sm leading-6 text-slate-600">Verify your approved administrator email and choose a password.</p>
+        <p className="mt-1 text-sm leading-6 text-slate-600">Verify your email and choose a password.</p>
         <form onSubmit={submit} className="mt-4 space-y-3">
           {message && <p role="alert" className="rounded border border-red-200 bg-red-50 p-2 text-sm text-red-800">{message}</p>}
           <label htmlFor="setup-email" className="block text-sm font-medium text-slate-800">Administrator email</label>
@@ -58,8 +58,8 @@ export default function SetupPage() {
           {confirmation && <p className={"text-xs "+(password===confirmation?"text-green-800":"text-red-800")}>{password===confirmation?"Passwords match.":"Passwords do not match."}</p>}
           <button disabled={busy} className="w-full rounded-md bg-blue-700 py-2.5 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-50">{busy?"Setting password…":"Set administrator password"}</button>
         </form>
-        <p className="mt-4 text-center text-sm text-slate-600">Already activated? <Link href="/login" className="font-semibold text-blue-700">Sign in</Link></p>
+        <p className="mt-4 text-center text-sm text-slate-600">Already registered? <Link href="/login" className="font-semibold text-blue-700">Sign in</Link></p>
       </>}
-  <p className="mt-3 text-center text-sm text-slate-600">New organization? <a href="/register/" className="font-semibold text-blue-700">Register here</a></p>
+  <p className="mt-3 text-center text-sm text-slate-600">New organization? <a href="/register/" className="font-semibold text-blue-700">Register</a></p>
     </AuthShell>;
 }

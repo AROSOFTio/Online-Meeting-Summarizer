@@ -213,6 +213,11 @@ def otp_mail(email,code,sender):
     sender(email,"Your MinuteSeal verification code","Your MinuteSeal verification code is "+code+". It expires in 10 minutes. If you did not register, ignore this email.")
 
 def register_browser(path,data,sender=mail):
+    # Assign a unique internal workspace identifier; no customer naming step.
+    if not data.get("slug"):
+        stem=re.sub(r"[^a-z0-9]+","-",str(data.get("name","")).lower()).strip("-")[:28].rstrip("-")
+        if not stem or not stem[0].isalpha():stem="org-"+stem
+        data={**data,"slug":stem+"-"+secrets.token_hex(4),"plan":"starter"}
     data=validate(data)
     now=int(time.time())
     ref=secrets.token_hex(16)

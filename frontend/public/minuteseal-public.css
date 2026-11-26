@@ -65,3 +65,19 @@
 @media(min-width:768px){.ms-shell-inner,.ms-hero-content{width:85%;padding-inline:0}}
 @media(min-width:1024px){.ms-shell-inner,.ms-hero-content{width:70%;padding-inline:0}}
 @media(min-width:1280px){.ms-primary-nav{gap:12px;font-size:13px}.ms-header-actions{gap:6px}.ms-header-actions .ms-button{padding-inline:10px}.ms-brand{font-size:20px}.ms-brand img{width:34px;height:34px}}
+
+/* Classic split authentication forms. */
+.ms-auth-page{background:#f8fafc}
+.ms-auth-content{flex:1;display:flex;align-items:flex-start;justify-content:center;padding-block:24px}
+.ms-auth-split{box-sizing:border-box;display:grid;grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);width:100%;max-width:1100px;min-height:340px;overflow:hidden;border:1px solid #dbe2ea;border-radius:9px;background:white;margin-inline:auto}
+.ms-auth-visual{position:relative;isolation:isolate;display:flex;align-items:flex-end;min-width:0;overflow:hidden;background:#103a91;color:#fff;padding:28px}
+.ms-auth-visual>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:-2}
+.ms-auth-visual:before{content:"";position:absolute;inset:0;background:rgba(16,58,145,.72);z-index:-1}
+.ms-auth-visual h2{font-size:clamp(22px,2vw,30px);line-height:1.2;color:white;font-weight:700;letter-spacing:-.035em;margin:0}
+.ms-auth-visual p{margin:8px 0 0;color:#eff6ff;font-size:13px;line-height:1.5}
+.ms-auth-logo{display:block;position:static;width:38px;height:38px;object-fit:contain;margin-bottom:14px}
+.ms-auth-form{min-width:0;align-self:center;padding:28px 32px}
+.ms-auth-form input:not([type=checkbox]):not([type=radio]){border-color:#cbd5e1;min-height:44px}
+.ms-auth-form input:focus{border-color:#2563eb;outline:2px solid #dbeafe;outline-offset:0}
+@media(max-width:950px){.ms-auth-split{grid-template-columns:1fr;min-height:0;max-width:620px}.ms-auth-visual{display:none!important}.ms-auth-form{padding:24px}.ms-auth-content{padding-block:20px}}
+@media(max-width:639px){.ms-auth-form{padding:18px 16px}.ms-auth-content{padding-block:16px}.ms-auth-form input:not([type=checkbox]):not([type=radio]){font-size:16px}}
