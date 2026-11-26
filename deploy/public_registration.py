@@ -113,7 +113,7 @@ def registration():
     notice="" if email_ready else '<div class="wizard-notice" role="status">Email delivery is temporarily unavailable. You can request a verification code again when service is restored.</div>'
     steps='<ol class="wizard-steps" aria-label="Registration progress" hidden>'+''.join(f'<li><button type="button" data-go="{i}" disabled><span class="step-no">{i+1}</span><span>{label}</span></button></li>' for i,label in enumerate(("Organization","Administrator")))+'</ol>'
     organization='<div class="wizard-panel" data-step="0"><h3 tabindex="-1">Organization details</h3><p>Tell us about your organization.</p><div class="grid">'+wizard_field("Organization name","name","e.g. Kampala Business Group",extra='autocomplete="organization" minlength="2"')+select("Organization type","sector",onboarding.SECTORS)+'</div></div>'
-    administrator='<div class="wizard-panel" data-step="1"><h3 tabindex="-1">Administrator details</h3><p>Enter your administrator details.</p><div class="grid">'+wizard_field("Full name","contact","Full name",maxlength=100,extra='autocomplete="name" minlength="2"')+wizard_field("Work email","email","name@organization.com","email",254,extra='autocomplete="email"')+'</div><p class="wizard-legal">This email will be used for verification and account activation.</p></div>'
+    administrator='<div class="wizard-panel" data-step="1"><h3 tabindex="-1">Administrator details</h3><p>Enter your administrator details.</p><div class="grid">'+wizard_field("Full name","contact","Full name",maxlength=100,extra='autocomplete="name" minlength="2"')+wizard_field("Work email","email","name@organization.com","email",254,extra='autocomplete="email"')+wizard_field("Password","password","Create a password","password",128,extra='autocomplete="new-password" minlength="8"')+wizard_field("Confirm password","confirm_password","Repeat password","password",128,extra='autocomplete="new-password" minlength="8"')+'</div><p class="wizard-legal">Use at least 8 characters, uppercase, lowercase and a special character. Verify your email next.</p></div>'
     return page("Create your organization",'<section class="wizard-card ms-auth-split"><aside class="wizard-visual ms-auth-visual" aria-label="MinuteSeal workspace"><img src="/images/heroes/register.webp" alt=""><div><img class="ms-auth-logo" src="/minuteseal.svg" alt=""><h2>Meetings made simple.</h2><p>Minutes, decisions and follow-up.</p></div></aside><div class="wizard-form-side ms-auth-form"><div class="wizard-top"><h2>Register your organization</h2><p>Complete your registration in two steps.</p>'+steps+'</div>'+notice+'<form method="post" action="/register" data-wizard>'+organization+administrator+'<div class="wizard-actions" hidden><button type="button" class="wizard-back">Back</button><span class="wizard-count" aria-live="polite">Step 1 of 2</span><button type="button" class="wizard-next">Continue →</button><button type="submit" class="wizard-submit" hidden>Register</button></div><div class="wizard-fallback"><button type="submit">Register</button></div></form></div></section>')
 def verify_page(state=None,message=""):
     if not state:
@@ -128,8 +128,9 @@ def verified_page(state):
         return page("Registration unavailable",'<section><p>This workspace request could not be activated. Contact support.</p></section>')
     host=state.get("host")
     if host and onboarding.SLUG.fullmatch(host.split(".")[0]) and re.fullmatch(r"[a-z0-9.-]+",host):
+        if state["status"]=="activated":return page("Registration complete",'<section class="otp-card"><h2>Your organization is ready</h2><p>Sign in using the email and password you chose during registration.</p><a class="ms-button" href="https://'+esc(host)+'/login">Open your organization</a></section>')
         return page("Workspace ready",'<section><p>Your workspace is ready. Use the setup invitation sent to your email to finish activating your account.</p><a href="https://'+esc(host)+'/setup">Open workspace</a></section>')
-    return page("Email verified",'<section class="otp-card"><h2>Email verified</h2><p>Your organization is awaiting workspace activation. We will email you when your workspace is ready.</p></section>')
+    return page("Email verified",'<section class="otp-card"><h2>Email verified</h2><p>Your email is verified. We are preparing your organization. Open this page again to continue when it is ready.</p></section>')
 
 class Server(HTTPServer):
     def __init__(self,path,port,origin):
@@ -172,7 +173,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.respond(page("Unavailable","Invalid host"),421)
         path=self.route_path()
         if path=="/verify":
-            return self.respond(verify_page(onboarding.browser_state(self.server.inbox,*self.browser_session())))
+            state=onboarding.browser_state(self.server.inbox,*self.browser_session())
+            if state and state["status"]=="activated" and state.get("host") and re.fullmatch(r"[a-z0-9.-]+",state["host"]):
+                return self.respond("",303,location="https://"+state["host"]+"/login")
+            return self.respond(verify_page(state))
         if path=="/status":
             return self.respond("",303,location=BASE+"/verify")
         view={"/":registration}.get(path)
@@ -200,7 +204,7 @@ class Handler(BaseHTTPRequestHandler):
                     sent=onboarding.resend_browser(self.server.inbox,ref,key)
                     return self.respond(verify_page(state,"A new code was sent." if sent else "Code could not be sent yet. Wait a minute and try again."),200)
                 ok=onboarding.verify_browser(self.server.inbox,ref,key,f.get("code",""))
-                if ok:return self.respond(verified_page(onboarding.browser_state(self.server.inbox,ref,key)))
+                if ok:return self.respond("",303,location=BASE+"/verify")
                 return self.respond(verify_page(state,"Invalid or expired code. Request a new code after five failed attempts."),400)
             return self.respond(page("Not found","Page not found"),404)
         except ValueError as e:

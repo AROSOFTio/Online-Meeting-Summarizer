@@ -26,6 +26,7 @@ import checkout
 import payment_gateways as pg
 import onboarding
 import operator_onboarding
+import trial_policy
 
 SECTORS=("Education","Government","Healthcare","Corporate","NGO & nonprofit","Association","Community","Research","Faith-based","Other")
 FEATURES={"live":"Live meetings","recording":"Recording uploads","ai":"AI transcription & minutes","templates":"Custom minute formats","exports":"PDF & Word exports","actions":"Action tracking","audit":"Audit and backups"}
@@ -404,7 +405,7 @@ def billing_action(root,rows,form):
     return message
 
 
-def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=(),gateways=None):
+def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=(),gateways=None,trial_days=30):
     profiles=[profile(r) for r in rows.values()]
     snapshots=[p["usage"] for p in profiles if p["usage"]]
     active=sum(bool(r.get("enabled")) for r in rows.values())
@@ -415,6 +416,7 @@ def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=
     if message:body+='<p role="status" class="notice">'+esc(message)+'</p>'
     body+='<div class="stats">'+''.join(f'<div class="stat"><span class="muted">{esc(k)}</span><b>{esc(v)}</b></div>' for k,v in totals)+'</div>'
     body+='<div class="notice">Usage is refreshed on demand; '+str(len(snapshots))+' of '+str(len(rows))+' workspaces have snapshots. Subscription limits and feature switches apply to upgraded managed workspaces. AI allowance is distinct from provider billing.</div>'
+    body+='<section class="panel"><h2>Trial policy</h2><p class="muted">Applies to newly activated trials. Existing subscription dates are unchanged.</p>'+form_start(csrf,"configure_trial")+field("Default trial duration (days)","trial_days",trial_days,"number")+'<button class="primary">Save trial duration</button></form></section>'
     body+='<section class="panel"><h2>Registration inbox</h2><p class="muted">Review email-verified applications before creating a workspace.</p>'
     for app in applications:
         body+='<div class="notice"><strong>'+esc(app["name"])+'</strong> · '+esc(app["sector"])+' · '+esc(app["plan"])+'<p>'+esc(app["contact"])+' · '+esc(app["email"])+' · '+esc(app["slug"])+' · '+esc(app["status"])+'</p>'
@@ -522,7 +524,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 applications=[]
                 message=(message+" Registration inbox unavailable.").strip()
-            body=dashboard(rows,audit_tail(self.server.root),session["csrf"],query,state,message,applications,pg.public_config(self.server.root))
+            body=dashboard(rows,audit_tail(self.server.root),session["csrf"],query,state,message,applications,pg.public_config(self.server.root),trial_policy.days(self.server.root))
         self.send_html(body)
 
     def do_GET(self):
@@ -636,7 +638,11 @@ class Handler(BaseHTTPRequestHandler):
             return self.show_dashboard(s,"Confirm suspension before stopping a workspace.")
         try:
             with tenantctl.registry(self.server.root) as rows:
-                if action in {"configure_gateway","test_gateway","create_invoice","start_collection","verify_payment","manual_settlement","cancel_invoice","issue_checkout","revoke_checkout"}:
+                if action=="configure_trial":
+                    trial_policy.configure(self.server.root,int(one(form,"trial_days")))
+                    audit(self.server.root,action,"platform","success")
+                    message="Default trial duration saved."
+                elif action in {"configure_gateway","test_gateway","create_invoice","start_collection","verify_payment","manual_settlement","cancel_invoice","issue_checkout","revoke_checkout"}:
                     message=billing_action(self.server.root,rows,form)
                 elif action in {"approve_registration","reject_registration","send_setup"}:
                     path=operator_onboarding.inbox_path()
@@ -655,9 +661,9 @@ class Handler(BaseHTTPRequestHandler):
                         if one(form,"confirm")!="yes":raise ValueError("Confirm public routing.")
                         row=rows.get(one(form,"slug"))
                         if not row:raise ValueError("Unknown workspace.")
-                        operator_onboarding.send_setup(path,self.server.root,row,safe_compose)
+                        completed=operator_onboarding.send_setup(path,self.server.root,row,safe_compose)
                         audit(self.server.root,action,row["slug"],"success")
-                        message="Single-use setup invitation sent to the verified administrator."
+                        message="Registered administrator activated with the configured trial." if completed else "Single-use setup invitation sent to the verified administrator."
                 else:
                     message=dispatch(self.server.root,rows,form)
         except Exception:

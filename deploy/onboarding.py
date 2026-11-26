@@ -59,6 +59,7 @@ def database(path):
         conn.execute("""CREATE TABLE IF NOT EXISTS mail_attempts(
             email TEXT NOT NULL, attempted INTEGER NOT NULL)""")
         conn.execute("CREATE TABLE IF NOT EXISTS browser_otp(ref TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0)")
+        conn.execute("CREATE TABLE IF NOT EXISTS registration_passwords(ref TEXT PRIMARY KEY, password_hash TEXT NOT NULL)")
         conn.commit()
         yield conn
         conn.commit()
@@ -181,7 +182,7 @@ def resend(path,ref,key,origin,sender=mail):
 def inbox(path):
     with database(path) as conn:
         return [dict(r) for r in conn.execute("""SELECT ref,name,contact,email,slug,sector,plan,status,host,created
-            FROM applications WHERE status IN ('verified','provisioned','setup_sent','rejected')
+            FROM applications WHERE status IN ('verified','provisioned','setup_sent','activated','rejected')
             ORDER BY created DESC LIMIT 200""")]
 
 def application(path,ref):
@@ -203,6 +204,7 @@ def transition(path,ref,old,new,host=None):
                              (new,host,int(time.time()),ref,old)).rowcount
         if changed!=1:
             raise ValueError("Registration state changed.")
+        if new=="rejected":conn.execute("DELETE FROM registration_passwords WHERE ref=?",(ref,))
 
 # Opaque session credentials stay in the browser cookie, not the customer UI.
 OTP_TTL=600
@@ -212,7 +214,34 @@ def otp_digest(ref,key,code):
 def otp_mail(email,code,sender):
     sender(email,"Your MinuteSeal verification code","Your MinuteSeal verification code is "+code+". It expires in 10 minutes. If you did not register, ignore this email.")
 
+def password_for_registration(data):
+    # The cleartext password exists only for the lifetime of this request.
+    from argon2 import PasswordHasher
+    password=data.get("password","")
+    if not isinstance(password,str) or not 8<=len(password)<=128 or not re.search(r"[A-Z]",password) or not re.search(r"[a-z]",password) or not re.search(r"[^A-Za-z0-9]",password):
+        raise ValueError("Use 8–128 characters, uppercase, lowercase and a special character.")
+    if password!=data.get("confirm_password"):
+        raise ValueError("Passwords do not match.")
+    return PasswordHasher().hash(password)
+
+def pending_password(path,ref):
+    # Only called by the trusted operator bridge; never return this from HTTP.
+    if not REF.fullmatch(ref):return None
+    with database(path) as conn:
+        row=conn.execute("SELECT p.password_hash FROM registration_passwords p JOIN applications a ON a.ref=p.ref WHERE p.ref=? AND a.status IN ('verified','provisioned')",(ref,)).fetchone()
+        return row[0] if row else None
+
+def finish_registration(path,ref,host):
+    with database(path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        changed=conn.execute("UPDATE applications SET status='activated',updated=? WHERE ref=? AND status='provisioned' AND host=?",(int(time.time()),ref,host)).rowcount
+        if changed!=1:
+            row=conn.execute("SELECT status,host FROM applications WHERE ref=?",(ref,)).fetchone()
+            if not row or row["status"]!="activated" or row["host"]!=host:raise ValueError("Registration state changed.")
+        conn.execute("DELETE FROM registration_passwords WHERE ref=?",(ref,))
+
 def register_browser(path,data,sender=mail):
+    password_hash=password_for_registration(data)
     # Assign a unique internal workspace identifier; no customer naming step.
     if not data.get("slug"):
         stem=re.sub(r"[^a-z0-9]+","-",str(data.get("name","")).lower()).strip("-")[:28].rstrip("-")
@@ -227,6 +256,7 @@ def register_browser(path,data,sender=mail):
         conn.execute("BEGIN IMMEDIATE")
         conn.execute("DELETE FROM applications WHERE status='unverified' AND created<?",(now-7*TTL,))
         conn.execute("DELETE FROM browser_otp WHERE ref NOT IN (SELECT ref FROM applications)")
+        conn.execute("DELETE FROM registration_passwords WHERE ref NOT IN (SELECT ref FROM applications)")
         if conn.execute("SELECT count(*) FROM applications WHERE status='unverified'").fetchone()[0]>=1000:
             raise ValueError("Registration queue is temporarily full. Try again later.")
         reserve_mail(conn,data["email"],now)
@@ -236,6 +266,7 @@ def register_browser(path,data,sender=mail):
             (ref,data["name"],data["contact"],data["email"],data["slug"],data["sector"],data["plan"],
              otp_digest(ref,key,code),digest(key),now+OTP_TTL,now,now,now))
         conn.execute("INSERT INTO browser_otp(ref,attempts) VALUES (?,0)",(ref,))
+        conn.execute("INSERT INTO registration_passwords(ref,password_hash) VALUES (?,?)",(ref,password_hash))
     try:
         otp_mail(data["email"],code,sender)
         sent=True
@@ -253,7 +284,7 @@ def browser_state(path,ref,key):
     if not REF.fullmatch(ref) or not TOKEN.fullmatch(key):return None
     with database(path) as conn:
         row=browser_row(conn,ref,key)
-        return dict(status=row["status"],email=row["email"],host=row["host"] if row["status"]=="setup_sent" else None) if row else None
+        return dict(status=row["status"],email=row["email"],host=row["host"] if row["status"] in ("setup_sent","activated") else None) if row else None
 
 def verify_browser(path,ref,key,code):
     if not re.fullmatch(r"[0-9]{6}",code):return False

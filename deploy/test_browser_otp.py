@@ -9,7 +9,7 @@ class BrowserOTPTests(unittest.TestCase):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.path=Path(self.tmp.name)/"inbox.db"
         self.messages=[]
-        self.data=dict(name="Example Group",contact="Test Admin",email="admin@example.invalid",slug="example",sector="Corporate",plan="starter")
+        self.data=dict(name="Example Group",contact="Test Admin",email="admin@example.invalid",slug="example",sector="Corporate",plan="starter",password="Test-Only-Password!",confirm_password="Test-Only-Password!")
     def mail(self,*args):self.messages.append(args)
     def code(self):return re.search(r"code is ([0-9]{6})",self.messages[-1][2]).group(1)
     def test_verify_and_replay(self):
@@ -34,3 +34,20 @@ class BrowserOTPTests(unittest.TestCase):
         ref,key,_=onboarding.register_browser(self.path,self.data,self.mail)
         with onboarding.database(self.path) as db:db.execute("UPDATE applications SET expires=0 WHERE ref=?",(ref,))
         self.assertFalse(onboarding.verify_browser(self.path,ref,key,self.code()))
+
+    def test_password_required_and_hash_only(self):
+        from argon2 import PasswordHasher
+        with self.assertRaises(ValueError):
+            onboarding.register_browser(self.path,{**self.data,"password":""},self.mail)
+        with self.assertRaises(ValueError):
+            onboarding.register_browser(self.path,{**self.data,"confirm_password":"different"},self.mail)
+        ref,key,_=onboarding.register_browser(self.path,self.data,self.mail)
+        self.assertIsNone(onboarding.pending_password(self.path,ref))
+        self.assertTrue(onboarding.verify_browser(self.path,ref,key,self.code()))
+        hashed=onboarding.pending_password(self.path,ref)
+        self.assertTrue(PasswordHasher().verify(hashed,self.data["password"]))
+        self.assertNotIn(self.data["password"],self.path.read_bytes().decode("latin1"))
+        onboarding.transition(self.path,ref,"verified","provisioned","example.example.invalid")
+        onboarding.finish_registration(self.path,ref,"example.example.invalid")
+        self.assertIsNone(onboarding.pending_password(self.path,ref))
+        self.assertEqual(onboarding.browser_state(self.path,ref,key)["status"],"activated")
