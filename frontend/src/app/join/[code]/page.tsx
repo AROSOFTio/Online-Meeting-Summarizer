@@ -111,7 +111,7 @@ export default function PublicJoinPage() {
 
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-4 sm:py-6">
-      <div className="mx-auto mb-5 w-full max-w-xl overflow-hidden rounded-md"><PageHero title="Meeting invitation" eyebrow="MinuteSeal" compact heading="p"/></div>
+      <div className="mx-auto mb-5 w-full max-w-xl overflow-hidden rounded-md"><PageHero image="/images/heroes/invitation.webp" title="Meeting invitation" eyebrow="MinuteSeal" compact heading="p"/></div>
       <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <header className="border-b border-slate-200 px-6 py-6 text-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}

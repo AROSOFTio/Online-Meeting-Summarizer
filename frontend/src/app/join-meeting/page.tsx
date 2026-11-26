@@ -20,7 +20,7 @@ export default function JoinMeetingPage() {
   };
 
   return (
-    <AuthShell>
+    <AuthShell image="/images/heroes/join.webp">
         <div className="mb-5">
           <h1 className="text-2xl font-bold text-slate-950">Join meeting</h1>
           <p className="mt-2 text-sm text-slate-600">Paste your invitation link or enter the code from the invitation.</p>

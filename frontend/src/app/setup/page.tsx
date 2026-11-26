@@ -41,7 +41,7 @@ export default function SetupPage() {
       setMessage(err instanceof Error ? err.message : "Setup could not be completed.");
     } finally { setBusy(false); }
   }
-  return <AuthShell>
+  return <AuthShell image="/images/heroes/setup.webp">
     <h1 className="text-2xl font-bold tracking-tight text-slate-950">Set up your workspace</h1>
     {done ? <div className="mt-4 space-y-4"><p role="status" className="text-sm text-slate-700">Your administrator password has been set.</p><Link href="/login" className="block rounded-md bg-blue-700 p-3 text-center text-sm font-semibold text-white">Sign in</Link></div> :
       <>
