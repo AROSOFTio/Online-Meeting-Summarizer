@@ -718,7 +718,7 @@ export default function LiveAudioRoom({
           <h2 className="mt-3 text-lg font-extrabold text-slate-950">
             {joining ? "Joining meeting..." : error ? "Meeting audio needs attention" : "Connecting meeting audio..."}
           </h2>
-          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             The best available/default microphone is selected automatically. There is no microphone-selection or second join step.
           </p>
           {joining && <div className="mx-auto mt-5 h-8 w-8 animate-spin rounded-full border-4 border-blue-700 border-t-transparent" />}
@@ -758,7 +758,7 @@ export default function LiveAudioRoom({
                 <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-green-500" />
                 <h2 className="font-extrabold text-slate-950">Meeting audio connected</h2>
               </div>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-slate-600">
                 {participants.length} connected participant{participants.length === 1 ? "" : "s"}. Default microphone connected automatically.
               </p>
 
@@ -831,7 +831,7 @@ export default function LiveAudioRoom({
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
+                    <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-600">
                       {participant.muted ? <MicOff size={12} /> : <Mic size={12} />}
                       <span>
                         {participant.role_title || "Participant"} · {participant.muted ? "Microphone OFF" : "Microphone ON"}
@@ -865,7 +865,7 @@ export default function LiveAudioRoom({
           </div>
 
           {participants.length === 1 && (
-            <div className="flex items-center justify-center gap-2 rounded-lg bg-slate-50 p-4 text-xs text-slate-500">
+            <div className="flex items-center justify-center gap-2 rounded-lg bg-slate-50 p-4 text-xs text-slate-600">
               <Users size={15} />
               Other invited devices will join audio automatically when they enter the meeting.
             </div>
@@ -989,7 +989,7 @@ function AudioLevelMeter({ stream, muted, label }: { stream: MediaStream | null;
           />
         ))}
       </div>
-      <span className="text-[10px] text-slate-500">{muted ? "Muted" : active ? "Audio detected" : "Silent"}</span>
+      <span className="text-[10px] text-slate-600">{muted ? "Muted" : active ? "Audio detected" : "Silent"}</span>
     </div>
   );
 }

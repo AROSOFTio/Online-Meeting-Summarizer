@@ -318,7 +318,7 @@ export default function LiveMeetingPage() {
   if (meetingQuery.isLoading) {
     return (
       <DashboardLayout>
-        <div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm text-slate-500">
+        <div className="rounded-xl border border-slate-200 bg-white py-16 text-center text-sm text-slate-600">
           <RefreshCw className="mx-auto mb-3 animate-spin text-blue-700" />
           Opening meeting...
         </div>
@@ -363,7 +363,7 @@ export default function LiveMeetingPage() {
           <h1 className="mt-3 text-2xl font-extrabold text-slate-950">
             {meeting.status === "completed" ? "Meeting completed" : "Minutes are being prepared"}
           </h1>
-          <p className="mt-2 text-sm text-slate-500">
+          <p className="mt-2 text-sm text-slate-600">
             The system is preparing the transcript, detecting speakers and building the meeting minutes.
           </p>
           <Link
@@ -407,7 +407,7 @@ export default function LiveMeetingPage() {
 
               <h1 className="mt-1 text-2xl font-extrabold text-slate-950">{meeting.title}</h1>
 
-              <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-500">
+              <div className="mt-2 flex flex-wrap gap-4 text-xs text-slate-600">
                 <span className="flex items-center gap-1">
                   <Calendar size={14} />
                   {new Date(meeting.date).toLocaleString(undefined, {
@@ -455,7 +455,7 @@ export default function LiveMeetingPage() {
               {meeting.lifecycle === "live" ? "Continue meeting recording" : "Ready to start the meeting?"}
             </h2>
 
-            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-600">
               Start once. The browser automatically uses this device&apos;s best available/default microphone with echo cancellation and noise suppression. There is no microphone-selection step. Invited devices also join meeting audio automatically.
             </p>
 
@@ -471,7 +471,7 @@ export default function LiveMeetingPage() {
 
             {meeting.lifecycle !== "live" && (
               <div className="mt-6 border-t border-slate-100 pt-5">
-                <p className="mb-2 text-xs text-slate-400">Already recorded elsewhere?</p>
+                <p className="mb-2 text-xs text-slate-600">Already recorded elsewhere?</p>
                 <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-50">
                   <Upload size={15} />
                   Upload recording instead
@@ -495,7 +495,7 @@ export default function LiveMeetingPage() {
                 {formatTime(seconds)}
               </div>
               <h2 className="mt-3 text-lg font-bold text-slate-900">Meeting is being recorded for minutes</h2>
-              <p className="mx-auto mt-1 max-w-2xl text-sm text-slate-500">
+              <p className="mx-auto mt-1 max-w-2xl text-sm text-slate-600">
                 The organiser microphone and connected participant microphones are combined into the meeting record. Participants can hear each other through the live audio room.
               </p>
 
@@ -561,12 +561,12 @@ export default function LiveMeetingPage() {
 
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {attendance.length === 0 ? (
-                <p className="text-sm text-slate-500">No participants have registered yet.</p>
+                <p className="text-sm text-slate-600">No participants have registered yet.</p>
               ) : (
                 attendance.map((person) => (
                   <div key={person.id} className="rounded-lg bg-slate-50 px-3 py-2">
                     <div className="text-sm font-semibold text-slate-800">{person.name}</div>
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-slate-600">
                       {person.role_title || "Member"} ·{" "}
                       <span className="capitalize">{person.attendance_status}</span>
                     </div>

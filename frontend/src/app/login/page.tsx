@@ -61,7 +61,7 @@ export default function LoginPage() {
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-800 text-xl font-black tracking-tight text-white shadow-sm">MS</div>
           )}
           <h1 className="text-xl font-extrabold text-slate-950">MINUTESEAL</h1>
-          <p className="mt-1 text-sm text-slate-500">Professional meeting minutes &amp; decisions</p>
+          <p className="mt-1 text-sm text-slate-600">Professional meeting minutes &amp; decisions</p>
         </div>
 
         <Link href="/setup" className="mb-4 block text-center text-sm text-blue-700">First-time organization setup</Link>
@@ -79,9 +79,9 @@ export default function LoginPage() {
           <button type="submit" disabled={isSubmitting} className="w-full rounded-lg bg-blue-700 py-3 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">{isSubmitting ? "Signing in..." : "Sign In"}</button>
         </form>
 
-        <div className="my-6 flex items-center gap-3 text-xs text-slate-400"><span className="h-px flex-1 bg-slate-200" />OR<span className="h-px flex-1 bg-slate-200" /></div>
+        <div className="my-6 flex items-center gap-3 text-xs text-slate-600"><span className="h-px flex-1 bg-slate-200" />OR<span className="h-px flex-1 bg-slate-200" /></div>
         <Link href="/join-meeting" className="flex w-full items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800 hover:bg-blue-100"><Users size={17} />Join an Invited Meeting</Link>
-        <p className="mt-2 text-center text-xs text-slate-400">Invitees do not need a staff login.</p>
+        <p className="mt-2 text-center text-xs text-slate-600">Invitees do not need a staff login.</p>
         <Link href="/templates" className="mt-5 block text-center text-sm font-semibold text-blue-700">Browse free meeting formats</Link>
       </div>
     </main>

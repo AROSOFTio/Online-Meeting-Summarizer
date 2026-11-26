@@ -1,13 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #06123d;
-  --foreground: #f8fafc;
+  --background: #f8fafc;
+  --foreground: #0f172a;
   --primary-dark: #0c237e;
   --primary-light: #1d4ed8;
   --minuteseal-gold: #fbbf24;
-  --neutral-grey: #64748b;
-  --border-grey: #1e293b;
+  --neutral-grey: #475569;
+  --border-grey: #cbd5e1;
 }
 
 @theme inline {
@@ -62,4 +62,21 @@ textarea {
 .login-wave-bottom { animation-direction: reverse; animation-duration: 23s; }
 @media (prefers-reduced-motion: reduce) {
   .login-wave { animation: none; }
+}
+
+/* Default light workspace, with deliberately dark meeting components scoped below. */
+@layer base {
+  *, ::before, ::after { border-color: #cbd5e1; }
+  :root { color-scheme: light; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]), select, textarea { border-color: #64748b; }
+  input::placeholder, textarea::placeholder { color: #475569; opacity: 1; }
+  :where(a, button, input, select, textarea, [tabindex]):focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
+  .meeting-dark { color-scheme: dark; color: #f8fafc; }
+  .meeting-dark input::placeholder, .meeting-dark textarea::placeholder { color: #cbd5e1; }
+  .meeting-dark :where(a, button, input, select, textarea, [tabindex]):focus-visible { outline-color: #93c5fd; }
+}
+/* Keep form boundaries visible even on white cards with soft utility borders. */
+@layer utilities {
+  .border-slate-200:is(input, select, textarea), .border-slate-300:is(input, select, textarea), .border-gray-200:is(input, select, textarea), .border-gray-300:is(input, select, textarea) { border-color: #64748b; }
+  .meeting-dark .border-slate-700:is(input, select, textarea) { border-color: #94a3b8; }
 }

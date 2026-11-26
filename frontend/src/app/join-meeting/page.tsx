@@ -25,7 +25,7 @@ export default function JoinMeetingPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/minuteseal.svg" alt="MinuteSeal" className="mx-auto mb-4 h-auto max-h-32 w-auto max-w-[220px] object-contain" />
           <h1 className="text-xl font-extrabold text-slate-950">Join Meeting</h1>
-          <p className="mt-1 text-sm text-slate-500">Paste your invitation link or enter the code from the invitation.</p>
+          <p className="mt-1 text-sm text-slate-600">Paste your invitation link or enter the code from the invitation.</p>
         </div>
 
         <form onSubmit={submit} className="space-y-4">
@@ -35,7 +35,7 @@ export default function JoinMeetingPage() {
           <button type="submit" className="flex w-full items-center justify-center gap-2 rounded-lg bg-blue-700 px-4 py-3 text-sm font-bold text-white hover:bg-blue-800"><Users size={17} />Continue <ArrowRight size={17} /></button>
         </form>
 
-        <Link href="/login" className="mt-5 flex items-center justify-center gap-1 text-xs font-semibold text-slate-500 hover:text-blue-700"><ArrowLeft size={13} />Back to staff sign in</Link>
+        <Link href="/login" className="mt-5 flex items-center justify-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700"><ArrowLeft size={13} />Back to staff sign in</Link>
       </div>
     </main>
   );

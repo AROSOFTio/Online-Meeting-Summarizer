@@ -19,10 +19,10 @@ interface ParticipantListProps {
 
 export const ParticipantList: React.FC<ParticipantListProps> = ({ participants }) => {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl">
+    <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-xl meeting-dark">
       <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-800">
         <div className="flex items-center gap-2">
-          <UserCheck className="w-5 h-5 text-indigo-400" />
+          <UserCheck className="w-5 h-5 text-indigo-300" />
           <h3 className="font-semibold text-slate-100 text-sm">Attendance List</h3>
         </div>
         <span className="bg-indigo-500/20 text-indigo-300 text-xs px-2.5 py-0.5 rounded-full font-mono">
@@ -63,23 +63,23 @@ export const ParticipantList: React.FC<ParticipantListProps> = ({ participants }
                   )}
                 </div>
                 {p.role_title && (
-                  <p className="text-xs text-slate-400">{p.role_title}</p>
+                  <p className="text-xs text-slate-300">{p.role_title}</p>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-2">
               {p.isMuted ? (
-                <MicOff className="w-4 h-4 text-slate-500" />
+                <MicOff className="w-4 h-4 text-slate-300" />
               ) : (
-                <Mic className={`w-4 h-4 ${p.isSpeaking ? "text-emerald-400 animate-pulse" : "text-slate-400"}`} />
+                <Mic className={`w-4 h-4 ${p.isSpeaking ? "text-emerald-400 animate-pulse" : "text-slate-300"}`} />
               )}
             </div>
           </div>
         ))}
 
         {participants.length === 0 && (
-          <p className="text-xs text-slate-500 italic py-4 text-center">
+          <p className="text-xs text-slate-300 italic py-4 text-center">
             No attendees recorded yet.
           </p>
         )}

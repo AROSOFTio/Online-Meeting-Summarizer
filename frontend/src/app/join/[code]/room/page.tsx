@@ -85,7 +85,7 @@ export default function PublicMeetingRoomPage() {
               <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
             )}
             {!invitation && !error && (
-              <div className="py-12 text-center text-sm text-slate-500">Opening meeting room...</div>
+              <div className="py-12 text-center text-sm text-slate-600">Opening meeting room...</div>
             )}
 
             {invitation && (
@@ -117,7 +117,7 @@ export default function PublicMeetingRoomPage() {
                         ? `Starts in about ${Math.ceil(remainingSeconds / 60)} minute(s).`
                         : "The scheduled time has arrived. The room opens when the organiser starts the meeting."}
                     </p>
-                    <p className="mt-2 text-xs text-slate-500">This page updates automatically.</p>
+                    <p className="mt-2 text-xs text-slate-600">This page updates automatically.</p>
                   </div>
                 )}
 
@@ -133,7 +133,7 @@ export default function PublicMeetingRoomPage() {
 
                 {invitation.lifecycle === "ended" && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">
-                    <ShieldCheck className="mx-auto text-slate-500" size={40} />
+                    <ShieldCheck className="mx-auto text-slate-600" size={40} />
                     <h2 className="mt-3 text-xl font-extrabold text-slate-950">Meeting has ended</h2>
                     <p className="mt-2 text-sm text-slate-600">The organiser has closed this meeting.</p>
                   </div>

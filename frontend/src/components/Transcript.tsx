@@ -29,13 +29,13 @@ export const Transcript: React.FC<TranscriptProps> = ({
   };
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 shadow-xl">
+    <div className="rounded-xl border border-slate-800 bg-slate-900 p-5 shadow-xl meeting-dark">
       <div className="mb-4 flex items-center justify-between border-b border-slate-800 pb-3">
         <div className="flex items-center gap-2">
-          <MessageSquare className="h-5 w-5 text-indigo-400" />
+          <MessageSquare className="h-5 w-5 text-indigo-300" />
           <h3 className="text-base font-semibold text-slate-100">Meeting Transcript</h3>
         </div>
-        <span className="font-mono text-xs text-slate-400">{segments.length} Speaker Segments</span>
+        <span className="font-mono text-xs text-slate-300">{segments.length} Speaker Segments</span>
       </div>
 
       <div className="max-h-[500px] space-y-4 overflow-y-auto pr-2">
@@ -47,7 +47,7 @@ export const Transcript: React.FC<TranscriptProps> = ({
                   <User className="h-3 w-3" />{segment.speaker || "Speaker"}
                 </span>
               </div>
-              <span className="flex items-center gap-1 font-mono text-[11px] text-slate-400"><Clock className="h-3 w-3 text-slate-500" />{formatTime(segment.start)} - {formatTime(segment.end)}</span>
+              <span className="flex items-center gap-1 font-mono text-[11px] text-slate-300"><Clock className="h-3 w-3 text-slate-300" />{formatTime(segment.start)} - {formatTime(segment.end)}</span>
             </div>
 
             {isEditable ? (
@@ -58,7 +58,7 @@ export const Transcript: React.FC<TranscriptProps> = ({
           </div>
         ))}
 
-        {segments.length === 0 && <div className="py-10 text-center text-sm italic text-slate-500">No transcript yet. Start speaking or upload audio and the system will process the recording.</div>}
+        {segments.length === 0 && <div className="py-10 text-center text-sm italic text-slate-300">No transcript yet. Start speaking or upload audio and the system will process the recording.</div>}
       </div>
     </div>
   );
