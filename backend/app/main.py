@@ -9,6 +9,8 @@ from app.api.endpoints import action_items, attendance, auth, exports, health, l
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.security import get_password_hash
+from app.core.subscriptions import check_request, SubscriptionDenied
+from app.api.endpoints import subscriptions
 from app.core.tenant_boundary import bind_or_verify_database, bind_or_verify_storage
 from app.models.meeting_flow import DirectoryProfile, MeetingRuntime  # noqa: F401
 from app.models.models import SystemSetting, User, UserRole
@@ -98,12 +100,17 @@ async def tenant_origin_guard(request: Request, call_next):
         fetch_site = request.headers.get("sec-fetch-site")
         if (origin and origin != settings.PUBLIC_APP_URL) or fetch_site in {"cross-site", "same-site"}:
             return JSONResponse({"detail": "Cross-origin workspace mutation denied"}, status_code=403)
+    try:
+        check_request(request.url.path,request.method)
+    except SubscriptionDenied as exc:
+        return JSONResponse({"detail":exc.detail},status_code=exc.status_code,headers={"Cache-Control":"no-store"})
     response = await call_next(request)
     if settings.TENANT_ID and request.url.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
 
 
+app.include_router(subscriptions.router, prefix="/api/subscription", tags=["Subscription"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(staff.router, prefix="/api/staff", tags=["Staff Management"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])

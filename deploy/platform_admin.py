@@ -18,6 +18,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import tenantctl
+import entitlements
 import onboarding
 import operator_onboarding
 
@@ -77,7 +78,7 @@ def one(form,key,default=""):
 
 def defaults(row):
     return {"name":row["slug"].replace("-"," ").title(),"sector":"Other",
-            "plan":"starter","expiry":"","features":list(FEATURES),
+            "plan":"starter","expiry":"","grace_days":0,"features":list(FEATURES),
             "limits":dict(PLANS["starter"]),"usage":None,
             "lifecycle":"running" if row.get("enabled") else "not started"}
 
@@ -97,6 +98,8 @@ def clean_profile(form):
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}",expiry):
             raise ValueError("Use a valid expiry date.")
         date.fromisoformat(expiry)
+    grace=int(one(form,"grace_days","0"))
+    if not 0<=grace<=30:raise ValueError("Grace must be 0–30 days.")
     limits={}
     for key,maximum in (("users",100000),("storage_gib",1000000),("ai_minutes",10000000)):
         value=int(one(form,key))
@@ -106,7 +109,7 @@ def clean_profile(form):
     features=form.get("features",[])
     if any(k not in FEATURES for k in features):
         raise ValueError("Unknown feature.")
-    return {"name":name,"sector":sector,"plan":plan,"expiry":expiry,
+    return {"name":name,"sector":sector,"plan":plan,"expiry":expiry,"grace_days":grace,
             "limits":limits,"features":[k for k in FEATURES if k in features]}
 
 
@@ -168,6 +171,7 @@ def dispatch(root,rows,form):
         port=int(one(form,"port"))
         row=tenantctl.provision(root,rows,slug,one(form,"host").strip().lower(),one(form,"email").strip().lower(),port)
         row["profile"]={**defaults(row),**configured}
+        entitlements.publish(root,row)
         audit(root,action,slug,"success")
         return "Organization provisioned. DNS, TLS and secure credential delivery are still required."
     row=rows.get(slug)
@@ -180,10 +184,12 @@ def dispatch(root,rows,form):
             updated=clean_profile(form)
             if one(form,"apply_preset")=="yes":
                 updated["limits"]=dict(PLANS[updated["plan"]])
+            entitlements.publish(root,row,{**p,**updated})
             p.update(updated)
         elif action=="activate":
             if p["expiry"] and date.fromisoformat(p["expiry"])<date.today():
                 raise ValueError("Subscription expiry is in the past. Update the configuration first.")
+            entitlements.publish(root,row,p)
             safe_compose(root,row,["up","-d","--build","--wait"])
             row["enabled"]=True
             p["lifecycle"]="running"
@@ -204,7 +210,7 @@ def dispatch(root,rows,form):
             p["lifecycle"]="unknown — reconcile"
         audit(root,action,slug,"failed")
         return "Operation failed. Verify the tenant with tenantctl before retrying; no success is assumed."
-    return {"configure":"Subscription configuration saved (not yet enforced).",
+    return {"configure":"Subscription policy saved. Upgraded workspaces read updates automatically.",
             "activate":"Workspace started. Public DNS/TLS and reverse-proxy routing are managed separately.",
             "suspend":"Workspace stopped; data retained. Reconcile reverse-proxy configuration separately.",
             "refresh":"Aggregate usage snapshot updated."}[action]
@@ -248,7 +254,8 @@ def settings_fields(p):
     limits=p["limits"]
     out=field("Organization name","name",p["name"])+dropdown("Organization type","sector",[(s,s) for s in SECTORS],p["sector"])
     out+=dropdown("Subscription plan","plan",[(s,s.title()) for s in PLANS],p["plan"])
-    out+=field("Subscription expiry","expiry",p["expiry"],"date",False)
+    out+=field("Subscription expiry (UTC)","expiry",p["expiry"],"date",False)
+    out+=field("Grace period (days)","grace_days",p.get("grace_days",0),"number")
     for label,key in (("User limit","users"),("Storage quota (GiB)","storage_gib"),("Monthly AI minutes allowance","ai_minutes")):
         out+=field(label,key,limits[key],"number")
     out+='<div class="wide"><span class="label">Configured features</span><div class="checks">'+''.join(f'<label class="check"><input type="checkbox" name="features" value="{esc(k)}" {"checked" if k in p["features"] else ""}> {esc(v)}</label>' for k,v in FEATURES.items())+'</div></div>'
@@ -278,7 +285,7 @@ def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=
     body='<header><div><strong>ConveneCore</strong> <small>Platform administration</small></div>'+form_start(csrf,"logout")+'<button>Sign out</button></form></header><main><h1>Organization management</h1><p class="muted">Manage isolated customer workspaces, subscription configurations and operational usage.</p>'
     if message:body+='<p role="status" class="notice">'+esc(message)+'</p>'
     body+='<div class="stats">'+''.join(f'<div class="stat"><span class="muted">{esc(k)}</span><b>{esc(v)}</b></div>' for k,v in totals)+'</div>'
-    body+='<div class="notice">Usage is refreshed on demand; '+str(len(snapshots))+' of '+str(len(rows))+' workspaces have snapshots. Subscription limits and feature switches are configuration only, not enforced. AI job counts are not billed AI minutes.</div>'
+    body+='<div class="notice">Usage is refreshed on demand; '+str(len(snapshots))+' of '+str(len(rows))+' workspaces have snapshots. Subscription limits and feature switches apply to upgraded managed workspaces. AI allowance is distinct from provider billing.</div>'
     body+='<section class="panel"><h2>Registration inbox</h2><p class="muted">Review email-verified applications before creating a workspace.</p>'
     for app in applications:
         body+='<div class="notice"><strong>'+esc(app["name"])+'</strong> · '+esc(app["sector"])+' · '+esc(app["plan"])+'<p>'+esc(app["contact"])+' · '+esc(app["email"])+' · '+esc(app["slug"])+' · '+esc(app["status"])+'</p>'

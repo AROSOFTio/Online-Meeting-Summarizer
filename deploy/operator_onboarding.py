@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 import onboarding
 import tenantctl
+import entitlements
 
 ISSUE_CODE="""import sys
 from app.core.database import SessionLocal
@@ -37,6 +38,7 @@ def approve(path,root,rows,ref,host,port,profile_factory,plans,features):
         row["registration_ref"]=ref
         row["profile"]={**profile_factory(row),"name":clean["name"],"sector":clean["sector"],
                         "plan":clean["plan"],"limits":dict(plans[clean["plan"]]),"features":list(features)}
+        entitlements.publish(root,row)
         # Persist registry before marking inbox approved; retry can reconcile a partial commit.
         tenantctl.private_write(root/"registry.json",__import__("json").dumps(rows,indent=2)+"\n")
     onboarding.transition(path,ref,"verified","provisioned",host)

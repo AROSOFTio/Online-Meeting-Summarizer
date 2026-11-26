@@ -98,6 +98,8 @@ def provision(root, rows, slug, host, email, port, organization_name=None, admin
     if admin_name and not any(c in admin_name for c in ("\n","\r","\x27")):env["ADMIN_FULL_NAME"]=admin_name
     private_write(directory / "tenant.env", dotenv(env))
     rows[slug] = row
+    from entitlements import publish
+    publish(root,row)
     return row
 
 
@@ -177,6 +179,8 @@ def main():
             if not row:
                 parser.error("Unknown organization")
             if args.action=="start":
+                from entitlements import publish
+                publish(root,row)
                 run_compose(root,row,"up","-d","--build","--wait")
                 row["enabled"]=True
             elif args.action=="suspend":

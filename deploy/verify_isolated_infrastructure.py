@@ -23,6 +23,10 @@ def inspect(root,row):
         services[name]=c
         networks.update(c["NetworkSettings"]["Networks"].keys())
         for mount in c["Mounts"]:
+            if mount["Type"]=="bind":
+                assert name in {"backend","worker"} and mount["Destination"]=="/run/convenecore-entitlements" and not mount["RW"]
+                assert Path(mount["Source"]).resolve()==(root/row["slug"]/"entitlements").resolve()
+                continue
             assert mount["Type"]=="volume", "Unexpected shared host mount"
             volumes.add(mount["Name"])
         published=[binding for bindings in (c["NetworkSettings"]["Ports"] or {}).values() if bindings for binding in bindings]

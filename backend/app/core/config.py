@@ -9,6 +9,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "ConveneCore"
     TENANT_ID: str = ""
+    SUBSCRIPTION_POLICY_FILE: str = "/run/convenecore-entitlements/subscription.json"
     SECRET_KEY: str = token_urlsafe(48)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
