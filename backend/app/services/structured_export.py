@@ -30,8 +30,6 @@ def render_pdf(definition, values, organization, final=False):
     story.extend([para(organization.get("name") or "ConveneCore",center),para(definition.name,center),para("FINAL MEETING MINUTES" if final else "DRAFT • FOR REVIEW",center),Spacer(1,8)])
     for i,f in enumerate(definition.fields,1):
         value=values.get(f.id,"")
-        if not value and not f.required and f.kind!="signature":
-            continue
         story.append(para(f"{i}. {f.label}",heading))
         if f.kind=="table" and value:
             cols=columns(f)
@@ -42,7 +40,7 @@ def render_pdf(definition, values, organization, final=False):
         elif f.kind=="list" and value:
             story.extend(para(f"{n}. {line}") for n,line in enumerate(value.splitlines(),1) if line.strip())
         else:
-            story.append(para(value or ("________________________" if f.kind=="signature" else "Not recorded — review required")))
+            story.append(para(value or ("________________________" if f.kind=="signature" else ("Not recorded — review required" if f.required else "Not recorded"))))
     def footer(canvas,document):
         canvas.saveState()
         canvas.setFont("Helvetica",9)
@@ -113,4 +111,4 @@ def render_docx(definition,values,organization,final=False):
 
 
 def render_txt(definition,values,organization,final=False):
-    return ("\n".join([organization.get("name") or "ConveneCore",definition.name,"FINAL" if final else "DRAFT",*["\n"+str(i)+". "+f.label+"\n"+(values.get(f.id) or "Not recorded") for i,f in enumerate(definition.fields,1) if values.get(f.id) or f.required or f.kind=="signature"]])).encode("utf-8")
+    return ("\n".join([organization.get("name") or "ConveneCore",definition.name,"FINAL" if final else "DRAFT",*["\n"+str(i)+". "+f.label+"\n"+(values.get(f.id) or "Not recorded") for i,f in enumerate(definition.fields,1)]])).encode("utf-8")

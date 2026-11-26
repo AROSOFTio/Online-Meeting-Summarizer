@@ -40,3 +40,51 @@ def test_missing_and_invalid_sections():
 def test_format_library_requires_login(client):
     assert client.get("/api/minute-formats/library").status_code==401
     assert client.post("/api/minute-formats/library",json=definition().model_dump()).status_code==401
+
+def test_saved_format_to_ai_and_final_exports(client, db, monkeypatch, tmp_path):
+    from datetime import datetime, timezone
+    from app.models.models import Meeting, MeetingStatus, Transcript, User
+    from app.services import structured_minutes
+    from app.core.config import settings
+    from app.core.security import get_password_hash
+    from app.models.models import UserRole
+    monkeypatch.setattr(settings, "EXPORT_DIR", str(tmp_path))
+    login=client.post("/api/auth/login",data={"username":"testadmin@starlight.sc.ug","password":"TestAdminPass123!"})
+    assert login.status_code==200
+    user=db.query(User).filter(User.email=="testadmin@starlight.sc.ug").one()
+    meeting=Meeting(title="Integration meeting",owner_id=user.id,date=datetime.now(timezone.utc),status=MeetingStatus.completed)
+    db.add(meeting)
+    db.commit()
+    db.refresh(meeting)
+    mid=meeting.id
+    db.add(Transcript(meeting_id=mid,content="The committee approved the report. Finance will review the budget."))
+    db.commit()
+    saved=client.post("/api/minute-formats/library",json=definition().model_dump())
+    assert saved.status_code==200
+    base=f"/api/minute-formats/meeting/{mid}"
+    attached=client.put(base+"/format",json={"format_id":saved.json()["id"]})
+    assert attached.status_code==200
+    assert len(attached.json()["missing_required"])==2
+    assert client.post(f"/api/meetings/{mid}/finalize?share=false").status_code==422
+    monkeypatch.setattr(structured_minutes,"generate_values",lambda *args:{"a":"Approve the report","b":"Review budget\tFinance lead\t\t","c":""})
+    generated=client.post(base+"/generate")
+    assert generated.status_code==200
+    assert not generated.json()["missing_required"]
+    assert client.get(f"/api/meetings/{mid}/export?format=pdf").content.startswith(b"%PDF")
+    word=client.get(f"/api/meetings/{mid}/export?format=docx")
+    assert word.status_code==200
+    assert Document(io.BytesIO(word.content)).tables[0].cell(1,1).text=="Finance lead"
+    edited=client.put(base+"/values",json={"values":{"a":"Report adopted","b":"Review budget\tFinance lead\t\t","c":""}})
+    assert edited.status_code==200
+    finalized=client.post(f"/api/meetings/{mid}/finalize?share=false")
+    assert finalized.status_code==200
+    assert client.get(base).json()["status"]=="final"
+    assert client.put(base+"/values",json={"values":{"a":"Changed"}}).status_code==409
+    assert client.post(base+"/generate").status_code==409
+    other=User(email="format-test@example.com",hashed_password=get_password_hash("FormatTest123!"),full_name="Other editor",role=UserRole.minute_secretary,is_active=True)
+    db.add(other)
+    db.commit()
+    client.post("/api/auth/logout")
+    assert client.post("/api/auth/login",data={"username":"format-test@example.com","password":"FormatTest123!"}).status_code==200
+    assert client.get("/api/minute-formats/library").json()==[]
+    assert client.get(base).status_code==403

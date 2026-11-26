@@ -65,12 +65,19 @@ def validate_values(definition, values):
         value = values.get(f.id, "")
         if not isinstance(value, str) or len(value) > 30000:
             raise ValueError("Invalid section value")
-        value = value.strip("\r\n") if f.kind == "table" else value.strip()
+        if f.kind == "table":
+            value = "\n".join(line for line in value.splitlines() if line.strip())
+        else:
+            value = value.strip()
         if not value.strip():
             value = ""
         if value and f.kind == "date":
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+                raise ValueError("Date must be YYYY-MM-DD")
             date.fromisoformat(value)
         if value and f.kind == "time":
+            if not re.fullmatch(r"\d{2}:\d{2}", value):
+                raise ValueError("Time must be HH:MM")
             time.fromisoformat(value)
         if f.kind == "table" and any(len(line.split("\t")) != len(columns(f)) for line in value.splitlines() if line.strip()):
             raise ValueError(f"{f.label}: each table row must contain {len(columns(f))} tab-separated cells")
