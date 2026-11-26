@@ -21,16 +21,17 @@ export default function Home(){
     <div className="flex flex-wrap items-center gap-2"><Link href="/login" className="rounded-md border border-blue-700 px-4 py-2 text-sm font-semibold text-blue-700 hover:bg-blue-50">Sign in</Link><Link href="/setup" className="rounded-md bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800">Set up workspace</Link></div>
    </div>
   </header>
-  <section className="border-b border-slate-200">
-   <div className="mx-auto grid max-w-[1440px] items-stretch md:grid-cols-[1fr_1fr] lg:w-[88%]">
-    <div className="flex flex-col justify-center px-5 py-12 sm:px-8 lg:pl-0 lg:pr-12 lg:py-16">
-     <p className="mb-4 text-xs font-bold uppercase tracking-[0.14em] text-blue-700">Meeting documentation, simplified</p>
-     <h1 className="max-w-2xl text-[clamp(2.2rem,4vw,3.75rem)] font-bold leading-[1.1] tracking-tight text-slate-950">Professional meeting minutes, decisions and follow-up.</h1>
-     <p className="mt-5 max-w-xl text-base leading-7 text-slate-600 lg:text-lg">Capture discussions, prepare structured minutes and track agreed actions in one organized workspace.</p>
-     <div className="mt-7 flex flex-wrap items-center gap-3"><Link href="/templates" className="inline-flex items-center gap-3 rounded-md bg-blue-700 px-5 py-3 text-sm font-bold text-white hover:bg-blue-800">Explore templates <ArrowRight size={18}/></Link><Link href="/login" className="rounded-md border border-blue-700 px-6 py-3 text-sm font-bold text-blue-700 hover:bg-blue-50">Sign in</Link></div>
-     <div className="mt-8 flex flex-wrap gap-x-5 gap-y-3 text-sm font-medium text-slate-700">{[{icon:FileText,label:"AI-assisted minutes"},{icon:CheckCircle2,label:"Action tracking"},{icon:ShieldCheck,label:"Organized records"}].map(({icon:Icon,label})=><span key={label} className="flex items-center gap-2"><Icon size={19} className="text-blue-700"/>{label}</span>)}</div>
+  <section aria-labelledby="homepage-hero-title" className="relative isolate w-full overflow-hidden bg-[#103a91] text-white">
+   <img src="/meeting.webp" alt="" aria-hidden="true" fetchPriority="high" className="absolute inset-0 -z-20 h-full w-full object-cover object-[center_44%]"/>
+   <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[#103a91]/85"/>
+   <div className="mx-auto flex min-h-[420px] max-w-[1440px] flex-col justify-center px-5 py-12 sm:px-8 lg:min-h-[490px] lg:w-[88%] lg:px-0 lg:py-16">
+    <div className="max-w-[760px]">
+     <p className="mb-4 text-xs font-bold uppercase tracking-[0.14em] text-blue-100">Meeting documentation, simplified</p>
+     <h1 id="homepage-hero-title" className="max-w-[720px] text-[clamp(2.25rem,4vw,3.6rem)] font-bold leading-[1.12] tracking-tight text-white">Professional meeting minutes, decisions and follow-up.</h1>
+     <p className="mt-5 max-w-[600px] text-base leading-7 text-white/95 lg:text-lg">Capture discussions, prepare structured minutes and track agreed actions in one organized workspace.</p>
+     <div className="mt-7 flex flex-wrap items-center gap-3"><Link href="/templates" className="inline-flex items-center gap-3 rounded-md bg-white px-5 py-3 text-sm font-bold text-blue-800 hover:bg-blue-50">Explore templates <ArrowRight size={18}/></Link><Link href="/login" className="rounded-md border border-white px-6 py-3 text-sm font-bold text-white hover:bg-white/10">Sign in</Link></div>
+     <div className="mt-8 flex flex-wrap gap-x-6 gap-y-3 text-sm font-medium text-white">{[{icon:FileText,label:"AI-assisted minutes"},{icon:CheckCircle2,label:"Action tracking"},{icon:ShieldCheck,label:"Organized records"}].map(({icon:Icon,label})=><span key={label} className="flex items-center gap-2"><Icon size={19} className="text-blue-100"/>{label}</span>)}</div>
     </div>
-    <div className="relative min-h-[270px] overflow-hidden bg-[#153c8a] md:min-h-[440px]"><img src="/meeting.webp" alt="Professionals collaborating around a conference table" fetchPriority="high" className="absolute inset-0 h-full w-full object-cover object-center opacity-75"/></div>
    </div>
   </section>
   <section id="features" className="mx-auto max-w-[1440px] scroll-mt-8 px-5 py-14 lg:w-[88%] lg:px-0 lg:py-20">
