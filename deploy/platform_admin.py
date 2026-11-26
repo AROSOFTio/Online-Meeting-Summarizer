@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ConveneCore private operator console. Bind to loopback; access via SSH tunnel."""
+"""MinuteSeal private operator console. Bind to loopback; access via SSH tunnel."""
 import argparse
 import getpass
 import hashlib
@@ -275,11 +275,11 @@ CSS="""
 
 
 def page(title,body):
-    return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'+esc(title)+' | ConveneCore</title><style>'+CSS+'</style>'+body+'</html>'
+    return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><style>'+CSS+'</style>'+body+'</html>'
 
 
 def login_page(message=""):
-    return page("Platform sign in",'<main class="login panel"><h1>ConveneCore</h1><p class="muted">Private platform administration</p>'+('<p class="notice">'+esc(message)+'</p>' if message else '')+'<form action="/login" method="post"><label>Platform password<input type="password" name="password" autocomplete="current-password" required maxlength="256"></label><button class="primary">Sign in</button></form><p class="fine">Operator access only. Customer workspace credentials are not accepted.</p></main>')
+    return page("Platform sign in",'<main class="login panel"><h1>MinuteSeal</h1><p class="muted">Private platform administration</p>'+('<p class="notice">'+esc(message)+'</p>' if message else '')+'<form action="/login" method="post"><label>Platform password<input type="password" name="password" autocomplete="current-password" required maxlength="256"></label><button class="primary">Sign in</button></form><p class="fine">Operator access only. Customer workspace credentials are not accepted.</p></main>')
 
 
 def billing_panel(rows,csrf,gateways=None):
@@ -326,7 +326,7 @@ def billing_panel(rows,csrf,gateways=None):
 def billing_document(row,inv,receipt=False):
     if receipt and inv["status"]!="paid":raise ValueError("Receipt requires a settled invoice")
     title="PAYMENT RECEIPT" if receipt else "SUBSCRIPTION INVOICE"
-    body='<main><section class="panel"><h1>ConveneCore</h1><h2>'+title+'</h2><p>'+esc(inv["receipt_id"] if receipt else inv["id"])+'</p><p>Organization: '+esc(inv["customer"])+'<br>Workspace: '+esc(inv["tenant"])+'<br>Invoice: '+esc(inv["id"])+'<br>Issued: '+esc(inv["created_at"])+'</p><table><thead><tr><th>Description</th><th>Duration</th><th>Total</th></tr></thead><tbody><tr><td>'+esc(inv["plan"].title())+' subscription</td><td>'+esc(inv["months"])+' months</td><td>'+esc(billing.display(inv["amount_minor"],inv["currency"]))+'</td></tr></tbody></table><p>Status: '+esc(inv["status"].replace("_"," "))+'</p>'
+    body='<main><section class="panel"><h1>MinuteSeal</h1><h2>'+title+'</h2><p>'+esc(inv["receipt_id"] if receipt else inv["id"])+'</p><p>Organization: '+esc(inv["customer"])+'<br>Workspace: '+esc(inv["tenant"])+'<br>Invoice: '+esc(inv["id"])+'<br>Issued: '+esc(inv["created_at"])+'</p><table><thead><tr><th>Description</th><th>Duration</th><th>Total</th></tr></thead><tbody><tr><td>'+esc(inv["plan"].title())+' subscription</td><td>'+esc(inv["months"])+' months</td><td>'+esc(billing.display(inv["amount_minor"],inv["currency"]))+'</td></tr></tbody></table><p>Status: '+esc(inv["status"].replace("_"," "))+'</p>'
     if inv.get("sandbox"):body+='<h2>TEST ONLY — NOT A REAL PAYMENT</h2>'
     if receipt:
         payment=inv["payment"]; renewal=inv.get("renewal",{})
@@ -395,7 +395,7 @@ def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=
     totals=[("Organizations",len(rows)),("Enabled",active),("Not enabled",len(rows)-active),
             ("Active users (snapshots)",sum(s["active_users"] for s in snapshots) if snapshots else "—"),
             ("Storage GiB (snapshots)",round(sum(s["storage_bytes"] for s in snapshots)/2**30,2) if snapshots else "—")]
-    body='<header><div><strong>ConveneCore</strong> <small>Platform administration</small></div>'+form_start(csrf,"logout")+'<button>Sign out</button></form></header><main><h1>Organization management</h1><p class="muted">Manage isolated customer workspaces, subscription configurations and operational usage.</p>'
+    body='<header><div><strong>MinuteSeal</strong> <small>Platform administration</small></div>'+form_start(csrf,"logout")+'<button>Sign out</button></form></header><main><h1>Organization management</h1><p class="muted">Manage isolated customer workspaces, subscription configurations and operational usage.</p>'
     if message:body+='<p role="status" class="notice">'+esc(message)+'</p>'
     body+='<div class="stats">'+''.join(f'<div class="stat"><span class="muted">{esc(k)}</span><b>{esc(v)}</b></div>' for k,v in totals)+'</div>'
     body+='<div class="notice">Usage is refreshed on demand; '+str(len(snapshots))+' of '+str(len(rows))+' workspaces have snapshots. Subscription limits and feature switches apply to upgraded managed workspaces. AI allowance is distinct from provider billing.</div>'
@@ -435,7 +435,7 @@ def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=
     body+='</tbody></table></div></section><section class="panel"><h2>Provision an organization</h2><p class="muted">Creates an isolated workspace definition and credentials. Starting the stack and configuring public DNS/TLS are separate operations.</p>'+form_start(csrf,"provision")+'<div class="formgrid">'+field("Workspace identifier","slug")+field("HTTPS hostname","host")+field("Administrator email","email","","email")+field("Unused loopback port","port","","number")+settings_fields({"name":"","sector":"Other","plan":"starter","expiry":"","features":list(FEATURES),"limits":PLANS["starter"]})+'</div><button class="primary">Create organization</button></form></section>'
     body+=billing_panel(rows,csrf,gateways)
     body+='<section class="panel"><h2>Plan reference</h2><p class="muted">Illustrative default allowances; configure actual limits on each organization.</p><div class="scroll"><table><thead><tr><th>Plan</th><th>Users</th><th>Storage GiB</th><th>AI minutes/month</th></tr></thead><tbody>'+''.join(f'<tr><td>{esc(k.title())}</td><td>{v["users"]}</td><td>{v["storage_gib"]}</td><td>{v["ai_minutes"]}</td></tr>' for k,v in PLANS.items())+'</tbody></table></div></section>'
-    body+='<section class="panel"><h2>Platform activity</h2><div class="scroll"><table><thead><tr><th>Time UTC</th><th>Operation</th><th>Workspace</th><th>Result</th></tr></thead><tbody>'+''.join('<tr>'+''.join('<td>'+esc(e.get(k,""))+'</td>' for k in ("timestamp","action","organization","outcome"))+'</tr>' for e in events)+'</tbody></table></div></section></main><footer>ConveneCore · Private operator console · No customer meeting content is displayed.</footer>'
+    body+='<section class="panel"><h2>Platform activity</h2><div class="scroll"><table><thead><tr><th>Time UTC</th><th>Operation</th><th>Workspace</th><th>Result</th></tr></thead><tbody>'+''.join('<tr>'+''.join('<td>'+esc(e.get(k,""))+'</td>' for k in ("timestamp","action","organization","outcome"))+'</tr>' for e in events)+'</tbody></table></div></section></main><footer>MinuteSeal · Private operator console · No customer meeting content is displayed.</footer>'
     return page("Organizations",body)
 
 
@@ -610,7 +610,7 @@ def main():
             parser.error("Initialize the private platform password first.")
         record=json.loads(path.read_text())
     server=Console(root,args.port,record)
-    print(f"Private ConveneCore console listening on {server.origin}; access via SSH tunnel only.")
+    print(f"Private MinuteSeal console listening on {server.origin}; access via SSH tunnel only.")
     server.serve_forever()
 
 

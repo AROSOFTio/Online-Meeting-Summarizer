@@ -56,12 +56,12 @@ export default function LoginPage() {
         <div className="mb-7 text-center">
           {!logoFailed ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src="/convenecore.svg" alt="ConveneCore" onError={() => setLogoFailed(true)} className="mx-auto mb-4 h-28 w-28 object-contain" />
+            <img src="/minuteseal.svg" alt="MinuteSeal" onError={() => setLogoFailed(true)} className="mx-auto mb-4 h-28 w-28 object-contain" />
           ) : (
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-800 text-xl font-black tracking-tight text-white shadow-sm">CC</div>
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-800 text-xl font-black tracking-tight text-white shadow-sm">MS</div>
           )}
-          <h1 className="text-xl font-extrabold text-slate-950">CONVENECORE</h1>
-          <p className="mt-1 text-sm text-slate-500">Meeting Summarizer</p>
+          <h1 className="text-xl font-extrabold text-slate-950">MINUTESEAL</h1>
+          <p className="mt-1 text-sm text-slate-500">Professional meeting minutes &amp; decisions</p>
         </div>
 
         <Link href="/setup" className="mb-4 block text-center text-sm text-blue-700">First-time organization setup</Link>

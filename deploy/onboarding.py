@@ -106,7 +106,7 @@ def reserve_mail(conn,email,now):
     conn.execute("INSERT INTO mail_attempts VALUES (?,?)",(email,now))
 
 def send_verification(row,code,origin,sender):
-    sender(row["email"],"Verify your ConveneCore registration",
+    sender(row["email"],"Verify your MinuteSeal registration",
         "To verify your email, open "+origin+"/verify\n"
         "Registration reference: "+row["ref"]+"\nVerification code: "+code+
         "\nThis code expires in 24 hours and can only be used once. "

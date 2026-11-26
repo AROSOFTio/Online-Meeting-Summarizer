@@ -70,16 +70,16 @@ def smtp_test(
     try:
         sent = email_service.send(
             recipients=[recipient],
-            subject="ConveneCore email test",
+            subject="MinuteSeal email test",
             text=(
-                "This is a delivery test from ConveneCore.\n\n"
+                "This is a delivery test from MinuteSeal.\n\n"
                 f"Production site: {settings.PUBLIC_APP_URL}\n"
                 f"Sender: {settings.SMTP_FROM_EMAIL}\n"
                 "If you received this message, SMTP authentication and outbound delivery are working."
             ),
             html_body=(
                 '<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#1f2937">'
-                '<h2 style="color:#173ea5">ConveneCore</h2>'
+                '<h2 style="color:#173ea5">MinuteSeal</h2>'
                 '<p>This is a delivery test from the Meeting Summarizer.</p>'
                 f'<p><b>Production site:</b> {settings.PUBLIC_APP_URL}<br>'
                 f'<b>Sender:</b> {settings.SMTP_FROM_EMAIL}</p>'

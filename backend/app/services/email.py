@@ -64,7 +64,7 @@ class EmailService:
 
         message = EmailMessage()
         message["Subject"] = subject
-        message["From"] = f"ConveneCore <{settings.SMTP_FROM_EMAIL}>"
+        message["From"] = f"MinuteSeal <{settings.SMTP_FROM_EMAIL}>"
         if len(unique_recipients) == 1:
             message["To"] = unique_recipients[0]
         else:
@@ -84,7 +84,7 @@ class EmailService:
         return (
             '<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#1f2937">'
             '<div style="text-align:center;border-bottom:3px solid #173ea5;padding:18px 0">'
-            '<h2 style="margin:8px 0 2px;color:#173ea5">CONVENECORE</h2>'
+            '<h2 style="margin:8px 0 2px;color:#173ea5">MINUTESEAL</h2>'
             '</div>'
         )
 

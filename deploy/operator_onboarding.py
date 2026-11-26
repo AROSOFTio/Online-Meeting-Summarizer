@@ -54,7 +54,7 @@ def send_setup(path,root,row,compose,sender=onboarding.mail):
     code=secrets.token_urlsafe(32)
     expires=int(time.time())+3600
     compose(root,row,["exec","-T","backend","python","-c",ISSUE_CODE,app["email"],onboarding.digest(code),str(expires)],timeout=45)
-    sender(app["email"],"Set up your ConveneCore workspace",
+    sender(app["email"],"Set up your MinuteSeal workspace",
            "Your organization workspace is ready for administrator setup.\n"
            "Open https://"+row["host"]+"/setup\nAdministrator email: "+app["email"]+
            "\nSingle-use setup code: "+code+"\nThe code expires in one hour. Set your own password there.")

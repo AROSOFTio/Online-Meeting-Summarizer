@@ -23,7 +23,7 @@ def _org(organization: Optional[dict]) -> dict:
     configured_logo = data.get("logo_path") or ""
     logo_path = configured_logo if configured_logo and os.path.isfile(configured_logo) and not configured_logo.lower().endswith(".svg") else ""
     return {
-        "name": data.get("name") or "ConveneCore",
+        "name": data.get("name") or "MinuteSeal",
         "address": data.get("address") or "",
         "phone": data.get("phone") or "",
         "email": data.get("email") or "",

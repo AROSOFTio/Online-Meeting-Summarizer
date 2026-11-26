@@ -27,7 +27,7 @@ def render_pdf(definition, values, organization, final=False):
             story.append(image)
         except Exception:
             pass
-    story.extend([para(organization.get("name") or "ConveneCore",center),para(definition.name,center),para("FINAL MEETING MINUTES" if final else "DRAFT • FOR REVIEW",center),Spacer(1,8)])
+    story.extend([para(organization.get("name") or "MinuteSeal",center),para(definition.name,center),para("FINAL MEETING MINUTES" if final else "DRAFT • FOR REVIEW",center),Spacer(1,8)])
     for i,f in enumerate(definition.fields,1):
         value=values.get(f.id,"")
         story.append(para(f"{i}. {f.label}",heading))
@@ -45,7 +45,7 @@ def render_pdf(definition, values, organization, final=False):
         canvas.saveState()
         canvas.setFont("Helvetica",9)
         canvas.setFillColor(colors.HexColor("#475569"))
-        canvas.drawString(42,28,"ConveneCore | "+("Final" if final else "Draft"))
+        canvas.drawString(42,28,"MinuteSeal | "+("Final" if final else "Draft"))
         canvas.drawRightString(A4[0]-42,28,f"Page {document.page}")
         canvas.restoreState()
     doc.build(story,onFirstPage=footer,onLaterPages=footer)
@@ -76,7 +76,7 @@ def render_docx(definition,values,organization,final=False):
             doc.paragraphs[-1].alignment=WD_ALIGN_PARAGRAPH.CENTER
         except Exception:
             pass
-    for value in (organization.get("name") or "ConveneCore",definition.name,"FINAL MEETING MINUTES" if final else "DRAFT • FOR REVIEW"):
+    for value in (organization.get("name") or "MinuteSeal",definition.name,"FINAL MEETING MINUTES" if final else "DRAFT • FOR REVIEW"):
         p=doc.add_heading(value,0)
         p.alignment=WD_ALIGN_PARAGRAPH.CENTER
     for i,f in enumerate(definition.fields,1):
@@ -101,7 +101,7 @@ def render_docx(definition,values,organization,final=False):
         else:
             doc.add_paragraph(value or ("________________________" if f.kind=="signature" else "Not recorded — review required"))
     footer=section.footer.paragraphs[0]
-    footer.text="ConveneCore | "+("Final" if final else "Draft")+"  •  Page "
+    footer.text="MinuteSeal | "+("Final" if final else "Draft")+"  •  Page "
     field=OxmlElement("w:fldSimple")
     field.set(qn("w:instr"),"PAGE")
     footer._p.append(field)
@@ -111,4 +111,4 @@ def render_docx(definition,values,organization,final=False):
 
 
 def render_txt(definition,values,organization,final=False):
-    return ("\n".join([organization.get("name") or "ConveneCore",definition.name,"FINAL" if final else "DRAFT",*["\n"+str(i)+". "+f.label+"\n"+(values.get(f.id) or "Not recorded") for i,f in enumerate(definition.fields,1)]])).encode("utf-8")
+    return ("\n".join([organization.get("name") or "MinuteSeal",definition.name,"FINAL" if final else "DRAFT",*["\n"+str(i)+". "+f.label+"\n"+(values.get(f.id) or "Not recorded") for i,f in enumerate(definition.fields,1)]])).encode("utf-8")

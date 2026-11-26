@@ -37,8 +37,8 @@ export default function Sidebar() {
   return <>
     <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between bg-blue-800 px-4 text-white lg:hidden">
       <div className="flex min-w-0 items-center gap-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/convenecore.svg" alt="ConveneCore" className="h-10 w-auto max-w-14 rounded bg-white object-contain p-0.5" />
-        <div className="min-w-0"><div className="truncate text-xs font-bold">CONVENECORE</div><div className="text-[9px] tracking-widest text-blue-100">MEETINGS</div></div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/minuteseal.svg" alt="MinuteSeal" className="h-10 w-auto max-w-14 rounded bg-white object-contain p-0.5" />
+        <div className="min-w-0"><div className="truncate text-xs font-bold">MINUTESEAL</div><div className="text-[9px] tracking-widest text-blue-100">MEETINGS</div></div>
       </div>
       <button onClick={() => setMobileOpen((value) => !value)} className="rounded p-2 hover:bg-white/10" aria-label="Toggle navigation">{mobileOpen ? <X size={24}/> : <Menu size={24}/>}</button>
     </header>
@@ -48,8 +48,8 @@ export default function Sidebar() {
     <aside className={`fixed bottom-0 left-0 top-0 z-50 flex w-[min(20rem,88vw)] flex-col border-r border-slate-200 bg-white transition-all duration-300 lg:translate-x-0 ${desktopWidth} ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}>
       <div className="flex h-16 items-center justify-between border-b border-slate-200 px-3">
         <div className="flex min-w-0 items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/convenecore.svg" alt="ConveneCore" className="h-11 w-auto max-w-14 shrink-0 object-contain" />
-          {!collapsed && <div className="min-w-0"><div className="truncate text-xs font-extrabold text-blue-950">CONVENECORE</div><div className="text-[9px] font-semibold tracking-[0.14em] text-slate-500">MEETING SUMMARIZER</div></div>}
+          {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/minuteseal.svg" alt="MinuteSeal" className="h-11 w-auto max-w-14 shrink-0 object-contain" />
+          {!collapsed && <div className="min-w-0"><div className="truncate text-xs font-extrabold text-blue-950">MINUTESEAL</div><div className="text-[9px] font-semibold tracking-[0.14em] text-slate-500">MEETING SUMMARIZER</div></div>}
         </div>
         <button onClick={() => setCollapsed((value) => !value)} className="hidden rounded p-1 text-slate-500 hover:bg-slate-100 lg:block" aria-label="Collapse sidebar">{collapsed ? <ChevronRight size={18}/> : <ChevronLeft size={18}/>}</button>
       </div>

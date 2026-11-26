@@ -8,13 +8,13 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "ConveneCore",
+  title: "MinuteSeal",
   description: "Meeting recording, attendance, transcription and professional minutes for every organization.",
-  manifest: "/manifest.webmanifest?v=10",
-  icons: { icon: "/convenecore.svg", shortcut: "/convenecore.svg" },
+  manifest: "/manifest.webmanifest?v=11",
+  icons: { icon: "/minuteseal.svg", shortcut: "/minuteseal.svg" },
   appleWebApp: {
     capable: true,
-    title: "ConveneCore",
+    title: "MinuteSeal",
     statusBarStyle: "default",
   },
 };

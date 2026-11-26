@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "ConveneCore"
+    PROJECT_NAME: str = "MinuteSeal"
     TENANT_ID: str = ""
     SUBSCRIPTION_POLICY_FILE: str = "/run/convenecore-entitlements/subscription.json"
     SECRET_KEY: str = token_urlsafe(48)
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: EmailStr = "admin@example.com"
     ADMIN_PASSWORD: str = ""
 
-    SCHOOL_NAME: str = "ConveneCore"
+    SCHOOL_NAME: str = "MinuteSeal"
     SCHOOL_LOGO_URL: str = "/api/settings/logo"
     TIMEZONE: str = "Africa/Kampala"
     RETENTION_PERIOD_DAYS: int = 365

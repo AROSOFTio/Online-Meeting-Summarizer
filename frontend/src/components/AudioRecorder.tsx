@@ -92,7 +92,7 @@ export default function AudioRecorder({ onRecordingComplete, onDiscard }: AudioR
       for (let i = 0; i < bufferLength; i++) {
         barHeight = dataArray[i] / 2;
 
-        ctx.fillStyle = `rgb(30, 64, 175)`; // Starlight dark-blue branding
+        ctx.fillStyle = `rgb(30, 64, 175)`; // MinuteSeal dark-blue branding
         ctx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
 
         x += barWidth + 1;

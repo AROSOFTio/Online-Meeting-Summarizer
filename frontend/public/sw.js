@@ -1,5 +1,5 @@
-const CACHE = "convenecore-v1";
-const OFFLINE_ASSETS = ["/manifest.webmanifest", "/convenecore.svg"];
+const CACHE = "minuteseal-v1";
+const OFFLINE_ASSETS = ["/manifest.webmanifest", "/minuteseal.svg"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(OFFLINE_ASSETS)));

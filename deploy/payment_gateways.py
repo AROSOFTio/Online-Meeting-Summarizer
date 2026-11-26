@@ -81,7 +81,7 @@ class Yo:
         result=self.call("acacctbalance")
         if result.get("Status")!="OK" or result.get("StatusCode")!="0":raise RuntimeError("Gateway authentication failed")
     def submit(self,inv,number):
-        result=self.call("acdepositfunds",NonBlocking="TRUE",Account=number,Amount=inv["amount_minor"],Narrative="ConveneCore invoice "+inv["id"],ExternalReference=inv["id"])
+        result=self.call("acdepositfunds",NonBlocking="TRUE",Account=number,Amount=inv["amount_minor"],Narrative="MinuteSeal invoice "+inv["id"],ExternalReference=inv["id"])
         return result.get("TransactionReference")
     def status(self,inv):
         fields={"PrivateTransactionReference":inv["id"],"DepositTransactionType":"PULL"}
@@ -105,7 +105,7 @@ class Iotec:
         return json.loads(request(IOTEC_API+route,json.dumps(body).encode() if body is not None else None,{"Authorization":"Bearer "+self.token,"Content-Type":"application/json","Accept":"application/json"}),parse_float=Decimal)
     def submit(self,inv,number):
         if not 500<=inv["amount_minor"]<=1000000000:raise ValueError("Invoice outside ioTec collection limits")
-        result=self.call("/collections/collect",{"category":"MobileMoney","currency":"UGX","walletId":self.c["wallet_id"],"externalId":inv["id"],"payer":number,"amount":inv["amount_minor"],"payerNote":"ConveneCore subscription","payeeNote":inv["id"]})
+        result=self.call("/collections/collect",{"category":"MobileMoney","currency":"UGX","walletId":self.c["wallet_id"],"externalId":inv["id"],"payer":number,"amount":inv["amount_minor"],"payerNote":"MinuteSeal subscription","payeeNote":inv["id"]})
         return result.get("id")
     def status(self,inv):
         result=self.call("/collections/status/"+quote(inv["tracking_id"],safe="") if inv.get("tracking_id") else "/collections/external-id/"+quote(inv["id"],safe=""))

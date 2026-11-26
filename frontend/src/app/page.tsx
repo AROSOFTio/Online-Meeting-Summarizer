@@ -23,7 +23,7 @@ export default function Home() {
       <div className="flex flex-col items-center">
         <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
         <p className="mt-4 text-sm font-medium text-gray-600">
-          Loading ConveneCore...
+          Loading MinuteSeal...
         </p>
       </div>
     </div>

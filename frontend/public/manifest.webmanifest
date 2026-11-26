@@ -1,6 +1,6 @@
 {
-  "name": "ConveneCore",
-  "short_name": "ConveneCore",
+  "name": "MinuteSeal",
+  "short_name": "MinuteSeal",
   "description": "Meeting management and professional minutes",
   "start_url": "/dashboard",
   "display": "standalone",
@@ -8,7 +8,7 @@
   "theme_color": "#173ea5",
   "icons": [
     {
-      "src": "/convenecore.svg",
+      "src": "/minuteseal.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any"
