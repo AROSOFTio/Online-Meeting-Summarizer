@@ -121,7 +121,7 @@ def configure_route(row):
             run([str(NGINX),"-t"])
             run([str(NGINX),"-s","reload"])
             raise
-    result=json.loads(run(["/usr/bin/curl","-fsS","--max-time","12","--resolve",host+":443:127.0.0.1","https://"+host+"/api/health"],timeout=20))
+    result=json.loads(run(["/usr/bin/curl","--noproxy","*","-fsS","--max-time","12","--resolve",host+":443:127.0.0.1","https://"+host+"/api/health"],timeout=20))
     if result.get("status")!="healthy" or result.get("database")!="healthy" or result.get("redis")!="healthy":
         raise RuntimeError("Workspace health check failed")
 

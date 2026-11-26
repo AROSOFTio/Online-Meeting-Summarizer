@@ -243,10 +243,9 @@ def finish_registration(path,ref,host):
 def register_browser(path,data,sender=mail):
     password_hash=password_for_registration(data)
     # Assign a unique internal workspace identifier; no customer naming step.
-    if not data.get("slug"):
-        stem=re.sub(r"[^a-z0-9]+","-",str(data.get("name","")).lower()).strip("-")[:28].rstrip("-")
-        if not stem or not stem[0].isalpha():stem="org-"+stem
-        data={**data,"slug":stem[:28].rstrip("-")+"-"+secrets.token_hex(4),"plan":"starter"}
+    stem=re.sub(r"[^a-z0-9]+","-",str(data.get("name","")).lower()).strip("-")[:28].rstrip("-")
+    if not stem or not stem[0].isalpha():stem="org-"+stem
+    data={**data,"slug":stem[:28].rstrip("-")+"-"+secrets.token_hex(4),"plan":"starter"}
     data=validate(data)
     now=int(time.time())
     ref=secrets.token_hex(16)
