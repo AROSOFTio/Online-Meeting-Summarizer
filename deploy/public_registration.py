@@ -4,6 +4,7 @@ import argparse
 import html
 import os
 import re
+from http.cookies import SimpleCookie, CookieError
 from datetime import datetime,timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -71,6 +72,7 @@ body.ms-page{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",s
 .wizard-form-side .wizard-notice{margin:0 24px 10px}
 @media(max-width:950px){.reg-body .wizard-card{grid-template-columns:1fr}.wizard-visual{display:none}.wizard-form-side .wizard-panel .grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:639px){.wizard-form-side .wizard-panel .grid{grid-template-columns:1fr}.wizard-top{padding:18px 16px 0}.wizard-panel{padding:18px 16px}.wizard-actions{padding:15px 16px}.wizard-form-side .wizard-notice{margin-inline:16px}.wizard-steps button{font-size:11px}.wizard-steps .step-no{flex-basis:28px}}
+.otp-card{max-width:480px;margin-inline:auto!important;padding:24px!important}.otp-card h2{font-size:21px;margin:0 0 9px}.otp-card .otp-input{font-size:22px;letter-spacing:.35em;text-align:center;min-height:49px}.otp-card .otp-resend{margin-top:12px}.otp-card .otp-resend button{background:#fff;color:#1d4ed8;border-color:#cbd5e1}.otp-card .note{margin-top:16px}
 """
 BASE=""
 def esc(v):return html.escape(str(v),quote=True)
@@ -95,8 +97,7 @@ def page(title,body):
         body=body.replace('action="'+BASE+'/register"','action="'+BASE+'/"')
     group="verify" if title in ("Verify your email","Email verified","Verification unsuccessful","Verification request") else "status" if title in ("Track registration","Registration status","Registration unavailable","Registration received") else "register"
     description={"register":"Create a workspace for your organization.","verify":"Confirm your administrator email.","status":"Check your application progress."}[group]
-    nav_links=[("register",BASE+"/","Create organization"),("verify",BASE+"/verify","Verify email"),("status",BASE+"/status","Track registration")]
-    nav='<nav class="reg-nav" aria-label="Registration navigation">'+''.join('<a href="'+href+'"'+(' aria-current="page"' if key==group else '')+'>'+label+'</a>' for key,href,label in nav_links)+'</nav>'
+    nav=""
     hero='<section data-page-hero="true" class="ms-public-hero ms-hero-compact"><img class="ms-hero-image" src="/images/heroes/'+group+'.webp" alt="" aria-hidden="true"><div class="ms-hero-overlay" aria-hidden="true"></div><div class="ms-hero-content"><h1 class="ms-hero-title">'+esc(title)+'</h1><p class="ms-hero-description">'+esc(description)+'</p></div></section>'
     return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><link rel="icon" href="/minuteseal.svg"><link rel="stylesheet" href="/minuteseal-public.css?v=4"><script src="/minuteseal-menu.js?v=1" defer></script><script src="/minuteseal-registration.js?v=1" defer></script><style>'+CSS+'</style></head><body class="ms-page">'+brand_header()+hero+'<main class="ms-public-content">'+nav+'<div class="reg-body">'+body+'</div></main>'+brand_footer()+'</body></html>'
 
@@ -105,16 +106,28 @@ def wizard_field(label,name,placeholder,kind="text",maxlength=150,extra=""):
 
 def registration():
     email_ready=bool(os.environ.get("CC_ONBOARD_SMTP_HOST") and os.environ.get("CC_ONBOARD_SMTP_FROM"))
-    notice="" if email_ready else '<div class="wizard-notice" role="status">Email verification is temporarily unavailable. You can still apply and track your registration.</div>'
+    notice="" if email_ready else '<div class="wizard-notice" role="status">Email delivery is temporarily unavailable. You can request a verification code again when service is restored.</div>'
     steps='<ol class="wizard-steps" aria-label="Registration progress" hidden>'+''.join(f'<li><button type="button" data-go="{i}" disabled><span class="step-no">{i+1}</span><span>{label}</span></button></li>' for i,label in enumerate(("Organization","Administrator","Workspace")))+'</ol>'
     organization='<div class="wizard-panel" data-step="0"><h3 tabindex="-1">Organization details</h3><p>Tell us about your organization.</p><div class="grid">'+wizard_field("Organization name","name","e.g. Kampala Business Group",extra='autocomplete="organization" minlength="2"')+select("Organization type","sector",onboarding.SECTORS)+'</div></div>'
     administrator='<div class="wizard-panel" data-step="1"><h3 tabindex="-1">Administrator details</h3><p>Who will manage the workspace?</p><div class="grid">'+wizard_field("Full name","contact","Full name",maxlength=100,extra='autocomplete="name" minlength="2"')+wizard_field("Work email","email","name@organization.com","email",254,extra='autocomplete="email"')+'</div><p class="wizard-legal">This email will be used for verification and account activation.</p></div>'
-    workspace='<div class="wizard-panel" data-step="2"><h3 tabindex="-1">Workspace preferences</h3><p>Choose an identifier and a subscription.</p><div class="grid">'+wizard_field("Workspace identifier","slug","e.g. kampala-group",maxlength=40,extra='pattern="[a-z][a-z0-9\\-]{1,39}" title="2–40 lowercase letters, numbers or hyphens; start with a letter." autocapitalize="none" spellcheck="false" minlength="2"')+select("Requested subscription","plan",onboarding.PLANS)+'</div><span class="wizard-hint">The identifier will be used in your workspace address, subject to approval.</span><div class="wizard-review" hidden><h4>Review your details</h4><dl><dt>Organization</dt><dd data-review="name"></dd><dt>Administrator</dt><dd data-review="contact"></dd><dt>Email</dt><dd data-review="email"></dd></dl></div><p class="wizard-legal">No payment is collected now. Email verification and approval are required before activation.</p></div>'
+    workspace='<div class="wizard-panel" data-step="2"><h3 tabindex="-1">Workspace preferences</h3><p>Choose an identifier and a subscription.</p><div class="grid">'+wizard_field("Workspace identifier","slug","e.g. kampala-group",maxlength=40,extra='pattern="[a-z][a-z0-9\\-]{1,39}" title="2–40 lowercase letters, numbers or hyphens; start with a letter." autocapitalize="none" spellcheck="false" minlength="2"')+select("Requested subscription","plan",onboarding.PLANS)+'</div><span class="wizard-hint">The identifier will be used in your workspace address, subject to approval.</span><div class="wizard-review" hidden><h4>Review your details</h4><dl><dt>Organization</dt><dd data-review="name"></dd><dt>Administrator</dt><dd data-review="contact"></dd><dt>Email</dt><dd data-review="email"></dd></dl></div><p class="wizard-legal">No payment is collected now. Verify your email to continue.</p></div>'
     return page("Create your organization",'<section class="wizard-card"><aside class="wizard-visual" aria-label="MinuteSeal workspace"><img src="/images/heroes/register.webp" alt=""><h2>Better meetings start here.</h2><p>One workspace for minutes, decisions and follow-up.</p></aside><div class="wizard-form-side"><div class="wizard-top"><h2>Register your workspace</h2><p>Complete your application in three steps.</p>'+steps+'</div>'+notice+'<form method="post" action="/register" data-wizard>'+organization+administrator+workspace+'<div class="wizard-actions" hidden><button type="button" class="wizard-back">Back</button><span class="wizard-count" aria-live="polite">Step 1 of 3</span><button type="button" class="wizard-next">Continue →</button><button type="submit" class="wizard-submit" hidden>Request workspace</button></div><div class="wizard-fallback"><button type="submit">Request workspace</button></div></form></div></section>')
-def verify_page():
-    return page("Verify your email",'<section><p>Enter the reference and single-use verification code from your email.</p><form method="post" action="/verify">'+field("Registration reference","ref",maxlength=32)+field("Verification code","code","password",43)+'<button>Verify email</button></form></section>')
-def status_page():
-    return page("Track registration",'<section><p>Use the private tracking key shown after registration. Keep it confidential.</p><form method="post" action="/status">'+field("Registration reference","ref",maxlength=32)+field("Private tracking key","key","password",43)+'<button>Check status</button> <button formaction="/resend">Resend verification</button></form></section>')
+def verify_page(state=None,message=""):
+    if not state:
+        return page("Verify your email",'<section><p>Start registration in this browser to receive your verification code.</p><a href="/">Register organization</a></section>')
+    if state["status"]!="unverified":
+        return verified_page(state)
+    alert='<p role="status">'+esc(message)+'</p>' if message else ''
+    return page("Verify your email",'<section class="otp-card"><h2>Enter your verification code</h2><p>Check your email: '+esc(state["email"])+'</p>'+alert+'<form method="post" action="/verify"><label>Six-digit code<input class="otp-input" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="000000" required></label><button>Verify email</button></form><form method="post" action="/resend" class="otp-resend"><button>Resend code</button></form><p class="note">Codes expire in 10 minutes. Wait 60 seconds before requesting another code.</p></section>')
+
+def verified_page(state):
+    if state["status"]=="rejected":
+        return page("Registration unavailable",'<section><p>This workspace request could not be activated. Contact support.</p></section>')
+    host=state.get("host")
+    if host and onboarding.SLUG.fullmatch(host.split(".")[0]) and re.fullmatch(r"[a-z0-9.-]+",host):
+        return page("Workspace ready",'<section><p>Your workspace is ready. Use the setup invitation sent to your email to finish activating your account.</p><a href="https://'+esc(host)+'/setup">Open workspace</a></section>')
+    return page("Email verified",'<section class="otp-card"><h2>Email verified</h2><p>Your organization is awaiting workspace activation. We will email you when your workspace is ready.</p></section>')
+
 class Server(HTTPServer):
     def __init__(self,path,port,origin):
         self.inbox=path
@@ -126,11 +139,13 @@ class Handler(BaseHTTPRequestHandler):
         super().setup()
         self.connection.settimeout(15)
     def log_message(self,*args):pass
-    def respond(self,body,status=200):
+    def respond(self,body,status=200,cookie=None,location=None):
         raw=body.encode()
         self.send_response(status)
         for k,v in {"Content-Type":"text/html; charset=utf-8","Content-Length":str(len(raw)),"Cache-Control":"no-store","Referrer-Policy":"same-origin","X-Frame-Options":"DENY","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"}.items():
             self.send_header(k,v)
+        if cookie:self.send_header("Set-Cookie",cookie)
+        if location:self.send_header("Location",location)
         self.end_headers()
         self.wfile.write(raw)
     def route_path(self):
@@ -139,10 +154,25 @@ class Handler(BaseHTTPRequestHandler):
             return path[len(BASE):] or "/"
         if BASE:return None
         return path
+    def browser_session(self):
+        try:
+            jar=SimpleCookie(self.headers.get("Cookie",""))
+            value=jar["__Host-ms-registration"].value
+            ref,key=value.split(".",1)
+            if onboarding.REF.fullmatch(ref) and onboarding.TOKEN.fullmatch(key):
+                return ref,key
+        except (CookieError,KeyError,ValueError):
+            pass
+        return "",""
     def do_GET(self):
         if self.headers.get("Host")!=self.server.hostname:
             return self.respond(page("Unavailable","Invalid host"),421)
-        view={"/":registration,"/verify":verify_page,"/status":status_page}.get(self.route_path())
+        path=self.route_path()
+        if path=="/verify":
+            return self.respond(verify_page(onboarding.browser_state(self.server.inbox,*self.browser_session())))
+        if path=="/status":
+            return self.respond("",303,location=BASE+"/verify")
+        view={"/":registration}.get(path)
         return self.respond(view() if view else page("Not found","Page not found"),200 if view else 404)
     def do_POST(self):
         if self.headers.get("Host")!=self.server.hostname or self.headers.get("Origin")!=self.server.origin:
@@ -154,22 +184,21 @@ class Handler(BaseHTTPRequestHandler):
             f={k:v[0] for k,v in parse_qs(self.rfile.read(length).decode(),keep_blank_values=True,max_num_fields=16).items()}
             path=self.route_path()
             if path=="/register" or (BASE and path=="/"):
-                ref,key,sent=onboarding.register(self.server.inbox,f,self.server.origin+BASE)
-                return self.respond(page("Registration received",'<section><p>'+("Check your email for the verification code." if sent else "Email delivery could not be confirmed. Use the tracking key to retry after one minute.")+'</p><strong>Registration reference</strong><code>'+esc(ref)+'</code><strong>Private tracking key</strong><code>'+esc(key)+'</code><p>Save both securely. The tracking key is not recoverable from the service.</p><a href="/verify">Verify email</a> · <a href="/status">Track registration</a></section>'))
-            if path=="/verify":
-                ok=onboarding.verify(self.server.inbox,f.get("ref",""),f.get("code",""))
-                return self.respond(page("Email verified" if ok else "Verification unsuccessful",'<section><p>'+("Your application is awaiting platform approval." if ok else "Invalid, expired or already-used code. Check your registration or request a new code.")+'</p></section>'),200 if ok else 400)
-            if path=="/resend":
-                onboarding.resend(self.server.inbox,f.get("ref",""),f.get("key",""),self.server.origin+BASE)
-                return self.respond(page("Verification request",'<section><p>If the reference and key are valid and eligible, a new verification email has been requested.</p></section>'))
-            if path=="/status":
-                row=onboarding.get_status(self.server.inbox,f.get("ref",""),f.get("key",""))
-                if not row:return self.respond(page("Registration unavailable","Invalid reference or tracking key."),404)
-                labels={"unverified":"Email verification required","verified":"Awaiting platform review","provisioned":"Workspace provisioned; activation pending","setup_sent":"Administrator setup invitation sent","rejected":"Application declined"}
-                body='<section><p>'+esc(labels.get(row["status"],"Under review"))+'</p>'
-                if row["host"] and onboarding.SLUG.fullmatch(row["host"].split(".")[0]) and all(c.isalnum() or c in ".-" for c in row["host"]):
-                    body+='<p>Workspace: <a href="https://'+esc(row["host"])+'/setup">'+esc(row["host"])+'</a></p>'
-                return self.respond(page("Registration status",body+'</section>'))
+                ref,key,sent=onboarding.register_browser(self.server.inbox,f)
+                cookie="__Host-ms-registration="+ref+"."+key+"; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=86400"
+                state=onboarding.browser_state(self.server.inbox,ref,key)
+                return self.respond(verify_page(state,"Verification code sent." if sent else "Email delivery is currently unavailable. Try Resend code later."),cookie=cookie)
+            if path in ("/verify","/resend"):
+                ref,key=self.browser_session()
+                state=onboarding.browser_state(self.server.inbox,ref,key)
+                if not state:return self.respond(verify_page(),400)
+                if state["status"]!="unverified":return self.respond(verified_page(state))
+                if path=="/resend":
+                    sent=onboarding.resend_browser(self.server.inbox,ref,key)
+                    return self.respond(verify_page(state,"A new code was sent." if sent else "Code could not be sent yet. Wait a minute and try again."),200)
+                ok=onboarding.verify_browser(self.server.inbox,ref,key,f.get("code",""))
+                if ok:return self.respond(verified_page(onboarding.browser_state(self.server.inbox,ref,key)))
+                return self.respond(verify_page(state,"Invalid or expired code. Request a new code after five failed attempts."),400)
             return self.respond(page("Not found","Page not found"),404)
         except ValueError as e:
             return self.respond(page("Check your information",'<section><p>'+esc(str(e))+'</p><a href="/">Return to registration</a></section>'),400)

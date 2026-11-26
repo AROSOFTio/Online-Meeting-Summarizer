@@ -58,6 +58,7 @@ def database(path):
             last_sent INTEGER NOT NULL, sends INTEGER NOT NULL, host TEXT)""")
         conn.execute("""CREATE TABLE IF NOT EXISTS mail_attempts(
             email TEXT NOT NULL, attempted INTEGER NOT NULL)""")
+        conn.execute("CREATE TABLE IF NOT EXISTS browser_otp(ref TEXT PRIMARY KEY, attempts INTEGER NOT NULL DEFAULT 0)")
         conn.commit()
         yield conn
         conn.commit()
@@ -202,3 +203,79 @@ def transition(path,ref,old,new,host=None):
                              (new,host,int(time.time()),ref,old)).rowcount
         if changed!=1:
             raise ValueError("Registration state changed.")
+
+# Opaque session credentials stay in the browser cookie, not the customer UI.
+OTP_TTL=600
+def otp_digest(ref,key,code):
+    return hmac.new(key.encode("ascii"),("minuteseal-otp:"+ref+":"+code).encode("ascii"),hashlib.sha256).hexdigest()
+
+def otp_mail(email,code,sender):
+    sender(email,"Your MinuteSeal verification code","Your MinuteSeal verification code is "+code+". It expires in 10 minutes. If you did not register, ignore this email.")
+
+def register_browser(path,data,sender=mail):
+    data=validate(data)
+    now=int(time.time())
+    ref=secrets.token_hex(16)
+    key=secrets.token_urlsafe(32)
+    code=f"{secrets.randbelow(1000000):06d}"
+    with database(path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        conn.execute("DELETE FROM applications WHERE status='unverified' AND created<?",(now-7*TTL,))
+        conn.execute("DELETE FROM browser_otp WHERE ref NOT IN (SELECT ref FROM applications)")
+        if conn.execute("SELECT count(*) FROM applications WHERE status='unverified'").fetchone()[0]>=1000:
+            raise ValueError("Registration queue is temporarily full. Try again later.")
+        reserve_mail(conn,data["email"],now)
+        conn.execute("""INSERT INTO applications
+            (ref,name,contact,email,slug,sector,plan,status,verify_hash,status_hash,expires,created,updated,last_sent,sends)
+            VALUES (?,?,?,?,?,?,?,'unverified',?,?,?,?,?,?,1)""",
+            (ref,data["name"],data["contact"],data["email"],data["slug"],data["sector"],data["plan"],
+             otp_digest(ref,key,code),digest(key),now+OTP_TTL,now,now,now))
+        conn.execute("INSERT INTO browser_otp(ref,attempts) VALUES (?,0)",(ref,))
+    try:
+        otp_mail(data["email"],code,sender)
+        sent=True
+    except Exception:
+        sent=False
+    return ref,key,sent
+
+def browser_row(conn,ref,key):
+    if not REF.fullmatch(ref) or not TOKEN.fullmatch(key):return None
+    row=conn.execute("SELECT a.*, b.attempts FROM applications a JOIN browser_otp b ON a.ref=b.ref WHERE a.ref=?",(ref,)).fetchone()
+    if not row or not matches(key,row["status_hash"]):return None
+    return row
+
+def browser_state(path,ref,key):
+    if not REF.fullmatch(ref) or not TOKEN.fullmatch(key):return None
+    with database(path) as conn:
+        row=browser_row(conn,ref,key)
+        return dict(status=row["status"],email=row["email"],host=row["host"] if row["status"]=="setup_sent" else None) if row else None
+
+def verify_browser(path,ref,key,code):
+    if not re.fullmatch(r"[0-9]{6}",code):return False
+    now=int(time.time())
+    with database(path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row=browser_row(conn,ref,key)
+        if not row or row["status"]!="unverified" or row["expires"]<now or row["attempts"]>=5:return False
+        if not hmac.compare_digest(otp_digest(ref,key,code),row["verify_hash"] or ""):
+            conn.execute("UPDATE browser_otp SET attempts=attempts+1 WHERE ref=?",(ref,))
+            return False
+        conn.execute("UPDATE applications SET status='verified',verify_hash=NULL,updated=? WHERE ref=?",(now,ref))
+        return True
+
+def resend_browser(path,ref,key,sender=mail):
+    now=int(time.time())
+    code=f"{secrets.randbelow(1000000):06d}"
+    with database(path) as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row=browser_row(conn,ref,key)
+        if not row or row["status"]!="unverified" or now-row["last_sent"]<60 or row["sends"]>=5:return False
+        reserve_mail(conn,row["email"],now)
+        conn.execute("UPDATE applications SET verify_hash=?,expires=?,last_sent=?,sends=sends+1,updated=? WHERE ref=?",
+                     (otp_digest(ref,key,code),now+OTP_TTL,now,now,ref))
+        conn.execute("UPDATE browser_otp SET attempts=0 WHERE ref=?",(ref,))
+    try:
+        otp_mail(row["email"],code,sender)
+        return True
+    except Exception:
+        return False
