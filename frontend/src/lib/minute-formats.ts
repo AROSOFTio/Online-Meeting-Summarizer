@@ -1,5 +1,5 @@
 export type FieldKind = "text" | "paragraph" | "list" | "table" | "date" | "time" | "signature";
-export type FormatField = { id: string; label: string; kind: FieldKind; required: boolean; hint: string };
+export type FormatField = { id: string; label: string; kind: FieldKind; required: boolean; hint: string; source?: string; columns?: string[] };
 export type MinuteFormat = { id: string; name: string; sector: string; description: string; fields: FormatField[] };
 export const fieldLibrary: FormatField[] = [
   ["title","Meeting title","text",true,"Official name of the meeting"],
@@ -34,7 +34,7 @@ export const fieldLibrary: FormatField[] = [
   ["close","Closing time","time",false,"Time of adjournment"],
   ["approval","Approval and signatures","signature",false,"Secretary and chairperson"],
   ["attachments","Supporting documents","list",false,"References to attachments"]
-].map(([id,label,kind,required,hint])=>({id:String(id),label:String(label),kind:kind as FieldKind,required:Boolean(required),hint:String(hint)}));
+].map(([id,label,kind,required,hint])=>({id:String(id),source:String(id),label:String(label),kind:kind as FieldKind,required:Boolean(required),hint:String(hint)}));
 const head=["title","reference","date","venue","chair","secretary","attendance","apologies","agenda"];
 const tail=["decisions","actions","wayforward","next","close","approval"];
 function preset(id:string,name:string,sector:string,description:string,middle:string[],before:string[]=head,after:string[]=tail):MinuteFormat{

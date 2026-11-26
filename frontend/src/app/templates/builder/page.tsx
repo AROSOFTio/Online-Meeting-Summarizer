@@ -2,11 +2,16 @@
 import Link from "next/link";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import { apiRequest } from "@/lib/api";
 import { fieldLibrary, fieldKinds, formats, type FormatField, type FieldKind } from "@/lib/minute-formats";
 const storageKey="convenecore-format-draft-v1";
 type Draft={name:string;sector:string;fields:FormatField[]};
 function Builder(){
   const query=useSearchParams();
+  const {user}=useAuth();
+  const canSave=user?.role==="admin"||user?.role==="minute_secretary";
+  const [saving,setSaving]=useState(false);
   const initial=formats.find(f=>f.id===query.get("format"));
   const [name,setName]=useState(initial?.name||"Custom meeting format");
   const [sector,setSector]=useState(initial?.sector||"General");
@@ -15,7 +20,7 @@ function Builder(){
   const [drag,setDrag]=useState<string|null>(null);
   const [filter,setFilter]=useState("");
   function add(field:FormatField,index?:number){
-    setFields(old=>{const next=[...old];next.splice(index??next.length,0,{...field,id:crypto.randomUUID()});return next;});
+    setFields(old=>{const next=[...old];next.splice(index??next.length,0,{...field,source:field.source||field.id,id:crypto.randomUUID()});return next;});
   }
   function move(id:string,index:number){
     setFields(old=>{const from=old.findIndex(f=>f.id===id);if(from<0)return old;const next=[...old];const [item]=next.splice(from,1);next.splice(Math.max(0,Math.min(index,next.length)),0,item);return next;});
@@ -24,11 +29,12 @@ function Builder(){
   function drop(index:number){if(!drag)return;const source=fieldLibrary.find(f=>"lib:"+f.id===drag);if(source)add(source,index);else move(drag,index);setDrag(null);}
   function validate(){if(!name.trim()||!fields.length||fields.some(f=>!f.label.trim())){setMessage("Enter a format name and at least one named field.");return false;}return true;}
   function save(){if(!validate())return;try{localStorage.setItem(storageKey,JSON.stringify({name,sector,fields}));setMessage("Draft saved in this browser.");}catch{setMessage("Unable to save locally. Download the format instead.");}}
+  async function saveAccount(){if(!validate())return;setSaving(true);try{await apiRequest("/api/minute-formats/library",{method:"POST",body:JSON.stringify({name,sector,fields})});setMessage("Format saved to your account. Select it in a meeting workspace.");}catch(e){setMessage(e instanceof Error?e.message:"Unable to save format");}finally{setSaving(false);}}
   function load(){try{const raw=localStorage.getItem(storageKey);if(!raw){setMessage("No saved draft in this browser.");return;}const d=JSON.parse(raw) as Draft;if(typeof d.name!=="string"||typeof d.sector!=="string"||!Array.isArray(d.fields)||!d.fields.every(f=>typeof f.id==="string"&&typeof f.label==="string"&&typeof f.hint==="string"&&typeof f.required==="boolean"&&fieldKinds.includes(f.kind)))throw Error();setName(d.name);setSector(d.sector);setFields(d.fields);setMessage("Local draft restored.");}catch{setMessage("Unable to restore the saved draft.");}}
   function download(){if(!validate())return;const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,name,sector,fields},null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download="meeting-format.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);setMessage("Format exported as JSON.");}
   return <main className="min-h-screen bg-slate-50 text-slate-900">
-    <header className="border-b bg-white"><div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-3 px-5 py-4"><Link href="/templates" className="font-semibold text-blue-700">← Template library</Link><div className="flex flex-wrap gap-2"><button onClick={load} className="rounded-lg border px-3 py-2 text-sm">Restore local draft</button><button onClick={download} className="rounded-lg border px-3 py-2 text-sm">Export format</button><button onClick={save} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white">Save draft</button></div></div></header>
-    <div className="mx-auto max-w-screen-2xl px-5 py-6"><h1 className="text-2xl font-bold">Minutes format builder</h1><p className="mt-1 text-sm text-slate-600">Drag fields from the library or use Add. Reorder by dragging or using the arrow buttons. Changes are local to this browser, not connected to live meetings.</p>
+    <header className="border-b bg-white"><div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-3 px-5 py-4"><Link href="/templates" className="font-semibold text-blue-700">← Template library</Link><div className="flex flex-wrap gap-2"><button onClick={load} className="rounded-lg border px-3 py-2 text-sm">Restore local draft</button><button onClick={download} className="rounded-lg border px-3 py-2 text-sm">Export format</button><button onClick={save} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white">Save local draft</button>{canSave?<button disabled={saving} onClick={saveAccount} className="rounded-lg bg-blue-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving?"Saving...":"Save to account"}</button>:<Link href="/login" className="rounded-lg border px-3 py-2 text-sm">Sign in to use in meetings</Link>}</div></div></header>
+    <div className="mx-auto max-w-screen-2xl px-5 py-6"><h1 className="text-2xl font-bold">Minutes format builder</h1><p className="mt-1 text-sm text-slate-600">Drag fields from the library or use Add. Reorder by dragging or using the arrow buttons. Save a local draft or save to your account to use this structure in AI-generated minutes.</p>
     {message&&<p role="status" className="mt-3 rounded-lg border bg-white p-3 text-sm">{message}</p>}
     <div className="mt-5 grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Format name<input value={name} onChange={e=>setName(e.target.value)} className="mt-1 block w-full rounded-lg border bg-white p-2"/></label><label className="text-sm font-medium">Organization type<input value={sector} onChange={e=>setSector(e.target.value)} className="mt-1 block w-full rounded-lg border bg-white p-2"/></label></div>
     <div className="mt-6 grid items-start gap-4 xl:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)]">

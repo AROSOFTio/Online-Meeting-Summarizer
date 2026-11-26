@@ -290,6 +290,15 @@ def transcribe_meeting(meeting_id: int, job_id: str):
         job.progress = 85
         db.commit()
         summary_text = _store_minutes(db, meeting_id, full_text)
+        from app.services.structured_minutes import get_snapshot, generate_snapshot
+        custom_format = get_snapshot(db, meeting_id)
+        if custom_format:
+            try:
+                generate_snapshot(db, meeting, full_text)
+            except Exception:
+                db.rollback()
+                # Keep the completed transcript. The editor can retry custom generation.
+                print("[WARNING] Custom minute generation did not complete; draft preserved.")
 
         meeting.status = MeetingStatus.completed
         job.status = JobStatus.completed
@@ -302,7 +311,7 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             recipients = [participant.email for participant in meeting.participants if participant.email]
             if meeting.owner and meeting.owner.email:
                 recipients.append(meeting.owner.email)
-            if recipients and email_service.enabled:
+            if recipients and email_service.enabled and not custom_format:
                 pdf_data = _build_generated_minutes_pdf(db, meeting, full_text)
                 sent = email_service.send_meeting_complete(
                     recipients=recipients,

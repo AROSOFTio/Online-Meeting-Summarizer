@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.endpoints import action_items, attendance, auth, exports, health, live_rooms, meetings, recordings, settings as settings_router, staff, stats, summaries, system, transcripts
+from app.api.endpoints import action_items, attendance, auth, exports, health, live_rooms, meetings, minute_formats, recordings, settings as settings_router, staff, stats, summaries, system, transcripts
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.security import get_password_hash
@@ -101,4 +101,5 @@ app.include_router(recordings.router, prefix="/api/recordings", tags=["Recording
 app.include_router(transcripts.router, prefix="/api/transcripts", tags=["Transcripts"])
 app.include_router(summaries.router, prefix="/api/summaries", tags=["Summaries"])
 app.include_router(action_items.router, prefix="/api/action-items", tags=["Action Items"])
+app.include_router(minute_formats.router, prefix="/api/minute-formats", tags=["Minute Formats"])
 app.include_router(exports.router, prefix="/api/meetings", tags=["Exports"])

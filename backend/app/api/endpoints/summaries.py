@@ -191,6 +191,9 @@ def delete_summary(
     meeting = summary.meeting
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised")
+    from app.services.structured_minutes import get_snapshot
+    if get_snapshot(db, meeting_id):
+        raise HTTPException(409, "This meeting uses a structured format; its record must be preserved.")
     db.query(Decision).filter(Decision.meeting_id == meeting_id).delete()
     db.query(ActionItem).filter(ActionItem.meeting_id == meeting_id).update(
         {ActionItem.summary_id: None}, synchronize_session=False
