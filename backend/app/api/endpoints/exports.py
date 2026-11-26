@@ -1,3 +1,4 @@
+from app.core.subscriptions import storage_write
 from pathlib import Path
 import re
 
@@ -212,19 +213,20 @@ def finalize_and_share_minutes(
             organization=organization,
             meeting_description=meeting.description or "",
         )
-    path = _final_pdf_path(meeting_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_bytes(pdf_data)
-    temporary.replace(path)
-    if snapshot:
-        row.status = "final"
-        try:
-            db.commit()
-        except Exception:
-            path.unlink(missing_ok=True)
-            db.rollback()
-            raise
+    with storage_write(len(pdf_data)):
+        path = _final_pdf_path(meeting_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_bytes(pdf_data)
+        temporary.replace(path)
+        if snapshot:
+            row.status = "final"
+            try:
+                db.commit()
+            except Exception:
+                path.unlink(missing_ok=True)
+                db.rollback()
+                raise
 
     recipients = sorted({p.email.strip() for p in meeting.participants if p.email and p.email.strip()})
     delivered = 0

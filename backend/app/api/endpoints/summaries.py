@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core import deps
+from app.core.subscriptions import check_ai_available, feature_enabled, SubscriptionDenied
 from app.core.audit import log_action
 from app.models.models import Meeting, Transcript, Summary, Decision, ActionItem, MeetingStatus, User, UserRole
 from app.services.summarizer import summarize, extract_decisions, extract_action_items, extract_key_points
@@ -32,6 +33,7 @@ def generate_summary(
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised")
 
+    check_ai_available(60)
     text = transcript.content
     provider = "TextRank fallback"
     if gemini_service.enabled:
@@ -51,6 +53,8 @@ def generate_summary(
                 if item.get("description")
             ]
             provider = "Gemini"
+        except SubscriptionDenied:
+            raise
         except Exception:
             summary_text = summarize(text, sentence_count=6)
             key_points = extract_key_points(text, count=5)
@@ -91,7 +95,7 @@ def generate_summary(
         ActionItem.summary_id == summary.id,
     ).count()
 
-    if existing_actions == 0:
+    if feature_enabled("actions") and existing_actions == 0:
         for candidate in action_candidates:
             responsible = str(candidate.get("assignee") or "").strip() or None
             db.add(ActionItem(

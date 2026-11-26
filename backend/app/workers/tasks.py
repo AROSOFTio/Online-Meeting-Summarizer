@@ -1,4 +1,5 @@
 import concurrent.futures
+import tempfile
 import json
 import os
 import re
@@ -8,6 +9,7 @@ from celery import Celery
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.subscriptions import require, feature_enabled, check_ai_available
 from app.core.database import SessionLocal
 from app.core.tenant_boundary import bind_or_verify_database, bind_or_verify_storage
 from app.models.models import (
@@ -133,7 +135,7 @@ def _store_minutes(db: Session, meeting_id: int, full_text: str) -> str:
         if text_value:
             db.add(Decision(meeting_id=meeting_id, summary_id=summary.id, text=text_value))
 
-    if db.query(ActionItem).filter(ActionItem.meeting_id == meeting_id).count() == 0:
+    if feature_enabled("actions") and db.query(ActionItem).filter(ActionItem.meeting_id == meeting_id).count() == 0:
         for item in action_items:
             responsible_name = None
             if isinstance(item, dict):
@@ -227,7 +229,8 @@ def transcribe_meeting(meeting_id: int, job_id: str):
     except Exception:
         db.close()
         raise
-    normalized_path = os.path.join(settings.UPLOAD_DIR, f"normalised_{meeting_id}.wav")
+    temp_dir=tempfile.TemporaryDirectory(prefix="cc-audio-")
+    normalized_path=os.path.join(temp_dir.name,"normalised.wav")
     try:
         meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
         job = db.query(ProcessingJob).filter(ProcessingJob.id == job_id).first()
@@ -248,6 +251,8 @@ def transcribe_meeting(meeting_id: int, job_id: str):
         job.progress = 20
         db.commit()
 
+        require("ai")
+        check_ai_available()
         duration = normalise_audio(recording.filepath, normalized_path)
         recording.duration_seconds = duration
         job.status = JobStatus.transcribing
@@ -301,7 +306,7 @@ def transcribe_meeting(meeting_id: int, job_id: str):
         summary_text = _store_minutes(db, meeting_id, full_text)
         from app.services.structured_minutes import get_snapshot, generate_snapshot
         custom_format = get_snapshot(db, meeting_id)
-        if custom_format:
+        if custom_format and feature_enabled("templates") and feature_enabled("ai"):
             try:
                 generate_snapshot(db, meeting, full_text)
             except Exception:
@@ -320,7 +325,7 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             recipients = [participant.email for participant in meeting.participants if participant.email]
             if meeting.owner and meeting.owner.email:
                 recipients.append(meeting.owner.email)
-            if recipients and email_service.enabled and not custom_format:
+            if recipients and email_service.enabled and not custom_format and feature_enabled("exports"):
                 pdf_data = _build_generated_minutes_pdf(db, meeting, full_text)
                 sent = email_service.send_meeting_complete(
                     recipients=recipients,
@@ -350,4 +355,5 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             db.rollback()
             print(f"[CRITICAL] Could not persist failure state: {db_error}")
     finally:
+        temp_dir.cleanup()
         db.close()

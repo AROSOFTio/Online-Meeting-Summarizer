@@ -8,6 +8,7 @@ from typing import List
 from app.core import deps, security
 from app.core.audit import log_action
 from app.core.config import settings
+from app.core.subscriptions import check_user_slot
 from app.services.email import email_service
 from app.models.meeting_flow import DirectoryProfile
 from app.models.models import User, UserRole
@@ -55,6 +56,7 @@ def create_staff(
     if existing_user:
         raise HTTPException(status_code=400, detail="The user with this email already exists")
 
+    check_user_slot(db)
     temporary_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
     hashed_password = security.get_password_hash(temporary_password)
     new_user = User(
@@ -134,6 +136,8 @@ def update_staff(
         user.full_name = user_in.full_name
     if user_in.role is not None:
         user.role = user_in.role
+    if user_in.is_active is True and not user.is_active:
+        check_user_slot(db)
     if user_in.is_active is not None:
         user.is_active = user_in.is_active
     if user_in.password:

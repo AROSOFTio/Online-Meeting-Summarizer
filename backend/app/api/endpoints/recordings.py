@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core import deps
 from app.core.audit import log_action
 from app.core.config import settings
+from app.core.subscriptions import storage_write
 from app.models.models import Meeting, MeetingStatus, Recording, User, UserRole
 from app.services.audio import compress_speech_webm, validate_media_file
 
@@ -26,7 +27,7 @@ def _can_read(meeting: Meeting, user: User) -> bool:
 
 
 @router.post("/upload/{meeting_id}")
-async def upload_recording(
+def upload_recording(
     meeting_id: int,
     request: Request,
     file: UploadFile = File(...),
@@ -46,62 +47,63 @@ async def upload_recording(
     if not valid:
         raise HTTPException(status_code=400, detail=error)
 
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
-    extension = Path(file.filename or "").suffix.lower()
-    saved_path = os.path.join(settings.UPLOAD_DIR, f"raw_{meeting_id}_{str(uuid.uuid4())[:8]}{extension}")
-    try:
-        with open(saved_path, "wb") as output:
-            while True:
-                chunk = await file.read(1024 * 1024)
-                if not chunk:
-                    break
-                output.write(chunk)
-    except Exception as exc:
-        if os.path.exists(saved_path):
-            os.remove(saved_path)
-        raise HTTPException(status_code=500, detail=f"Failed to write recording: {exc}") from exc
-
-    stored_path = saved_path
-    stored_filename = file.filename or "recording"
-    stored_size = file_size
-    stored_mime = file.content_type
-
-    # Browser live meetings arrive as WebM. Keep speech clear but reduce storage
-    # dramatically by storing mono 16 kHz Opus at 32 kbps.
-    if extension == ".webm":
-        compact_path = os.path.join(settings.UPLOAD_DIR, f"meeting_{meeting_id}_{str(uuid.uuid4())[:8]}.webm")
-        if compress_speech_webm(saved_path, compact_path):
-            try:
+    with storage_write(file_size):
+        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+        extension = Path(file.filename or "").suffix.lower()
+        saved_path = os.path.join(settings.UPLOAD_DIR, f"raw_{meeting_id}_{str(uuid.uuid4())[:8]}{extension}")
+        try:
+            with open(saved_path, "wb") as output:
+                while True:
+                    chunk = file.file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    output.write(chunk)
+        except Exception as exc:
+            if os.path.exists(saved_path):
                 os.remove(saved_path)
+            raise HTTPException(status_code=500, detail=f"Failed to write recording: {exc}") from exc
+    
+        stored_path = saved_path
+        stored_filename = file.filename or "recording"
+        stored_size = file_size
+        stored_mime = file.content_type
+    
+        # Browser live meetings arrive as WebM. Keep speech clear but reduce storage
+        # dramatically by storing mono 16 kHz Opus at 32 kbps.
+        if extension == ".webm" and not settings.TENANT_ID:
+            compact_path = os.path.join(settings.UPLOAD_DIR, f"meeting_{meeting_id}_{str(uuid.uuid4())[:8]}.webm")
+            if compress_speech_webm(saved_path, compact_path):
+                try:
+                    os.remove(saved_path)
+                except OSError:
+                    pass
+                stored_path = compact_path
+                stored_filename = f"meeting-{meeting_id}.webm"
+                stored_size = os.path.getsize(compact_path)
+                stored_mime = "audio/webm"
+    
+        existing = db.query(Recording).filter(Recording.meeting_id == meeting_id).first()
+        old_path = existing.filepath if existing else None
+        if existing:
+            db.delete(existing)
+            db.flush()
+        recording = Recording(
+            meeting_id=meeting_id,
+            filename=stored_filename,
+            filepath=stored_path,
+            file_size_bytes=stored_size,
+            mime_type=stored_mime,
+            uploaded_by_id=current_user.id,
+        )
+        db.add(recording)
+        meeting.status = MeetingStatus.draft
+        db.commit()
+        db.refresh(recording)
+        if old_path and old_path != stored_path and os.path.exists(old_path):
+            try:
+                os.remove(old_path)
             except OSError:
                 pass
-            stored_path = compact_path
-            stored_filename = f"meeting-{meeting_id}.webm"
-            stored_size = os.path.getsize(compact_path)
-            stored_mime = "audio/webm"
-
-    existing = db.query(Recording).filter(Recording.meeting_id == meeting_id).first()
-    old_path = existing.filepath if existing else None
-    if existing:
-        db.delete(existing)
-        db.flush()
-    recording = Recording(
-        meeting_id=meeting_id,
-        filename=stored_filename,
-        filepath=stored_path,
-        file_size_bytes=stored_size,
-        mime_type=stored_mime,
-        uploaded_by_id=current_user.id,
-    )
-    db.add(recording)
-    meeting.status = MeetingStatus.draft
-    db.commit()
-    db.refresh(recording)
-    if old_path and old_path != stored_path and os.path.exists(old_path):
-        try:
-            os.remove(old_path)
-        except OSError:
-            pass
     log_action(db, action="upload_recording", details=f"Uploaded {recording.filename} for meeting {meeting_id}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return {"id": recording.id, "meeting_id": recording.meeting_id, "filename": recording.filename, "file_size_bytes": recording.file_size_bytes, "mime_type": recording.mime_type}
 

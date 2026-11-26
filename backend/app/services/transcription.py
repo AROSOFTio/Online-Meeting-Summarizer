@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from google.genai import types
 
 from app.core.config import settings
+from app.core.subscriptions import reserve_ai, require, SubscriptionDenied
 from app.services.gemini_client import get_gemini_client, resolve_gemini_model, generate_with_retry
 
 
@@ -40,11 +41,12 @@ class TranscriptionService:
         return json.loads(cleaned)
 
     def transcribe(self, audio_path: str, participant_names: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        require("ai")
         if os.getenv("MOCK_TRANSCRIPTION", "false").lower() == "true":
             spk1 = participant_names[0] if participant_names else "Speaker 1"
             spk2 = participant_names[1] if participant_names and len(participant_names) > 1 else spk1
             return [
-                {"start": 0.0, "end": 4.5, "text": "Welcome everyone to the Starlight Secondary School meeting.", "speaker": spk1},
+                {"start": 0.0, "end": 4.5, "text": "Welcome everyone to the organization meeting.", "speaker": spk1},
                 {"start": 4.5, "end": 10.0, "text": "We are reviewing today's agenda and action items.", "speaker": spk2},
             ]
 
@@ -58,7 +60,7 @@ class TranscriptionService:
 
         attendees = ", ".join(participant_names or []) or "No confirmed attendee names supplied"
         prompt = (
-            "Transcribe this school meeting audio faithfully. Preserve the words actually spoken; "
+            "Transcribe this meeting audio faithfully. Preserve the words actually spoken; "
             "do not invent missing speech. Handle Ugandan/African, British, Indian, American and "
             "other English accents. Return chronological speaker turns with start and end times in "
             "seconds. Use an attendee name only when the audio or context supports that identity; "
@@ -80,6 +82,9 @@ class TranscriptionService:
             },
         }
 
+        from app.services.audio import get_audio_duration_python_wave
+        duration=get_audio_duration_python_wave(audio_path)
+        reserve_ai(duration)
         client = get_gemini_client()
         uploaded = None
         model = resolve_gemini_model()
@@ -88,6 +93,8 @@ class TranscriptionService:
             uploaded = self._wait_until_ready(uploaded)
             response = generate_with_retry(
                 model=model,
+                usage_seconds=duration,
+                prepaid_first=True,
                 contents=[prompt, uploaded],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
@@ -111,6 +118,8 @@ class TranscriptionService:
             if not output:
                 raise RuntimeError("Gemini returned transcript segments without speech text")
             return output
+        except SubscriptionDenied:
+            raise
         except Exception as exc:
             message = str(exc)
             if "404" in message or "NOT_FOUND" in message.upper():

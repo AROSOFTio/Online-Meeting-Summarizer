@@ -35,11 +35,14 @@ def get_gemini_client() -> genai.Client:
     return genai.Client(api_key=settings.GEMINI_API_KEY)
 
 
-def generate_with_retry(**kwargs):
+def generate_with_retry(*,usage_seconds=60,prepaid_first=False,**kwargs):
     """Retry only temporary Gemini overload/rate-limit failures."""
     import random
     import time
+    from app.core.subscriptions import reserve_ai, require
     for attempt in range(5):
+        require("ai")
+        if not (prepaid_first and attempt==0):reserve_ai(usage_seconds)
         try:
             return get_gemini_client().models.generate_content(**kwargs)
         except Exception as exc:

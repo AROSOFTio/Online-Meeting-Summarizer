@@ -210,6 +210,8 @@ def create_backup(
         db.refresh(record)
         log_action(db, action="create_backup", details=f"Created validated database backup {path.name}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
         return {"id": record.id, "filename": path.name, "size_bytes": record.size_bytes, "status": record.status}
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Backup failed: {exc}") from exc
 
@@ -249,3 +251,16 @@ def run_retention_cleanup(
     db.commit()
     log_action(db, action="retention_cleanup", details=f"Removed {removed} archived recording(s) older than {days} days", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return {"removed_recordings": removed, "retention_period_days": days}
+
+
+@router.delete("/backups/{backup_id}")
+def delete_backup(backup_id:int,db:Session=Depends(deps.get_db),current_user:User=Depends(deps.get_admin_user)):
+    record=db.query(BackupRecord).filter(BackupRecord.id==backup_id).first()
+    if not record:raise HTTPException(404,"Backup not found")
+    root=(Path(settings.STORAGE_DIR)/"backups").resolve()
+    path=Path(record.filepath).resolve()
+    if path.parent!=root:raise HTTPException(409,"Invalid backup path")
+    path.unlink(missing_ok=True)
+    db.delete(record)
+    db.commit()
+    return {"detail":"Backup deleted"}

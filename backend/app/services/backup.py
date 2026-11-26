@@ -1,3 +1,6 @@
+import tempfile
+import uuid
+from app.core.subscriptions import storage_write
 import os
 import shutil
 import sqlite3
@@ -20,12 +23,12 @@ def _sqlite_path() -> Path:
     return Path(settings.DATABASE_URL.replace("sqlite:///", "", 1)).resolve()
 
 
-def create_database_backup() -> Path:
+def _create_database_backup(directory: Path) -> Path:
     if settings.is_sqlite:
         source = _sqlite_path()
         if not source.exists():
             raise RuntimeError(f"SQLite database does not exist: {source}")
-        target = BACKUP_DIR / f"meeting-summarizer-{_timestamp()}.sqlite3"
+        target = directory / f"meeting-summarizer-{_timestamp()}.sqlite3"
         source_connection = sqlite3.connect(source)
         backup_connection = sqlite3.connect(target)
         try:
@@ -36,7 +39,7 @@ def create_database_backup() -> Path:
         validate_backup(target)
         return target
 
-    target = BACKUP_DIR / f"meeting-summarizer-{_timestamp()}.dump"
+    target = directory / f"meeting-summarizer-{_timestamp()}.dump"
     result = subprocess.run(
         ["pg_dump", "--format=custom", "--no-owner", "--no-acl", "--file", str(target), settings.DATABASE_URL],
         capture_output=True,
@@ -49,6 +52,19 @@ def create_database_backup() -> Path:
         raise RuntimeError(result.stderr.strip() or "pg_dump failed")
     validate_backup(target)
     return target
+
+
+def create_database_backup() -> Path:
+    with tempfile.TemporaryDirectory(prefix="cc-backup-") as tmp:
+        source=_create_database_backup(Path(tmp))
+        with storage_write(source.stat().st_size):
+            target=BACKUP_DIR / (source.stem+"-"+uuid.uuid4().hex[:8]+source.suffix)
+            try:
+                shutil.copyfile(source,target)
+            except Exception:
+                target.unlink(missing_ok=True)
+                raise
+        return target
 
 
 def validate_backup(path: Path) -> None:

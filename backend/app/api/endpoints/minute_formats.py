@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from app.core import deps
+from app.core.subscriptions import check_ai_available, SubscriptionDenied
 from app.core.config import settings
 from app.models.models import Meeting, MeetingStatus, Transcript, User, UserRole
 from app.models.minute_formats import MinuteFormat, MeetingMinuteFormat
@@ -104,7 +105,10 @@ def generate(meeting_id:int,db:Session=Depends(deps.get_db),user:User=Depends(de
     if not transcript or not get_snapshot(db,meeting_id):
         raise HTTPException(404,"Transcript or format not found")
     try:
+        check_ai_available(60)
         generate_snapshot(db,meeting,transcript.content)
+    except SubscriptionDenied:
+        raise
     except ValueError as exc:
         raise HTTPException(422,str(exc)) from exc
     except Exception as exc:

@@ -24,6 +24,7 @@ from app.schemas.schemas import (
     ProcessingJobOut,
 )
 from app.services.email import email_service
+from app.core.subscriptions import check_ai_available
 from app.workers.tasks import run_background_job, transcribe_meeting
 
 router = APIRouter()
@@ -511,6 +512,7 @@ def trigger_transcription(
     current_user: User = Depends(deps.get_minutes_editor),
 ):
     meeting = _editable_meeting(meeting_id, db, current_user)
+    check_ai_available()
     if not meeting.recording:
         raise HTTPException(status_code=400, detail="Cannot transcribe meeting: no recording is attached")
     active_job = (
@@ -569,6 +571,7 @@ def retry_transcription(
     current_user: User = Depends(deps.get_minutes_editor),
 ):
     meeting = _editable_meeting(meeting_id, db, current_user)
+    check_ai_available()
     if meeting.status != MeetingStatus.failed: raise HTTPException(status_code=400, detail="Cannot retry a job that has not failed")
     if not meeting.recording: raise HTTPException(status_code=400, detail="Cannot retry: recording is missing")
     job = ProcessingJob(id=str(uuid.uuid4()), meeting_id=meeting_id, status=JobStatus.queued, progress=0)
