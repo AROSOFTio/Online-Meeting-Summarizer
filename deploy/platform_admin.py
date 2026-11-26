@@ -19,6 +19,8 @@ from urllib.parse import parse_qs, urlsplit
 
 import tenantctl
 import entitlements
+import billing
+import payment_gateways as pg
 import onboarding
 import operator_onboarding
 
@@ -279,7 +281,89 @@ def login_page(message=""):
     return page("Platform sign in",'<main class="login panel"><h1>ConveneCore</h1><p class="muted">Private platform administration</p>'+('<p class="notice">'+esc(message)+'</p>' if message else '')+'<form action="/login" method="post"><label>Platform password<input type="password" name="password" autocomplete="current-password" required maxlength="256"></label><button class="primary">Sign in</button></form><p class="fine">Operator access only. Customer workspace credentials are not accepted.</p></main>')
 
 
-def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=()):
+def billing_panel(rows,csrf,gateways=None):
+    gateways=gateways or {}
+    out='<section class="panel"><h2>Payment gateway settings</h2><p class="muted">Production · Uganda mobile money. Credentials are write-only. Leave existing credential fields blank to keep their values. Enable only after verifying the merchant account.</p>'
+    for provider,keys in pg.PROVIDERS.items():
+        state=gateways.get(provider,{})
+        out+='<div class="notice"><h3>'+esc(pg.LABELS[provider])+'</h3><p>'+("Configured" if state.get("configured") else "Not configured")+' · '+("Enabled" if state.get("enabled") else "Disabled")+(" · Default" if state.get("default") else "")+'</p>'+form_start(csrf,"configure_gateway")+hidden("provider",provider)+'<div class="formgrid">'
+        labels={"username":"API username","password":"API password","client_id":"Client ID","client_secret":"Client secret","wallet_id":"Wallet ID"}
+        for key in keys:
+            out+='<label>'+esc(labels[key])+'<input type="password" name="'+esc(key)+'" autocomplete="new-password" maxlength="512" placeholder="'+("Leave blank to retain" if state.get("configured") else "Enter credential")+'" '+("" if state.get("configured") else "required")+'></label>'
+        out+='</div><label class="check"><input type="checkbox" name="enabled" value="yes" '+("checked" if state.get("enabled") else "")+'> Enable collections</label><label class="check"><input type="checkbox" name="default" value="yes" '+("checked" if state.get("default") else "")+'> Make default gateway</label><button class="primary">Save gateway</button></form>'
+        if state.get("configured"):
+            out+=form_start(csrf,"test_gateway")+hidden("provider",provider)+'<button>Test connection (no payment)</button></form>'
+        out+='</div>'
+    out+='</section><section class="panel"><h2>Invoices &amp; payments</h2><p class="muted">Create a subscription invoice, reconcile a confirmed collection, and apply the renewal. A payment request requires the payer’s explicit consent. Do not retry an uncertain request.</p>'
+    for slug,row in sorted(rows.items()):
+        out+='<div class="notice"><h3>'+esc(profile(row)["name"])+'</h3>'+form_start(csrf,"create_invoice",slug)+'<div class="formgrid">'+field("Invoice amount","amount","","number")+dropdown("Currency","currency",[(k,k) for k in billing.CURRENCIES],"UGX")+field("Subscription months","months","1","number")+'</div><button class="primary">Create invoice</button></form>'
+        for inv in reversed(list(row.get("invoices",{}).values())):
+            iid=inv["id"]; status=inv["status"]
+            out+='<div class="notice"><strong>'+esc(iid)+'</strong> · '+esc(billing.display(inv["amount_minor"],inv["currency"]))+' · '+esc(inv["months"])+' months · '+esc(status.replace("_"," "))+'<p><a href="/billing/document?slug='+esc(slug)+'&amp;id='+esc(iid)+'">Print invoice</a>'
+            if status=="paid":out+=' · <a href="/billing/document?slug='+esc(slug)+'&amp;id='+esc(iid)+'&amp;receipt=yes">Print receipt</a>'
+            out+='</p>'
+            if status=="open" and not inv.get("sandbox"):
+                providers=[(k,pg.LABELS[k]) for k,v in gateways.items() if k in pg.PROVIDERS and v.get("enabled")]
+                default=next((k for k,v in gateways.items() if v.get("default") and v.get("enabled")),"")
+                if providers and inv["currency"]=="UGX":
+                    out+=form_start(csrf,"start_collection",slug)+hidden("invoice",iid)+dropdown("Gateway","provider",providers,default)+field("Consenting payer mobile number","phone")+'<label class="check"><input type="checkbox" name="confirm" value="yes" required> Payer explicitly authorized this exact invoice amount and request</label><button>Request mobile money payment</button></form>'
+                out+=form_start(csrf,"manual_settlement",slug)+hidden("invoice",iid)+'<div class="formgrid">'+dropdown("Payment method","method",[(k,k.replace("_"," ").title()) for k in sorted(billing.METHODS)],"bank")+field("Verified transaction reference","reference")+field("Confirmed amount","amount","","number")+'</div><label class="check"><input type="checkbox" name="confirm" value="yes" required> I independently verified receipt of this payment</label><button>Record verified settlement</button></form>'
+                out+=form_start(csrf,"cancel_invoice",slug)+hidden("invoice",iid)+'<label class="check"><input type="checkbox" name="confirm" value="yes" required> Confirm cancellation</label><button class="warn">Cancel invoice</button></form>'
+            if status in {"collection_pending","collection_unknown","paid_pending_sync"}:
+                out+=form_start(csrf,"verify_payment",slug)+hidden("invoice",iid)+'<button>Verify payment / sync renewal</button></form>'
+            out+='</div>'
+        out+='</div>'
+    return out+'</section>'
+
+
+def billing_document(row,inv,receipt=False):
+    if receipt and inv["status"]!="paid":raise ValueError("Receipt requires a settled invoice")
+    title="PAYMENT RECEIPT" if receipt else "SUBSCRIPTION INVOICE"
+    body='<main><section class="panel"><h1>ConveneCore</h1><h2>'+title+'</h2><p>'+esc(inv["receipt_id"] if receipt else inv["id"])+'</p><p>Organization: '+esc(inv["customer"])+'<br>Workspace: '+esc(inv["tenant"])+'<br>Invoice: '+esc(inv["id"])+'<br>Issued: '+esc(inv["created_at"])+'</p><table><thead><tr><th>Description</th><th>Duration</th><th>Total</th></tr></thead><tbody><tr><td>'+esc(inv["plan"].title())+' subscription</td><td>'+esc(inv["months"])+' months</td><td>'+esc(billing.display(inv["amount_minor"],inv["currency"]))+'</td></tr></tbody></table><p>Status: '+esc(inv["status"].replace("_"," "))+'</p>'
+    if inv.get("sandbox"):body+='<h2>TEST ONLY — NOT A REAL PAYMENT</h2>'
+    if receipt:
+        payment=inv["payment"]; renewal=inv.get("renewal",{})
+        body+='<p>Payment method: '+esc(payment["channel"])+'<br>Payment reference: '+esc(payment["reference"])+'<br>Recorded: '+esc(payment["recorded_at"])+'</p>'
+        if isinstance(renewal,dict):body+='<p>Subscription expiry: '+esc(renewal["new_expiry"])+'</p>'
+    return page(title,body+'<p class="fine">Print or save as PDF using your browser. This document is not a statutory tax invoice.</p></section></main>')
+
+
+def billing_action(root,rows,form):
+    action=one(form,"action")
+    if action=="configure_gateway":
+        provider=one(form,"provider")
+        pg.configure(root,provider,{k:one(form,k) for k in pg.PROVIDERS.get(provider,())},one(form,"enabled")=="yes",one(form,"default")=="yes")
+        audit(root,action,provider,"success")
+        return "Gateway configuration saved."
+    if action=="test_gateway":
+        provider=one(form,"provider")
+        g,_=pg.gateway(root,provider);g.test()
+        audit(root,action,provider,"success")
+        return "Gateway connection test succeeded; no payment was requested."
+    slug=one(form,"slug");row=rows.get(slug)
+    if not row:raise ValueError("Unknown organization")
+    if action=="create_invoice":
+        billing.create_invoice(row,one(form,"amount"),one(form,"currency"),int(one(form,"months")))
+        message="Invoice created."
+    else:
+        inv=billing.invoice(row,one(form,"invoice"))
+        if action=="start_collection":
+            billing.begin_collection(root,rows,row,inv,one(form,"provider"),one(form,"phone"),one(form,"confirm")=="yes")
+            message="Collection submitted; verify the final status before retrying anything."
+        elif action=="verify_payment":
+            billing.reconcile(root,rows,row,inv)
+            message="Invoice status: "+inv["status"].replace("_"," ")
+        elif action=="manual_settlement":
+            billing.record_manual(root,rows,row,inv,one(form,"method"),one(form,"reference"),one(form,"amount"),inv["currency"],one(form,"confirm")=="yes")
+            message="Verified external settlement recorded and renewal applied."
+        elif action=="cancel_invoice" and one(form,"confirm")=="yes":
+            billing.cancel(inv);message="Invoice cancelled."
+        else:raise ValueError("Unknown billing operation")
+    audit(root,action,slug,"success")
+    return message
+
+
+def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=(),gateways=None):
     profiles=[profile(r) for r in rows.values()]
     snapshots=[p["usage"] for p in profiles if p["usage"]]
     active=sum(bool(r.get("enabled")) for r in rows.values())
@@ -324,6 +408,7 @@ def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=
             buttons+=form_start(csrf,"send_setup",slug)+'<label class="check"><input type="checkbox" name="confirm" value="yes" required> DNS/TLS route verified</label><button>Send setup invitation</button></form>'
         body+=f'<tr><td><strong>{esc(p["name"])}</strong><small>{esc(p["sector"])} · {esc(slug)}</small><a href="https://{esc(row["host"])}" rel="noreferrer">{esc(row["host"])}</a></td><td><span class="pill {esc(status)}">{esc(status)}</span></td><td>{esc(p["plan"].title())}<small>Expiry: {esc(expiry)}{" · Expired" if expired else ""}</small></td><td class="usage">{usage}</td><td><div class="actions">{buttons}</div><details><summary>Configure workspace</summary>'+form_start(csrf,"configure",slug)+'<div class="formgrid">'+settings_fields(p)+'</div><button class="primary">Save configuration</button> <button name="apply_preset" value="yes">Save with plan defaults</button></form></details></td></tr>'
     body+='</tbody></table></div></section><section class="panel"><h2>Provision an organization</h2><p class="muted">Creates an isolated workspace definition and credentials. Starting the stack and configuring public DNS/TLS are separate operations.</p>'+form_start(csrf,"provision")+'<div class="formgrid">'+field("Workspace identifier","slug")+field("HTTPS hostname","host")+field("Administrator email","email","","email")+field("Unused loopback port","port","","number")+settings_fields({"name":"","sector":"Other","plan":"starter","expiry":"","features":list(FEATURES),"limits":PLANS["starter"]})+'</div><button class="primary">Create organization</button></form></section>'
+    body+=billing_panel(rows,csrf,gateways)
     body+='<section class="panel"><h2>Plan reference</h2><p class="muted">Illustrative default allowances; configure actual limits on each organization.</p><div class="scroll"><table><thead><tr><th>Plan</th><th>Users</th><th>Storage GiB</th><th>AI minutes/month</th></tr></thead><tbody>'+''.join(f'<tr><td>{esc(k.title())}</td><td>{v["users"]}</td><td>{v["storage_gib"]}</td><td>{v["ai_minutes"]}</td></tr>' for k,v in PLANS.items())+'</tbody></table></div></section>'
     body+='<section class="panel"><h2>Platform activity</h2><div class="scroll"><table><thead><tr><th>Time UTC</th><th>Operation</th><th>Workspace</th><th>Result</th></tr></thead><tbody>'+''.join('<tr>'+''.join('<td>'+esc(e.get(k,""))+'</td>' for k in ("timestamp","action","organization","outcome"))+'</tr>' for e in events)+'</tbody></table></div></section></main><footer>ConveneCore · Private operator console · No customer meeting content is displayed.</footer>'
     return page("Organizations",body)
@@ -386,18 +471,23 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 applications=[]
                 message=(message+" Registration inbox unavailable.").strip()
-            body=dashboard(rows,audit_tail(self.server.root),session["csrf"],query,state,message,applications)
+            body=dashboard(rows,audit_tail(self.server.root),session["csrf"],query,state,message,applications,pg.public_config(self.server.root))
         self.send_html(body)
 
     def do_GET(self):
         if not self.valid_host():
             return self.send_html(page("Denied","Invalid host"),421)
         u=urlsplit(self.path)
-        if u.path!="/":
-            return self.send_html(page("Not found","Not found"),404)
         _,session=self.session()
         if not session:return self.send_html(login_page())
         q=parse_qs(u.query)
+        if u.path=="/billing/document":
+            try:
+                with tenantctl.registry(self.server.root) as rows:
+                    row=rows[one(q,"slug")];inv=billing.invoice(row,one(q,"id"));document=billing_document(row,inv,one(q,"receipt")=="yes")
+                return self.send_html(document)
+            except (KeyError,ValueError):return self.send_html(page("Not found","Document unavailable"),404)
+        if u.path!="/":return self.send_html(page("Not found","Not found"),404)
         self.show_dashboard(session,message=session.pop("flash",""),query=one(q,"q")[:150],state=one(q,"state"))
 
     def do_POST(self):
@@ -442,7 +532,9 @@ class Handler(BaseHTTPRequestHandler):
             return self.show_dashboard(s,"Confirm suspension before stopping a workspace.")
         try:
             with tenantctl.registry(self.server.root) as rows:
-                if action in {"approve_registration","reject_registration","send_setup"}:
+                if action in {"configure_gateway","test_gateway","create_invoice","start_collection","verify_payment","manual_settlement","cancel_invoice"}:
+                    message=billing_action(self.server.root,rows,form)
+                elif action in {"approve_registration","reject_registration","send_setup"}:
                     path=operator_onboarding.inbox_path()
                     if not path:raise ValueError("Registration inbox not configured.")
                     if action=="approve_registration":
