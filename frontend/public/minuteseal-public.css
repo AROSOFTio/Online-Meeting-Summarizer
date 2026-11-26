@@ -23,10 +23,22 @@
 .ms-menu-toggle{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--ms-line);border-radius:5px;color:var(--ms-ink);list-style:none;cursor:pointer}
 .ms-menu-toggle::-webkit-details-marker{display:none}
 .ms-menu-toggle svg{width:21px;height:21px}
-.ms-mobile-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;position:absolute;inset-inline:0;top:100%;background:white;border-bottom:1px solid var(--ms-line);padding:12px 16px;font-size:14px}
-.ms-mobile-links a{padding:10px 12px;border-radius:5px;min-width:0}
+.ms-mobile-links{display:flex;flex-direction:column;gap:4px;position:fixed;inset-block-start:0;inset-inline-end:0;width:80vw;height:100vh;height:100dvh;box-sizing:border-box;overflow-y:auto;overscroll-behavior:contain;background:#fff;border-inline-start:1px solid var(--ms-line);padding:20px 18px max(24px,env(safe-area-inset-bottom));font-size:15px;z-index:2}
+.ms-mobile-menu:not([open]) .ms-mobile-links,.ms-mobile-menu:not([open]) .ms-menu-backdrop{display:none}
+.ms-menu-backdrop{position:fixed;inset:0;z-index:1;background:rgba(15,23,42,.48);border:0;padding:0;margin:0;cursor:pointer}
+.ms-mobile-menu[open] .ms-menu-toggle{position:fixed;top:max(17px,env(safe-area-inset-top));right:18px;z-index:3;background:#fff}
+.ms-menu-close-icon{display:none}
+.ms-mobile-menu[open] .ms-menu-open-icon{display:none}
+.ms-mobile-menu[open] .ms-menu-close-icon{display:block}
+.ms-drawer-brand{display:flex;align-items:center;gap:9px;min-height:40px;padding-right:44px;margin-bottom:16px;font-size:19px;font-weight:750;letter-spacing:-.045em;color:var(--ms-ink)}
+.ms-drawer-brand img{width:32px;height:32px}
+.ms-drawer-brand b{color:var(--ms-action)}
+.ms-mobile-links a{padding:12px;border-radius:5px;min-width:0;font-weight:550;line-height:1.35}
 .ms-mobile-links a[aria-current=page]{background:#eff6ff}
-.ms-mobile-links a.ms-button{color:#fff}
+.ms-mobile-links a.ms-button{color:#fff;margin-top:12px;min-height:44px}
+.ms-mobile-menu[open] .ms-mobile-links .ms-drawer-secondary{color:var(--ms-action);border:1px solid var(--ms-line);margin-top:4px;text-align:center}
+@media(max-width:1279px){html:has(.ms-mobile-menu[open]){overflow:hidden}}
+@media(max-width:360px){.ms-mobile-links{padding-inline:12px}.ms-drawer-brand{font-size:17px;gap:6px}.ms-drawer-brand img{width:28px;height:28px}}
 .ms-footer{margin-top:auto;border-top:1px solid var(--ms-line)}
 .ms-footer-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;padding-block:20px;font-size:12px;color:var(--ms-muted)}
 .ms-footer-nav{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
