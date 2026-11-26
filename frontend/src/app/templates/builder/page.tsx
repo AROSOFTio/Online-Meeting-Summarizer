@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import PageHero from "@/components/PageHero";
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
@@ -34,7 +35,8 @@ function Builder(){
   function download(){if(!validate())return;const url=URL.createObjectURL(new Blob([JSON.stringify({version:1,name,sector,fields},null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download="meeting-format.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);setMessage("Format exported as JSON.");}
   return <main className="min-h-screen bg-slate-50 text-slate-900">
     <header className="border-b bg-white"><div className="mx-auto flex max-w-screen-2xl flex-wrap items-center justify-between gap-3 px-5 py-4"><Link href="/templates" className="font-semibold text-blue-700">← Template library</Link><div className="flex flex-wrap gap-2"><button onClick={load} className="rounded-lg border px-3 py-2 text-sm">Restore local draft</button><button onClick={download} className="rounded-lg border px-3 py-2 text-sm">Export format</button><button onClick={save} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white">Save local draft</button>{canSave?<button disabled={saving} onClick={saveAccount} className="rounded-lg bg-blue-800 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving?"Saving...":"Save to account"}</button>:<Link href="/login" className="rounded-lg border px-3 py-2 text-sm">Sign in to use in meetings</Link>}</div></div></header>
-    <div className="mx-auto max-w-screen-2xl px-5 py-6"><h1 className="text-2xl font-bold">Minutes format builder</h1><p className="mt-1 text-sm text-slate-600">Drag fields from the library or use Add. Reorder by dragging or using the arrow buttons. Save a local draft or save to your account to use this structure in AI-generated minutes.</p>
+    <PageHero title="Minutes format builder" description="Add and reorder fields, save a draft or save to your account for use in AI-generated minutes." compact/>
+    <div className="mx-auto max-w-screen-2xl px-5 py-5">
     {message&&<p role="status" className="mt-3 rounded-lg border bg-white p-3 text-sm">{message}</p>}
     <div className="mt-5 grid gap-3 sm:grid-cols-2"><label className="text-sm font-medium">Format name<input value={name} onChange={e=>setName(e.target.value)} className="mt-1 block w-full rounded-lg border bg-white p-2"/></label><label className="text-sm font-medium">Organization type<input value={sector} onChange={e=>setSector(e.target.value)} className="mt-1 block w-full rounded-lg border bg-white p-2"/></label></div>
     <div className="mt-6 grid items-start gap-4 xl:grid-cols-[260px_minmax(0,1fr)_minmax(0,1fr)]">

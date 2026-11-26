@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import AuthShell from "@/components/AuthShell";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, ArrowRight, Users } from "lucide-react";
 
@@ -19,13 +20,10 @@ export default function JoinMeetingPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-50 px-4 py-10">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-7 shadow-sm">
-        <div className="mb-7 text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/minuteseal.svg" alt="MinuteSeal" className="mx-auto mb-4 h-auto max-h-32 w-auto max-w-[220px] object-contain" />
-          <h1 className="text-xl font-extrabold text-slate-950">Join Meeting</h1>
-          <p className="mt-1 text-sm text-slate-600">Paste your invitation link or enter the code from the invitation.</p>
+    <AuthShell>
+        <div className="mb-5">
+          <h1 className="text-2xl font-bold text-slate-950">Join meeting</h1>
+          <p className="mt-2 text-sm text-slate-600">Paste your invitation link or enter the code from the invitation.</p>
         </div>
 
         <form onSubmit={submit} className="space-y-4">
@@ -36,7 +34,6 @@ export default function JoinMeetingPage() {
         </form>
 
         <Link href="/login" className="mt-5 flex items-center justify-center gap-1 text-xs font-semibold text-slate-600 hover:text-blue-700"><ArrowLeft size={13} />Back to staff sign in</Link>
-      </div>
-    </main>
+    </AuthShell>
   );
 }

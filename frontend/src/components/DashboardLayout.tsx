@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import PageHero from "./PageHero";
 import { useAuth } from "@/context/AuthContext";
 import NotificationCenter from "./NotificationCenter";
 import Sidebar from "./Sidebar";
@@ -9,6 +10,8 @@ import Sidebar from "./Sidebar";
 export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const section = pathname === "/dashboard" ? "Your meeting workspace" : pathname === "/create-meeting" ? "Plan your next meeting" : pathname === "/meetings" ? "Meeting records" : pathname.endsWith("/live") ? "Live meeting workspace" : pathname.endsWith("/invite") ? "Meeting invitations" : pathname.startsWith("/meetings/") ? "Meeting documentation" : pathname === "/staff" ? "People and access" : pathname === "/action-items" ? "Decisions into action" : pathname === "/settings" ? "Organization administration" : pathname === "/subscription" ? "Workspace management" : "MinuteSeal workspace";
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -41,6 +44,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
       <div className="mx-auto w-full max-w-7xl p-3 sm:p-5 lg:p-8">
         <div className="mb-3 flex justify-end"><NotificationCenter /></div>
         {toast && <div className="fixed right-4 top-4 z-[100] max-w-sm rounded-xl border border-green-200 bg-white px-4 py-3 text-sm font-semibold text-green-800 shadow-lg">{toast}</div>}
+        <div className="mb-5 overflow-hidden rounded-md"><PageHero title={section} eyebrow="MinuteSeal" compact heading="p"/></div>
         {children}
       </div>
     </main>
