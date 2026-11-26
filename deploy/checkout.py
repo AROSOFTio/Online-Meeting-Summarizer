@@ -47,7 +47,7 @@ def publish(path,inv):
         old=c.execute("SELECT status,intent FROM checkout WHERE key=?",(key,)).fetchone()
         status=inv["status"]
         # An outstanding customer intent is preserved until the private worker handles it.
-        if old and old["status"]=="queued" and status=="open":return
+        if old and old["status"] in {"queued","review_required"} and status=="open":return
         c.execute("""INSERT INTO checkout(key,invoice,view,expires,status,intent,updated)
         VALUES(?,?,?,?,?,NULL,?) ON CONFLICT(key) DO UPDATE SET view=excluded.view,
         expires=excluded.expires,status=excluded.status,intent=NULL,updated=excluded.updated""",

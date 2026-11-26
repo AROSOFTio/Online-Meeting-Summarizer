@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlsplit
 import tenantctl
 import entitlements
 import billing
+import checkout
 import payment_gateways as pg
 import onboarding
 import operator_onboarding
@@ -302,7 +303,13 @@ def billing_panel(rows,csrf,gateways=None):
             out+='<div class="notice"><strong>'+esc(iid)+'</strong> · '+esc(billing.display(inv["amount_minor"],inv["currency"]))+' · '+esc(inv["months"])+' months · '+esc(status.replace("_"," "))+'<p><a href="/billing/document?slug='+esc(slug)+'&amp;id='+esc(iid)+'">Print invoice</a>'
             if status=="paid":out+=' · <a href="/billing/document?slug='+esc(slug)+'&amp;id='+esc(iid)+'&amp;receipt=yes">Print receipt</a>'
             out+='</p>'
-            if status=="open" and not inv.get("sandbox"):
+            if inv.get("customer_checkout"):
+                out+='<p>Customer checkout issued · link valid for seven days.</p>'
+                if status=="open":
+                    out+=form_start(csrf,"revoke_checkout",slug)+hidden("invoice",iid)+'<button>Revoke checkout link</button></form>'
+            elif status=="open" and not inv.get("sandbox") and inv["currency"]=="UGX" and os.environ.get("CC_CHECKOUT_INBOX") and os.environ.get("CC_CHECKOUT_ORIGIN"):
+                out+=form_start(csrf,"issue_checkout",slug)+hidden("invoice",iid)+'<button class="primary">Create customer checkout link</button></form>'
+            if status=="open" and not inv.get("sandbox") and not inv.get("customer_checkout"):
                 providers=[(k,pg.LABELS[k]) for k,v in gateways.items() if k in pg.PROVIDERS and v.get("enabled")]
                 default=next((k for k,v in gateways.items() if v.get("default") and v.get("enabled")),"")
                 if providers and inv["currency"]=="UGX":
@@ -347,16 +354,34 @@ def billing_action(root,rows,form):
         message="Invoice created."
     else:
         inv=billing.invoice(row,one(form,"invoice"))
-        if action=="start_collection":
+        if action in {"issue_checkout","revoke_checkout"}:
+            path=Path(os.environ["CC_CHECKOUT_INBOX"])
+            origin=os.environ["CC_CHECKOUT_ORIGIN"]
+            u=urlsplit(origin)
+            if u.scheme!="https" or not u.hostname or u.username or u.password or u.path or u.query or u.fragment:raise ValueError("Invalid checkout origin")
+            if action=="issue_checkout":
+                providers=[k for k,v in pg.public_config(root).items() if v["enabled"] and (k!="iotec" or 500<=inv["amount_minor"]<=1000000000)]
+                token=checkout.issue(path,inv,providers)
+                billing.persist(root,rows)
+                checkout.publish(path,inv)
+                message="Copy and privately share this checkout link (shown once): "+origin+"/checkout/"+token
+            else:
+                checkout.revoke(path,inv)
+                billing.persist(root,rows)
+                message="Checkout revoked."
+        elif action=="start_collection":
+            if inv.get("customer_checkout"):raise ValueError("Revoke customer checkout first")
             billing.begin_collection(root,rows,row,inv,one(form,"provider"),one(form,"phone"),one(form,"confirm")=="yes")
             message="Collection submitted; verify the final status before retrying anything."
         elif action=="verify_payment":
             billing.reconcile(root,rows,row,inv)
             message="Invoice status: "+inv["status"].replace("_"," ")
         elif action=="manual_settlement":
+            if inv.get("customer_checkout"):raise ValueError("Revoke customer checkout first")
             billing.record_manual(root,rows,row,inv,one(form,"method"),one(form,"reference"),one(form,"amount"),inv["currency"],one(form,"confirm")=="yes")
             message="Verified external settlement recorded and renewal applied."
         elif action=="cancel_invoice" and one(form,"confirm")=="yes":
+            if inv.get("customer_checkout"):raise ValueError("Revoke customer checkout first")
             billing.cancel(inv);message="Invoice cancelled."
         else:raise ValueError("Unknown billing operation")
     audit(root,action,slug,"success")
@@ -532,7 +557,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.show_dashboard(s,"Confirm suspension before stopping a workspace.")
         try:
             with tenantctl.registry(self.server.root) as rows:
-                if action in {"configure_gateway","test_gateway","create_invoice","start_collection","verify_payment","manual_settlement","cancel_invoice"}:
+                if action in {"configure_gateway","test_gateway","create_invoice","start_collection","verify_payment","manual_settlement","cancel_invoice","issue_checkout","revoke_checkout"}:
                     message=billing_action(self.server.root,rows,form)
                 elif action in {"approve_registration","reject_registration","send_setup"}:
                     path=operator_onboarding.inbox_path()

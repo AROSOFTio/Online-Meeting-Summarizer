@@ -84,11 +84,13 @@ class Yo:
         result=self.call("acdepositfunds",NonBlocking="TRUE",Account=number,Amount=inv["amount_minor"],Narrative="ConveneCore invoice "+inv["id"],ExternalReference=inv["id"])
         return result.get("TransactionReference")
     def status(self,inv):
-        result=self.call("actransactioncheckstatus",PrivateTransactionReference=inv["id"],DepositTransactionType="PULL")
+        fields={"PrivateTransactionReference":inv["id"],"DepositTransactionType":"PULL"}
+        if inv.get("tracking_id"):fields["TransactionReference"]=inv["tracking_id"]
+        result=self.call("actransactioncheckstatus",**fields)
         ref=result.get("TransactionReference")
         if not ref or (inv.get("tracking_id") and ref!=inv["tracking_id"]):raise ValueError("Gateway reference mismatch")
         currency=result.get("CurrencyCode")
-        if currency in {"UGX-MTNMM","UGX-WARIDMM","UGX-AIRTELMM","UGX-AIRMM"}:currency="UGX"
+        if currency in {"UGX-MTNMM","UGX-WARIDMM","UGX-AIRTELMM","UGX-AIRMM","UGX-WTLMM"}:currency="UGX"
         return {"reference":ref,"success":result.get("Status")=="OK" and result.get("StatusCode")=="0" and result.get("TransactionStatus")=="SUCCEEDED","amount":result.get("Amount"),"currency":currency}
 
 class Iotec:
