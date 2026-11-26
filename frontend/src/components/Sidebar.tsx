@@ -9,22 +9,26 @@ import {
 } from "lucide-react";
 
 import { useAuth } from "@/context/AuthContext";
+import {useQuery} from "@tanstack/react-query";
+import {apiRequest} from "@/lib/api";
 
 export default function Sidebar() {
   const { user, logout } = useAuth();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const subscription=useQuery<{managed:boolean;state:string;features:string[]}>({queryKey:["subscription-navigation"],queryFn:()=>apiRequest("/api/subscription"),enabled:!!user,refetchInterval:30000,retry:false});
   if (!user) return null;
 
   const isAdmin = user.role === "admin";
-  const canEdit = isAdmin || user.role === "minute_secretary";
+  const canEdit = (isAdmin || user.role === "minute_secretary") && subscription.data?.state!=="expired";
   const items = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard, show: true },
     { name: "Meetings", path: "/meetings", icon: Calendar, show: true },
     { name: "Minute Formats", path: "/templates", icon: CheckSquare, show: true },
-    { name: "Action Items", path: "/action-items", icon: CheckSquare, show: true },
+    { name: "Action Items", path: "/action-items", icon: CheckSquare, show: !subscription.data?.managed||subscription.data.features.includes("actions") },
     { name: "Staff", path: "/staff", icon: Users, show: isAdmin },
+    { name: "Subscription", path: "/subscription", icon: Settings, show: true },
     { name: "Settings", path: "/settings", icon: Settings, show: isAdmin },
   ].filter((item) => item.show);
   const desktopWidth = collapsed ? "lg:w-20" : "lg:w-64";

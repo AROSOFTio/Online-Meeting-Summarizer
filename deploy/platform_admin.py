@@ -11,7 +11,7 @@ import re
 import secrets
 import subprocess
 import time
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -42,6 +42,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.core.tenant_boundary import bind_or_verify_database, bind_or_verify_storage
 from app.models.models import User, Meeting, Recording, ProcessingJob
+from app.core.subscriptions import snapshot
 db=SessionLocal()
 try:
     bind_or_verify_database(db)
@@ -59,6 +60,9 @@ try:
             "recorded_seconds":float(db.query(func.sum(Recording.duration_seconds)).scalar() or 0),
             "storage_bytes":storage,
             "jobs_this_month":db.query(ProcessingJob).filter(ProcessingJob.created_at>=month).count()}
+    entitlement=snapshot(db)
+    result["storage_bytes"]=entitlement.get("usage",{}).get("storage_bytes",storage)
+    result["ai_seconds"]=entitlement.get("usage",{}).get("ai_seconds",0)
     print(json.dumps(result))
 finally:
     db.close()
@@ -127,7 +131,7 @@ def safe_compose(root,row,args,timeout=900):
 def collect_usage(root,row):
     raw=safe_compose(root,row,["exec","-T","backend","python","-c",METRICS_CODE],timeout=45)
     data=json.loads(raw.strip().splitlines()[-1])
-    keys=("active_users","meetings","recorded_seconds","storage_bytes","jobs_this_month")
+    keys=("active_users","meetings","recorded_seconds","storage_bytes","jobs_this_month","ai_seconds")
     if any(type(data.get(k)) not in (int,float) or not 0<=data[k]<10**18 for k in keys):
         raise RuntimeError("Invalid aggregate metrics.")
     return {**{k:data[k] for k in keys},"collected_at":now()}
@@ -187,7 +191,7 @@ def dispatch(root,rows,form):
             entitlements.publish(root,row,{**p,**updated})
             p.update(updated)
         elif action=="activate":
-            if p["expiry"] and date.fromisoformat(p["expiry"])<date.today():
+            if p["expiry"] and date.fromisoformat(p["expiry"])+timedelta(days=p.get("grace_days",0))<datetime.now(timezone.utc).date():
                 raise ValueError("Subscription expiry is in the past. Update the configuration first.")
             entitlements.publish(root,row,p)
             safe_compose(root,row,["up","-d","--build","--wait"])
@@ -307,7 +311,7 @@ def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=
         expired=bool(p["expiry"] and date.fromisoformat(p["expiry"])<date.today())
         usage='Not collected'
         if u:
-            usage=f'{u["active_users"]} / {limits["users"]} users<br>{u["storage_bytes"]/2**30:.2f} / {limits["storage_gib"]} GiB<br>{u["meetings"]} meetings · {u["jobs_this_month"]} jobs/month<br><small>{esc(u["collected_at"])}</small>'
+            usage=f'{u["active_users"]} / {limits["users"]} users<br>{u["storage_bytes"]/2**30:.2f} / {limits["storage_gib"]} GiB<br>{u["meetings"]} meetings · {u["jobs_this_month"]} jobs/month<br>{u.get("ai_seconds",0)/60:.1f} / {limits["ai_minutes"]} AI allowance min<br><small>{esc(u["collected_at"])}</small>'
         buttons=""
         for action,label in (("activate","Start"),("suspend","Suspend"),("refresh","Refresh usage")):
             if action=="activate" and row.get("enabled"):continue

@@ -22,7 +22,7 @@ def route_features(path,method):
     group=parts[1]; last=parts[-1]
     if group=="live-rooms":return set() if last=="leave" else {"live"}
     if group=="recordings":return {"recording"}
-    if group=="action-items":return {"actions"}
+    if group=="action-items":return set() if method=="DELETE" else {"actions"}
     if group=="minute-formats":
         if method=="GET" and len(parts)==4 and parts[2]=="meeting":return set()
         return {"templates","ai"} if last=="generate" else {"templates"}

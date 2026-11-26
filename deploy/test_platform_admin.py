@@ -65,7 +65,7 @@ class PlatformAdminTests(unittest.TestCase):
         page=admin.dashboard({"alpha":row},[],"test-csrf")
         self.assertNotIn("<script>alert",page)
         self.assertIn("&lt;script&gt;",page)
-        self.assertIn("configuration only",page)
+        self.assertIn("upgraded managed workspaces",page)
         self.assertNotIn("DB_PASSWORD",page)
 
 
