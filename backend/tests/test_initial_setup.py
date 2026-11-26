@@ -17,10 +17,12 @@ def test_single_use_initial_setup(db,monkeypatch):
     digest=hashlib.sha256(code.encode()).hexdigest()
     issue(db,email,digest,int(time.time())+600)
     assert not consume(db,email,"x"*43,"NewPassword123!")
-    assert consume(db,email,code,"NewPassword123!")
+    with pytest.raises(ValueError):
+        consume(db,email,code,"Short1!")
+    assert consume(db,email,code,"Strong1!")
     db.refresh(user)
     assert not user.must_change_password
-    assert verify_password("NewPassword123!",user.hashed_password)
+    assert verify_password("Strong1!",user.hashed_password)
     assert not consume(db,email,code,"AnotherPassword123!")
     with pytest.raises(ValueError):
         issue(db,email,digest,int(time.time())+600)

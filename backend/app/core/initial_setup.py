@@ -27,8 +27,8 @@ def issue(db:Session,email:str,digest:str,expires:int):
 def consume(db:Session,email:str,code:str,password:str):
     if not settings.TENANT_ID or not re.fullmatch(r"[A-Za-z0-9_-]{43}",code):
         return False
-    if not 12<=len(password)<=128 or not re.search(r"[A-Z]",password) or not re.search(r"[a-z]",password) or not re.search(r"[^A-Za-z0-9]",password):
-        raise ValueError("Use 12–128 characters, uppercase, lowercase and a special character.")
+    if not 8<=len(password)<=128 or not re.search(r"[A-Z]",password) or not re.search(r"[a-z]",password) or not re.search(r"[^A-Za-z0-9]",password):
+        raise ValueError("Use 8–128 characters, uppercase, lowercase and a special character.")
     user=db.query(User).filter(User.email==email).with_for_update().first()
     if not user or user.role!=UserRole.admin or not user.is_active or not user.must_change_password or user.email!=str(settings.ADMIN_EMAIL):
         return False

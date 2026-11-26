@@ -134,7 +134,7 @@ def read_users_me(current_user: User = Depends(deps.get_current_user)):
 class InitialSetup(BaseModel):
     email: EmailStr
     code: str = Field(min_length=43,max_length=43)
-    password: str = Field(min_length=12,max_length=128)
+    password: str = Field(min_length=8,max_length=128)
 
 @router.post("/setup")
 def initial_setup(body:InitialSetup,db:Session=Depends(deps.get_db)):
