@@ -1,0 +1,16 @@
+[Unit]
+Description=ConveneCore public checkout listener
+[Service]
+User=convenecore-checkout
+WorkingDirectory=/opt/convenecore
+EnvironmentFile=/etc/convenecore/checkout.env
+ExecStart=/usr/bin/python3 /opt/convenecore/deploy/public_checkout.py --inbox /var/lib/convenecore-checkout/inbox.db --origin ${CC_CHECKOUT_ORIGIN} --port 18792
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/convenecore-checkout
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target

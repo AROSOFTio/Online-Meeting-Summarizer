@@ -1,0 +1,11 @@
+[Unit]
+Description=ConveneCore private payment verification and checkout worker
+[Service]
+Type=oneshot
+User=convenecore-operator
+WorkingDirectory=/opt/convenecore
+ExecStart=/usr/bin/python3 /opt/convenecore/deploy/checkout_worker.py --root /var/lib/convenecore/tenants --inbox /var/lib/convenecore-checkout/inbox.db
+UMask=0007
+TimeoutStartSec=600
+NoNewPrivileges=true
+PrivateTmp=true
