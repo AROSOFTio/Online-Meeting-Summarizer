@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """MinuteSeal private operator console. Bind to loopback; access via SSH tunnel."""
 import argparse
+import platform_mfa
 import getpass
 import hashlib
 import hmac
@@ -278,8 +279,12 @@ def page(title,body):
     return '<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><style>'+CSS+'</style>'+body+'</html>'
 
 
+def setup_required_page():
+    return page("First-time setup",'<main class="login panel"><h1>MinuteSeal</h1><p>Platform administrator setup required.</p><p>Enroll your password and authenticator from the trusted operator terminal. Public enrollment is disabled.</p></main>')
+
+
 def login_page(message=""):
-    return page("Platform sign in",'<main class="login panel"><h1>MinuteSeal</h1><p class="muted">Private platform administration</p>'+('<p class="notice">'+esc(message)+'</p>' if message else '')+'<form action="/login" method="post"><label>Platform password<input type="password" name="password" autocomplete="current-password" required maxlength="256"></label><button class="primary">Sign in</button></form><p class="fine">Operator access only. Customer workspace credentials are not accepted.</p></main>')
+    return page("Platform sign in",'<main class="login panel"><h1>MinuteSeal</h1><p class="muted">Private platform administration</p>'+('<p class="notice">'+esc(message)+'</p>' if message else '')+'<form action="/login" method="post"><label>Platform password<input type="password" name="password" autocomplete="current-password" required maxlength="256"></label><label>Authenticator code<input name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required></label><button class="primary">Sign in</button></form><p class="fine">Operator access only. Customer workspace credentials are not accepted.</p></main>')
 
 
 def billing_panel(rows,csrf,gateways=None):
@@ -440,9 +445,8 @@ def dashboard(rows,events,csrf,query="",filter_state="",message="",applications=
 
 
 class Console(HTTPServer):
-    def __init__(self,root,port,record):
+    def __init__(self,root,port):
         self.root=root
-        self.record=record
         self.sessions={}
         self.attempts=[]
         super().__init__(("127.0.0.1",port),Handler)
@@ -482,7 +486,7 @@ class Handler(BaseHTTPRequestHandler):
         except (KeyError,ValueError):
             return None,None
         s=self.server.sessions.get(token)
-        if not s or s["expires"]<=time.monotonic():
+        if not s or min(s["expires"],s["absolute"])<=time.monotonic():
             self.server.sessions.pop(token,None)
             return None,None
         s["expires"]=time.monotonic()+SESSION_SECONDS
@@ -504,7 +508,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_html(page("Denied","Invalid host"),421)
         u=urlsplit(self.path)
         _,session=self.session()
-        if not session:return self.send_html(login_page())
+        if not session:return self.send_html(login_page() if platform_mfa.enrolled(self.server.root) else setup_required_page())
         q=parse_qs(u.query)
         if u.path=="/billing/document":
             try:
@@ -533,12 +537,16 @@ class Handler(BaseHTTPRequestHandler):
             if len(self.server.attempts)>=5:
                 return self.send_html(login_page("Too many attempts. Retry after one minute."),429)
             self.server.attempts.append(clock)
-            if not check_password(one(form,"password"),self.server.record):
-                return self.send_html(login_page("Incorrect platform password."),401)
+            if not platform_mfa.enrolled(self.server.root):
+                return self.send_html(setup_required_page(),503)
+            if not platform_mfa.verify(self.server.root,one(form,"password"),one(form,"otp"),check_password):
+                audit(self.server.root,"login","platform","rejected")
+                return self.send_html(login_page("Incorrect password or authenticator code."),401)
+            audit(self.server.root,"login","platform","success")
             self.server.attempts.clear()
-            self.server.sessions={k:v for k,v in self.server.sessions.items() if v["expires"]>clock}
+            self.server.sessions={k:v for k,v in self.server.sessions.items() if min(v["expires"],v["absolute"])>clock}
             token=secrets.token_urlsafe(32)
-            s={"csrf":secrets.token_urlsafe(32),"expires":clock+SESSION_SECONDS}
+            s={"csrf":secrets.token_urlsafe(32),"expires":clock+SESSION_SECONDS,"absolute":clock+8*3600}
             self.server.sessions[token]=s
             self.send_response(303)
             self.send_header("Location","/")
@@ -597,19 +605,13 @@ def main():
     parser.add_argument("--init-password",action="store_true")
     args=parser.parse_args()
     root=args.root.resolve()
+    if args.init_password:
+        platform_mfa.enroll_interactive(root,password_record)
+        audit(root,"enroll","platform","success")
+        return
     with tenantctl.registry(root):
-        path=root/"platform-password.json"
-        if args.init_password:
-            password=getpass.getpass("New platform password: ")
-            if password!=getpass.getpass("Repeat platform password: "):
-                parser.error("Passwords do not match")
-            tenantctl.private_write(path,json.dumps(password_record(password)))
-            print("Platform password configured.")
-            return
-        if not path.is_file() or path.stat().st_mode & 0o077:
-            parser.error("Initialize the private platform password first.")
-        record=json.loads(path.read_text())
-    server=Console(root,args.port,record)
+        platform_mfa.enrolled(root)
+    server=Console(root,args.port)
     print(f"Private MinuteSeal console listening on {server.origin}; access via SSH tunnel only.")
     server.serve_forever()
 

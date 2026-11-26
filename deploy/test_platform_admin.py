@@ -73,7 +73,12 @@ class PlatformAdminTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             root=Path(d)
             password="Test-only-long-platform-password"
-            server=admin.Console(root,0,admin.password_record(password))
+            secret="JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+            record=admin.password_record(password)
+            record.update(totp_secret=secret,last_step=-1)
+            admin.tenantctl.private_write(root/"platform-password.json",admin.json.dumps(record))
+            otp=admin.platform_mfa.totp(secret,int(admin.time.time())//30)
+            server=admin.Console(root,0)
             thread=threading.Thread(target=server.serve_forever,daemon=True)
             thread.start()
             def send(method,path,body=None,cookie=None,origin=None,host=None):
@@ -98,8 +103,10 @@ class PlatformAdminTests(unittest.TestCase):
                 self.assertEqual(send("GET","/",host="unknown.example")[0],421)
                 self.assertEqual(send("POST","/login",{"password":password},origin="https://customer.example")[0],403)
                 self.assertEqual(send("POST","/login",{"password":"wrong"},origin=server.origin)[0],401)
-                status,_,cookie=send("POST","/login",{"password":password},origin=server.origin)
+                self.assertEqual(send("POST","/login",{"password":password},origin=server.origin)[0],401)
+                status,_,cookie=send("POST","/login",{"password":password,"otp":otp},origin=server.origin)
                 self.assertEqual(status,303)
+                self.assertEqual(send("POST","/login",{"password":password,"otp":otp},origin=server.origin)[0],401)
                 self.assertIn("HttpOnly",cookie)
                 self.assertIn("SameSite=Strict",cookie)
                 cookie=cookie.split(";")[0]
