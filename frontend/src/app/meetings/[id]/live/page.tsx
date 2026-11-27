@@ -13,6 +13,7 @@ import {openMicrophone,mediaError} from "@/lib/meeting-media";
 import LiveInvitePanel from "@/components/LiveInvitePanel";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
+import {savePart,recoverRecording,clearRecording,uploadRecording} from "@/lib/recording-recovery";
 
 interface LiveMeetingInfo {
   id: number;
@@ -27,6 +28,7 @@ interface LiveMeetingInfo {
   ended_at: string | null;
   is_moderator: boolean;
   recording: { id: number; filename: string } | null;
+  recovery_key?:string;
 }
 
 interface Attendance {
@@ -59,6 +61,14 @@ export default function LiveMeetingPage() {
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const journalRef=useRef<Promise<void>>(Promise.resolve());
+  const journalFailedRef=useRef(false);
+  const releaseLockRef=useRef<(()=>void)|null>(null);
+  const [recovered,setRecovered]=useState<Blob|null>(null);
+  const [journalStatus,setJournalStatus]=useState<"checking"|"ready"|"protected"|"unavailable">("checking");
+  const [uploadPercent,setUploadPercent]=useState(0);
+  const uploadBusyRef=useRef(false);
+  const [pendingFile,setPendingFile]=useState<{blob:Blob;name:string}|null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const leavingRef = useRef(false);
   const autoStartAttemptedRef = useRef(false);
@@ -75,6 +85,18 @@ export default function LiveMeetingPage() {
 
   const meeting = meetingQuery.data;
   const canManageMeeting = Boolean(meeting?.is_moderator);
+  const recoveryKey=meeting?.recovery_key;
+  useEffect(()=>{
+    if(!recoveryKey||!canManageMeeting)return;
+    let active=true;
+    void recoverRecording(recoveryKey).then(blob=>{if(active){setRecovered(blob);setJournalStatus("ready");}}).catch(()=>{if(active)setJournalStatus("unavailable");});
+    return()=>{active=false;};
+  },[recoveryKey,canManageMeeting]);
+  useEffect(()=>{
+    if(!isRecording&&!processing&&!pendingFile)return;
+    const warn=(e:BeforeUnloadEvent)=>{e.preventDefault();e.returnValue="";};
+    window.addEventListener("beforeunload",warn);return()=>window.removeEventListener("beforeunload",warn);
+  },[isRecording,processing,pendingFile]);
 
   const attendanceQuery = useQuery<Attendance[]>({
     queryKey: ["meeting-live-attendance", meetingId],
@@ -116,7 +138,7 @@ export default function LiveMeetingPage() {
       } catch {
         // Page is already leaving.
       }
-      cleanupMedia();
+      cleanupMedia();releaseLockRef.current?.();releaseLockRef.current=null;
     },
     [cleanupMedia],
   );
@@ -124,12 +146,15 @@ export default function LiveMeetingPage() {
   const attachRemoteStream = useCallback((peerId: string, stream: MediaStream) => {
     const context = audioContextRef.current;
     const destination = mixDestinationRef.current;
-    if (!context || !destination || mixSourcesRef.current.has(peerId)) return;
+    if (!context || !destination) return;
 
     try {
       const source = context.createMediaStreamSource(stream);
       source.connect(destination);
+      mixSourcesRef.current.get(peerId)?.disconnect();
       mixSourcesRef.current.set(peerId, source);
+      const release=()=>{if(mixSourcesRef.current.get(peerId)===source){source.disconnect();mixSourcesRef.current.delete(peerId);}};
+      stream.getAudioTracks().forEach(t=>t.addEventListener("ended",release,{once:true}));
     } catch (streamError) {
       console.error("Could not add participant microphone to meeting recording:", streamError);
     }
@@ -157,38 +182,71 @@ export default function LiveMeetingPage() {
 
   const sendForMinutes = useCallback(
     async (source: Blob | File, filename: string) => {
-      setProcessing(true);
-      setError(null);
-
+      if(uploadBusyRef.current)return;
+      uploadBusyRef.current=true;setPendingFile({blob:source,name:filename});
+      setProcessing(true);setError(null);setUploadPercent(0);
       try {
-        await apiRequest(`/api/meetings/${meetingId}/end`, { method: "POST" });
-
-        const body = new FormData();
-        body.append("file", source, filename);
-        await apiRequest(`/api/recordings/upload/${meetingId}`, { method: "POST", body });
-        await apiRequest(`/api/meetings/${meetingId}/transcribe`, { method: "POST" });
-
+        if(recoveryKey&&navigator.locks&&!releaseLockRef.current){
+          const acquired=await new Promise<boolean>((resolve,reject)=>{
+            void navigator.locks.request("minuteseal-record-"+recoveryKey,{ifAvailable:true},async lock=>{
+              if(!lock){resolve(false);return;}
+              await new Promise<void>(release=>{releaseLockRef.current=release;resolve(true);});
+            }).catch(reject);
+          });
+          if(!acquired)throw new Error("The recording is still active in another tab.");
+        }
+        const info=await apiRequest(`/api/live-rooms/${meetingId}/info`);
+        if(info.status!=="processing"&&info.status!=="completed"){
+          await apiRequest(`/api/meetings/${meetingId}/end`, { method: "POST" });
+          await uploadRecording(meetingId,source,filename,setUploadPercent);
+          await apiRequest(`/api/meetings/${meetingId}/transcribe`, { method: "POST" });
+        }
+        if(recoveryKey)await clearRecording(recoveryKey).catch(()=>{});
+        setRecovered(null);setPendingFile(null);releaseLockRef.current?.();releaseLockRef.current=null;
         router.push(`/meetings/${meetingId}`);
       } catch (finishError) {
         setProcessing(false);
-        setError(finishError instanceof Error ? finishError.message : "Could not finish the meeting.");
-      }
+        setError((finishError instanceof Error ? finishError.message : "Could not finish the meeting.")+" Your recording is retained for retry or download.");
+      }finally{uploadBusyRef.current=false;}
     },
-    [meetingId, router],
+    [meetingId, router,recoveryKey],
   );
+  const downloadBackup=(blob:Blob,name:string)=>{
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  };
+  const backupName=(blob:Blob)=>`meeting-${meetingId}-recovered.${blob.type.includes("mp4")?"m4a":"webm"}`;
+  const backupPanel=(pendingFile||recovered)&&!isRecording?<div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-slate-800">
+    <strong>{pendingFile?"Recording saved for retry":"Recoverable recording found on this browser"}</strong>
+    <p className="mt-1 text-xs">Process the saved recording or download a copy before starting another recording. A recovered segment may omit the final seconds before a crash.</p>
+    <div className="mt-3 flex flex-wrap gap-2"><button disabled={processing} onClick={()=>{const file=pendingFile||{blob:recovered!,name:backupName(recovered!)};void sendForMinutes(file.blob,file.name);}} className="rounded bg-blue-700 px-3 py-2 text-white">Retry upload and process minutes</button><button disabled={processing} onClick={()=>{const file=pendingFile||{blob:recovered!,name:backupName(recovered!)};downloadBackup(file.blob,file.name);}} className="rounded border bg-white px-3 py-2">Download recording backup</button>{!pendingFile&&recovered&&<button disabled={processing} onClick={()=>{if(window.confirm("Permanently discard this local recording? Download it first if needed."))void (async()=>{if(navigator.locks){await navigator.locks.request("minuteseal-record-"+recoveryKey,{ifAvailable:true},async lock=>{if(!lock){setError("Recording is active in another tab.");return;}await clearRecording(recoveryKey!);setRecovered(null);});}else{await clearRecording(recoveryKey!);setRecovered(null);}})().catch(()=>setError("Could not discard local backup."));}} className="rounded border bg-white px-3 py-2 text-red-700">Discard backup</button>}</div>
+    {processing&&<p className="mt-2">Uploading: {uploadPercent}%</p>}
+  </div>:null;
 
   const startMeeting = useCallback(async () => {
-    if(startingRef.current||testingMic)return;
+    if(startingRef.current||testingMic||pendingFile||recovered||(recoveryKey&&journalStatus==="checking"))return;
     startingRef.current=true;setStarting(true);
     leavingRef.current = false;
     setError(null);
     chunksRef.current = [];
     setSeconds(0);
 
-    let runtimeStarted = false;
     let stream: MediaStream | null = null;
 
     try {
+      if(recoveryKey&&navigator.locks){
+        const acquired=await new Promise<boolean>((resolve,reject)=>{
+          void navigator.locks.request("minuteseal-record-"+recoveryKey,{ifAvailable:true},async lock=>{
+            if(!lock){resolve(false);return;}
+            await new Promise<void>(release=>{releaseLockRef.current=release;resolve(true);});
+          }).catch(reject);
+        });
+        if(!acquired)throw new Error("This meeting is already recording in another tab.");
+      }
+      if(recoveryKey){
+        const previous=await recoverRecording(recoveryKey).catch(()=>null);
+        if(previous){setRecovered(previous);throw new Error("A previous recording is available. Recover it before starting another.");}
+      }
+      journalRef.current=Promise.resolve();journalFailedRef.current=false;
       stream = await openMicrophone(selectedMic);
       streamRef.current = stream;
 
@@ -209,16 +267,22 @@ export default function LiveMeetingPage() {
         MediaRecorder.isTypeSupported(type),
       );
       const recorder = preferred
-        ? new MediaRecorder(destination.stream, { mimeType: preferred })
-        : new MediaRecorder(destination.stream);
+        ? new MediaRecorder(destination.stream, { mimeType: preferred, audioBitsPerSecond:128000 })
+        : new MediaRecorder(destination.stream,{audioBitsPerSecond:128000});
 
       recorderRef.current = recorder;
 
       recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data);
+        if(event.data.size>0){
+          const index=chunksRef.current.length;chunksRef.current.push(event.data);
+          if(recoveryKey){
+            journalRef.current=journalRef.current.then(()=>savePart(recoveryKey,index,event.data)).then(()=>{if(!journalFailedRef.current)setJournalStatus("protected");}).catch(()=>{journalFailedRef.current=true;setJournalStatus("unavailable");});
+          }
+        }
       };
 
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
+        await journalRef.current;
         const type = recorder.mimeType || chunksRef.current[0]?.type || "audio/webm";
         const blob = new Blob(chunksRef.current, { type });
 
@@ -227,6 +291,7 @@ export default function LiveMeetingPage() {
         setIsRecording(false);
 
         if (leavingRef.current) return;
+        setRecovered(blob);
         if (blob.size === 0) {
           setError("The recording was empty. Please try again.");
           return;
@@ -236,8 +301,9 @@ export default function LiveMeetingPage() {
         void sendForMinutes(blob, `meeting-${meetingId}.${extension}`);
       };
 
-      await apiRequest(`/api/meetings/${meetingId}/start`, { method: "POST" });
-      runtimeStarted = true;
+      if(meeting?.lifecycle!=="live"){
+        await apiRequest(`/api/meetings/${meetingId}/start`, { method: "POST" });
+      }
       recorder.start(1000);
       setHostStream(stream);
       void meetingQuery.refetch();
@@ -246,17 +312,11 @@ export default function LiveMeetingPage() {
 
       timerRef.current = setInterval(() => setSeconds((value) => value + 1), 1000);
     } catch (startError) {
-      if (runtimeStarted && meeting?.lifecycle !== "live") {
-        try {
-          await apiRequest(`/api/meetings/${meetingId}/end`, { method: "POST" });
-        } catch {
-          // Best-effort rollback only.
-        }
-      }
+      // Local recording setup failure must never end a live meeting for guests.
 
       cleanupMedia();
       setHostStream(null);
-      setError(mediaError(startError));
+      releaseLockRef.current?.();releaseLockRef.current=null;setError(mediaError(startError));
     } finally {startingRef.current=false;setStarting(false);}
   }, [
     selectedMic,testingMic,
@@ -265,11 +325,11 @@ export default function LiveMeetingPage() {
     meeting?.lifecycle,
     meetingId,
     meetingQuery,
-    sendForMinutes,
+    sendForMinutes,recoveryKey,pendingFile,recovered,journalStatus,
   ]);
 
   useEffect(() => {
-    if (!canManageMeeting || autoStartAttemptedRef.current || typeof window === "undefined") return;
+    if (!canManageMeeting || autoStartAttemptedRef.current || typeof window === "undefined" || (recoveryKey&&journalStatus==="checking") || recovered || pendingFile) return;
 
     const shouldAutoStart = new URLSearchParams(window.location.search).get("autostart") === "1";
     if (!shouldAutoStart) return;
@@ -282,7 +342,7 @@ export default function LiveMeetingPage() {
       0,
     );
     return () => window.clearTimeout(timer);
-  }, [canManageMeeting]);
+  }, [canManageMeeting,recoveryKey,journalStatus,recovered,pendingFile]);
 
   const endMeeting = () => {
     leavingRef.current = false;
@@ -307,7 +367,7 @@ export default function LiveMeetingPage() {
     );
   }
 
-  if (meetingQuery.isError || !meeting) {
+  if (!meeting) {
     return (
       <DashboardLayout>
         <div className="rounded-xl border border-red-200 bg-red-50 p-5 text-sm text-red-700">
@@ -321,7 +381,8 @@ export default function LiveMeetingPage() {
     return (
       <DashboardLayout>
         <div className="mx-auto max-w-2xl rounded-2xl border border-amber-200 bg-white p-8 text-center shadow-sm">
-          <h1 className="text-2xl font-extrabold text-slate-950">Meeting ended, but no recording was uploaded</h1>
+          <h1 className="text-2xl font-extrabold text-slate-950">Meeting recording recovery</h1>
+          {backupPanel}
           <p className="mt-3 text-sm text-slate-600">Minutes processing has not started. Upload the original meeting audio to generate the transcript and minutes for this meeting.</p>
           {canManageMeeting && (
             <label className="mt-6 inline-flex cursor-pointer items-center gap-2 rounded-lg bg-blue-700 px-5 py-3 text-sm font-bold text-white hover:bg-blue-800">
@@ -365,7 +426,8 @@ export default function LiveMeetingPage() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto w-full max-w-6xl space-y-5">
+      <div className="mx-auto w-full space-y-3">
+        {meetingQuery.isError&&<p role="status" className="rounded border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900">Meeting status is temporarily unavailable. Your audio room and recording remain open.</p>}
         {inviteOpen && (
           <LiveInvitePanel
             meetingId={meeting.id}
@@ -374,7 +436,7 @@ export default function LiveMeetingPage() {
           />
         )}
 
-        <header className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <header className={isRecording?"px-1 py-2":"rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"}>
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <div className="flex items-center gap-2">
@@ -382,7 +444,7 @@ export default function LiveMeetingPage() {
                   <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-red-500" />
                 )}
                 <p className="text-xs font-bold uppercase tracking-wider text-blue-700">
-                  {meeting.lifecycle === "live" ? "On-ground meeting in progress" : "Meeting room"}
+                  {meeting.lifecycle === "live" ? "Live meeting · Organizer" : "Meeting room"}
                 </p>
               </div>
 
@@ -426,7 +488,8 @@ export default function LiveMeetingPage() {
           </div>
         </header>
 
-        {canManageMeeting && !isRecording && !processing && (
+        {backupPanel}
+        {canManageMeeting && !isRecording && !processing && !pendingFile && !recovered && (
           <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8">
             <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full motion-safe:animate-pulse bg-blue-50 text-blue-700">
               {meeting.lifecycle === "live" ? <Radio size={36} /> : <Mic size={36} />}
@@ -442,7 +505,7 @@ export default function LiveMeetingPage() {
 
             <MicrophoneSetup value={selectedMic} onChange={setSelectedMic} disabled={starting} onTestingChange={setTestingMic}/>
             <button
-              disabled={starting||testingMic}
+              disabled={starting||testingMic||(!!recoveryKey&&journalStatus==="checking")}
               id="start-meeting-button"
               type="button"
               onClick={() => void startMeeting()}
@@ -472,36 +535,7 @@ export default function LiveMeetingPage() {
 
         {canManageMeeting && isRecording && hostStream && (
           <>
-            <section className="rounded-2xl border border-red-200 bg-white p-6 text-center shadow-sm">
-              <div className="mx-auto h-4 w-4 animate-pulse rounded-full bg-red-600" />
-              <div className="mt-4 font-mono text-4xl font-extrabold tracking-wider text-slate-950">
-                {formatTime(seconds)}
-              </div>
-              <h2 className="mt-3 text-lg font-bold text-slate-900">Meeting is being recorded for minutes</h2>
-              <p className="mx-auto mt-1 max-w-2xl text-sm text-slate-600">
-                The organiser microphone and connected participant microphones are combined into the meeting record. Participants can hear each other through the live audio room.
-              </p>
-
-              <div className="mt-5 flex flex-wrap justify-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setInviteOpen(true)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm font-extrabold text-blue-800"
-                >
-                  <Mail size={16} />
-                  Invite During Meeting
-                </button>
-                <button
-                  type="button"
-                  onClick={endMeeting}
-                  className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-5 py-3 text-sm font-extrabold text-white hover:bg-red-700"
-                >
-                  <Square size={17} fill="currentColor" />
-                  End Meeting & Process Minutes
-                </button>
-              </div>
-            </section>
-
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-600"><span className="inline-flex items-center gap-1 font-semibold text-red-700"><span className="h-2 w-2 rounded-full bg-red-600"/> Recording</span><span className="rounded-full border bg-white px-3 py-1 font-mono font-bold text-slate-950">{formatTime(seconds)}</span><span>Audio-first meeting</span><span className={journalStatus==="protected"?"text-green-700":"text-amber-700"}>{journalStatus==="protected"?"Local recording backup active":journalStatus==="unavailable"?"Local backup unavailable — keep this tab open":"Preparing local backup"}</span></div>
             <LiveAudioRoom
               meetingId={meeting.id}
               displayName={user.full_name}
@@ -509,6 +543,8 @@ export default function LiveMeetingPage() {
               autoJoin
               onRemoteStream={attachRemoteStream}
               onMicrophoneChange={changeHostMicrophone}
+              onEndMeeting={endMeeting}
+              onInvite={()=>setInviteOpen(true)}
             />
           </>
         )}
@@ -533,7 +569,7 @@ export default function LiveMeetingPage() {
           </div>
         )}
 
-        {canManageMeeting && (
+        {canManageMeeting && !isRecording && (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between">
               <h2 className="font-bold text-slate-900">Attendance & invitations</h2>

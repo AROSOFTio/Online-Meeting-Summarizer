@@ -7,6 +7,16 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    def __getattribute__(self,key):
+        # Preserve the original Pydantic object and introspection semantics.
+        # Only explicitly scoped values override platform defaults.
+        if key in {"TENANT_ID","DATABASE_URL","STORAGE_DIR","UPLOAD_DIR","EXPORT_DIR","SUBSCRIPTION_POLICY_FILE","PUBLIC_APP_URL","ADMIN_EMAIL","SECRET_KEY","is_sqlite"}:
+            from app.core.organization_context import current
+            context=current.get()
+            if context is not None and key in context.values:
+                return context.values[key]
+        return super().__getattribute__(key)
+
     PROJECT_NAME: str = "MinuteSeal"
     TENANT_ID: str = ""
     SUBSCRIPTION_POLICY_FILE: str = "/run/convenecore-entitlements/subscription.json"

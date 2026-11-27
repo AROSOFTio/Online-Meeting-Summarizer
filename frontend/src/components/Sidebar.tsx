@@ -35,7 +35,7 @@ export default function Sidebar() {
   const spacerWidth = collapsed ? "lg:w-20" : "lg:w-64";
 
   return <>
-    <header className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between bg-blue-800 px-4 text-white lg:hidden">
+    <header className={"fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between px-4 lg:hidden "+(pathname.endsWith("/live")?"border-b border-slate-200 bg-white text-blue-950":"bg-blue-800 text-white")}>
       <div className="flex min-w-0 items-center gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}<img src="/minuteseal.svg" alt="MinuteSeal" className="h-10 w-auto max-w-14 rounded bg-white object-contain p-0.5" />
         <div className="min-w-0"><div className="truncate text-xs font-bold">MINUTESEAL</div><div className="text-[9px] tracking-widest text-blue-100">MEETINGS</div></div>

@@ -1,3 +1,4 @@
+from app.core.organization_context import scoped_path
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -213,7 +214,7 @@ def create_backup(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Backup failed: {exc}") from exc
+        raise HTTPException(status_code=500, detail="Backup failed; contact support") from exc
 
 
 @router.get("/backups/{backup_id}/download")
@@ -223,7 +224,7 @@ def download_backup(
     current_user: User = Depends(deps.get_admin_user),
 ):
     record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
-    if not record or not os.path.isfile(record.filepath):
+    if not record or not scoped_path(record.filepath).is_file():
         raise HTTPException(status_code=404, detail="Backup file not found")
     validate_backup(Path(record.filepath))
     return FileResponse(record.filepath, filename=Path(record.filepath).name, media_type="application/octet-stream")
@@ -241,7 +242,7 @@ def run_retention_cleanup(
     recordings = db.query(Recording).join(Meeting).filter(Meeting.is_archived.is_(True), Recording.created_at < cutoff).all()
     removed = 0
     for recording in recordings:
-        if recording.filepath and os.path.isfile(recording.filepath):
+        if recording.filepath and scoped_path(recording.filepath).is_file():
             try:
                 os.remove(recording.filepath)
             except OSError:

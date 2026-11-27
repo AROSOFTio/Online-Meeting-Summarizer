@@ -77,8 +77,8 @@ export default function PublicMeetingRoomPage() {
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           
 
-          <div className="p-6 sm:p-8">
-            {error && (
+          <div className={invitation?.lifecycle==="live"?"p-3 sm:p-4":"p-5 sm:p-8"}>
+            {error && !invitation && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
             )}
             {!invitation && !error && (
@@ -87,8 +87,8 @@ export default function PublicMeetingRoomPage() {
 
             {invitation && (
               <div className="space-y-5">
-                <div className="rounded-xl bg-slate-50 p-5">
-                  <h1 className="text-2xl font-extrabold text-slate-950">{invitation.meeting_title}</h1>
+                <div className="rounded-lg bg-slate-50 p-3">
+                  <h1 className="text-base font-bold text-slate-950 sm:text-lg">{invitation.meeting_title}</h1>
                   <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
                     <Calendar size={16} />
                     {new Date(invitation.meeting_date).toLocaleString(undefined, {

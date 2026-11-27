@@ -1,6 +1,7 @@
 import fcntl
 import math
 import os
+import shutil
 from contextlib import contextmanager
 from pathlib import Path
 from fastapi import HTTPException
@@ -57,6 +58,9 @@ def storage_write(size=0):
     with (root/".subscription-storage.lock").open("a") as lock:
         fcntl.flock(lock,fcntl.LOCK_EX)
         p=require()
+        from app.core.organization_context import current
+        if current.get() is not None and shutil.disk_usage(root).free<10*1024**3+max(size,0):
+            raise SubscriptionDenied(507,"Platform storage temporarily unavailable")
         if size<0 or storage_bytes()+size>p["limits"]["storage_gib"]*2**30:raise SubscriptionDenied(409,"Storage quota reached. Free storage or upgrade.")
         yield
 def remaining_ai(db,p):

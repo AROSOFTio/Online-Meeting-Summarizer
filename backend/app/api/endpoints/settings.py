@@ -1,3 +1,4 @@
+from app.core.organization_context import scoped_path
 import os
 from pathlib import Path
 from time import time
@@ -90,7 +91,7 @@ def upload_logo(
 @router.get("/logo")
 def get_logo(db: Session = Depends(deps.get_db)):
     custom = db.query(SystemSetting).filter(SystemSetting.key == LOGO_SETTING_KEY).first()
-    if custom and os.path.isfile(custom.value) and not custom.value.lower().endswith(".svg"):
+    if custom and scoped_path(custom.value).is_file() and not custom.value.lower().endswith(".svg"):
         return FileResponse(custom.value)
     raise HTTPException(status_code=404, detail="Organization logo is not available")
 

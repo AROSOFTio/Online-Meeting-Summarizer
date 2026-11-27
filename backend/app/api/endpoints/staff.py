@@ -1,8 +1,10 @@
+from app.core.organization_context import current as organization_context
 import secrets
 import string
 
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List
 
 from app.core import deps, security
@@ -52,7 +54,7 @@ def create_staff(
     current_user: User = Depends(deps.get_admin_user)
 ):
     """Create a new staff member account (Admin Only)."""
-    existing_user = db.query(User).filter(User.email == user_in.email).first()
+    existing_user = db.query(User).filter(func.lower(User.email) == str(user_in.email).strip().lower()).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="The user with this email already exists")
 
@@ -60,7 +62,7 @@ def create_staff(
     temporary_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(8))
     hashed_password = security.get_password_hash(temporary_password)
     new_user = User(
-        email=user_in.email,
+        email=str(user_in.email).strip().lower(),
         hashed_password=hashed_password,
         full_name=user_in.full_name,
         role=user_in.role,
@@ -95,6 +97,8 @@ def create_staff(
         db.rollback()
         raise HTTPException(status_code=502, detail="Temporary password email failed. Account not created; check SMTP settings.")
     db.refresh(new_user)
+    context=organization_context.get()
+    if context is not None:context.runtime.sync_member(context.principal.org_id,new_user.id)
 
     log_action(
         db,
@@ -127,10 +131,10 @@ def update_staff(
             raise HTTPException(status_code=400, detail="Admins cannot change their own role")
 
     if user_in.email:
-        existing_user = db.query(User).filter(User.email == user_in.email, User.id != user_id).first()
+        existing_user = db.query(User).filter(func.lower(User.email) == str(user_in.email).strip().lower(), User.id != user_id).first()
         if existing_user:
             raise HTTPException(status_code=400, detail="The user with this email already exists")
-        user.email = user_in.email
+        user.email = str(user_in.email).strip().lower()
 
     if user_in.full_name is not None:
         user.full_name = user_in.full_name
@@ -153,6 +157,8 @@ def update_staff(
 
     db.commit()
     db.refresh(user)
+    context=organization_context.get()
+    if context is not None:context.runtime.sync_member(context.principal.org_id,user.id)
     db.refresh(profile)
 
     log_action(
@@ -184,6 +190,8 @@ def deactivate_staff(
     profile = _profile_for(db, user)
     db.commit()
     db.refresh(user)
+    context=organization_context.get()
+    if context is not None:context.runtime.sync_member(context.principal.org_id,user.id)
 
     log_action(
         db,

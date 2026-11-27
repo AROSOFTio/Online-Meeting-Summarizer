@@ -40,7 +40,7 @@ def render_pdf(definition, values, organization, final=False):
         elif f.kind=="list" and value:
             story.extend(para(f"{n}. {line}") for n,line in enumerate(value.splitlines(),1) if line.strip())
         else:
-            story.append(para(value or ("________________________" if f.kind=="signature" else ("Not recorded — review required" if f.required else "Not recorded"))))
+            story.append(para(value or ("________________________" if f.kind=="signature" else ("Not recorded in the available meeting record" if f.required else "Not recorded"))))
     def footer(canvas,document):
         canvas.saveState()
         canvas.setFont("Helvetica",9)
@@ -99,7 +99,7 @@ def render_docx(definition,values,organization,final=False):
             for line in value.splitlines():
                 if line.strip():doc.add_paragraph(line,style="List Number")
         else:
-            doc.add_paragraph(value or ("________________________" if f.kind=="signature" else "Not recorded — review required"))
+            doc.add_paragraph(value or ("________________________" if f.kind=="signature" else "Not recorded in the available meeting record"))
     footer=section.footer.paragraphs[0]
     footer.text="MinuteSeal | "+("Final" if final else "Draft")+"  •  Page "
     field=OxmlElement("w:fldSimple")

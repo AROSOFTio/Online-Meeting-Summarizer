@@ -22,6 +22,8 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [organization, setOrganization] = useState("");
+  const [showOrganization, setShowOrganization] = useState(false);
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
@@ -31,8 +33,9 @@ export default function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await login(data.email.trim().toLowerCase(), data.password);
+      await login(data.email.trim().toLowerCase(), data.password, organization);
     } catch (err: unknown) {
+      if (err instanceof Error && err.message.includes("organization name")) setShowOrganization(true);
       setError(err instanceof Error ? err.message : "Invalid credentials");
     } finally {
       setIsSubmitting(false);
@@ -47,6 +50,7 @@ export default function LoginPage() {
       <label className="block text-sm font-medium text-slate-800">Email address<input type="email" autoComplete="username" {...register("email")} placeholder="name@organization.com" className="mt-1 w-full rounded-md border border-slate-500 bg-white px-3 py-2.5 text-sm text-slate-900"/></label>
       {errors.email && <p className="text-xs text-red-700">{errors.email.message}</p>}
       <div><label htmlFor="login-password" className="block text-sm font-medium text-slate-800">Password</label><div className="relative mt-1"><input id="login-password" type={showPassword?"text":"password"} autoComplete="current-password" {...register("password")} className="w-full rounded-md border border-slate-500 bg-white px-3 py-2.5 pr-12 text-sm text-slate-900"/><button type="button" onClick={()=>setShowPassword(v=>!v)} aria-label={showPassword?"Hide password":"Show password"} aria-pressed={showPassword} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-2 text-slate-700">{showPassword?<EyeOff size={18}/>:<Eye size={18}/>}</button></div>{errors.password && <p className="mt-1 text-xs text-red-700">{errors.password.message}</p>}</div>
+      {showOrganization ? <label className="block text-sm font-medium text-slate-800">Organization name (if needed)<input value={organization} onChange={e=>setOrganization(e.target.value)} maxLength={255} className="mt-1 w-full rounded-md border border-slate-500 px-3 py-2.5 text-sm" placeholder="Your registered organization name"/></label> : <button type="button" onClick={()=>setShowOrganization(true)} className="text-xs font-medium text-blue-700">I belong to multiple organizations</button>}
       <button type="submit" disabled={isSubmitting} className="w-full rounded-md bg-blue-700 py-2.5 text-sm font-bold text-white hover:bg-blue-800 disabled:opacity-50">{isSubmitting?"Signing in…":"Sign in"}</button>
     </form>
     <div className="mt-4 border-t border-slate-200 pt-4"><Link href="/join-meeting" className="flex items-center justify-center gap-2 rounded-md border border-blue-700 py-2.5 text-sm font-semibold text-blue-700 hover:bg-blue-50"><Users size={17}/>Join an invited meeting</Link><p className="mt-2 text-center text-xs text-slate-600">Invitees do not need a staff login.</p></div>

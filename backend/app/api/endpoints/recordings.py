@@ -1,8 +1,14 @@
+from app.core.organization_context import scoped_path
 import os
 import uuid
+import re
+import tempfile
+import shutil
+import mimetypes
+from starlette.datastructures import Headers
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, Query, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -34,12 +40,14 @@ def upload_recording(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_minutes_editor),
 ):
-    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
+    meeting = db.query(Meeting).filter(Meeting.id == meeting_id).with_for_update().first()
     if not meeting:
         raise HTTPException(status_code=404, detail="Meeting not found")
     if current_user.role != UserRole.admin and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="You do not have permission to upload files for this meeting")
 
+    if meeting.status in {MeetingStatus.processing, MeetingStatus.completed} or (Path(settings.EXPORT_DIR)/f"meeting-{meeting_id}-final-minutes.pdf").is_file():
+        raise HTTPException(409, "Recording cannot be replaced while processing or after minutes completion")
     file.file.seek(0, os.SEEK_END)
     file_size = file.file.tell()
     file.file.seek(0)
@@ -83,7 +91,7 @@ def upload_recording(
                 stored_mime = "audio/webm"
     
         existing = db.query(Recording).filter(Recording.meeting_id == meeting_id).first()
-        old_path = existing.filepath if existing else None
+        old_path = str(scoped_path(existing.filepath)) if existing else None
         if existing:
             db.delete(existing)
             db.flush()
@@ -108,13 +116,89 @@ def upload_recording(
     return {"id": recording.id, "meeting_id": recording.meeting_id, "filename": recording.filename, "file_size_bytes": recording.file_size_bytes, "mime_type": recording.mime_type}
 
 
+# Resumable, bounded upload parts. All paths are organization and editor scoped.
+_PART_SIZE = 1024 * 1024
+_MAX_PARTS = 500
+
+def _upload_scope(db, meeting_id, user, upload_id):
+    if not re.fullmatch(r"[a-f0-9]{64}", upload_id):
+        raise HTTPException(422, "Invalid upload identifier")
+    meeting = db.query(Meeting).filter_by(id=meeting_id).first()
+    if not meeting:
+        raise HTTPException(404, "Meeting not found")
+    if user.role != UserRole.admin and meeting.owner_id != user.id:
+        raise HTTPException(403, "Not authorized to upload for this meeting")
+    path = Path(settings.UPLOAD_DIR) / ".resumable" / f"{meeting_id}-{user.id}" / upload_id
+    return meeting, path
+
+@router.get("/resume/{meeting_id}/{upload_id}")
+def upload_progress(meeting_id: int, upload_id: str, db: Session = Depends(deps.get_db), current_user: User = Depends(deps.get_minutes_editor)):
+    meeting, path = _upload_scope(db, meeting_id, current_user, upload_id)
+    completed = bool(meeting.recording and meeting.recording.filename.startswith(f"meeting-{meeting_id}-{upload_id[:24]}."))
+    return {"completed":completed,"parts": sorted(int(p.stem) for p in path.glob("*.part") if p.stem.isdigit())}
+
+@router.put("/resume/{meeting_id}/{upload_id}/{index}")
+def upload_part(meeting_id: int, upload_id: str, index: int, file: UploadFile = File(...), db: Session = Depends(deps.get_db), current_user: User = Depends(deps.get_minutes_editor)):
+    meeting, path = _upload_scope(db, meeting_id, current_user, upload_id)
+    if meeting.status in {MeetingStatus.processing, MeetingStatus.completed}:
+        raise HTTPException(409, "Recording already processing or completed")
+    if not 0 <= index < _MAX_PARTS:
+        raise HTTPException(422, "Invalid part index")
+    data = file.file.read(_PART_SIZE + 1)
+    if not data or len(data) > _PART_SIZE:
+        raise HTTPException(413, "Each upload part must be between 1 byte and 1 MiB")
+    target = path / f"{index}.part"
+    if target.is_file():
+        if target.read_bytes() != data:
+            raise HTTPException(409, "Upload part differs from previous attempt")
+        return {"stored": index}
+    with storage_write(len(data)):
+        path.mkdir(parents=True, exist_ok=True)
+        temp = path / (str(uuid.uuid4()) + ".tmp")
+        try:
+            temp.write_bytes(data)
+            if target.exists() and target.read_bytes() != data:
+                raise HTTPException(409, "Conflicting upload part")
+            temp.replace(target)
+        finally:
+            temp.unlink(missing_ok=True)
+    return {"stored": index}
+
+@router.post("/resume/{meeting_id}/{upload_id}/complete")
+def complete_upload(meeting_id: int, upload_id: str, request: Request, count: int = Query(ge=1, le=_MAX_PARTS), filename: str = Query(max_length=255), db: Session = Depends(deps.get_db), current_user: User = Depends(deps.get_minutes_editor)):
+    meeting, path = _upload_scope(db, meeting_id, current_user, upload_id)
+    # Stable filename makes an ambiguous successful completion safe to repeat.
+    ext = Path(filename).suffix.lower()
+    stable = f"meeting-{meeting_id}-{upload_id[:24]}{ext}"
+    if meeting.recording and meeting.recording.filename == stable:
+        shutil.rmtree(path, ignore_errors=True)
+        return {"id": meeting.recording.id, "meeting_id": meeting_id, "filename": stable, "file_size_bytes": meeting.recording.file_size_bytes}
+    parts = [path / f"{i}.part" for i in range(count)]
+    if any(not p.is_file() for p in parts):
+        raise HTTPException(409, "Upload incomplete; retry missing parts")
+    if any(p.stat().st_size != _PART_SIZE for p in parts[:-1]):
+        raise HTTPException(422, "Invalid intermediate part size")
+    total = sum(p.stat().st_size for p in parts)
+    valid, error = validate_media_file(stable, total, "")
+    if not valid:
+        raise HTTPException(400, error)
+    with tempfile.TemporaryFile() as assembled:
+        for p in parts:
+            with p.open("rb") as source:
+                shutil.copyfileobj(source, assembled, _PART_SIZE)
+        assembled.seek(0)
+        result = upload_recording(meeting_id, request, UploadFile(file=assembled, filename=stable, headers=Headers({"content-type":mimetypes.guess_type(stable)[0] or "audio/webm"})), db, current_user)
+    shutil.rmtree(path, ignore_errors=True)
+    return result
+
+
 def _recording_or_404(recording_id: int, db: Session, user: User) -> Recording:
     recording = db.query(Recording).filter(Recording.id == recording_id).first()
     if not recording:
         raise HTTPException(status_code=404, detail="Recording not found")
     if not _can_read(recording.meeting, user):
         raise HTTPException(status_code=403, detail="You are not authorised to access this recording")
-    if not os.path.exists(recording.filepath):
+    if not scoped_path(recording.filepath).is_file():
         raise HTTPException(status_code=404, detail="Physical audio file is missing from storage")
     return recording
 

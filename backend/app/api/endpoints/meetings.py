@@ -1,3 +1,4 @@
+from app.core.organization_context import scoped_path
 import os
 import json
 import secrets
@@ -52,6 +53,17 @@ def _public_datetime(value: Optional[datetime]) -> Optional[datetime]:
 
 
 def _invite_code(db: Session, length: int = 8) -> str:
+    from app.core.organization_context import current
+    context=current.get()
+    if context is not None:
+        from sqlalchemy.exc import IntegrityError
+        for _ in range(20):
+            code="".join(secrets.choice(INVITE_ALPHABET) for _ in range(32))
+            try:
+                context.runtime.reserve_invitation(code,context.principal.org_id)
+                return code
+            except IntegrityError:continue
+        raise RuntimeError("Could not allocate invitation")
     for _ in range(20):
         code = "".join(secrets.choice(INVITE_ALPHABET) for _ in range(length))
         if not db.query(MeetingInvitation).filter(MeetingInvitation.code == code).first():
@@ -512,7 +524,7 @@ def delete_meeting(
     meeting = _editable_meeting(meeting_id, db, current_user)
     title = meeting.title
     if permanent:
-        recording_path = meeting.recording.filepath if meeting.recording else None
+        recording_path = str(scoped_path(meeting.recording.filepath)) if meeting.recording else None
         db.delete(meeting); db.commit()
         if recording_path:
             try: os.remove(recording_path)
@@ -547,7 +559,12 @@ def trigger_transcription(
         runtime.lifecycle = "ended"
         runtime.ended_at = _storage_datetime(datetime.now(timezone.utc))
     db.commit(); db.refresh(job)
-    run_background_job(transcribe_meeting, meeting_id, job.id)
+    try:
+        run_background_job(transcribe_meeting, meeting_id, job.id)
+    except Exception:
+        job.status=JobStatus.failed;job.error_message="Processing queue unavailable; retry later"
+        meeting.status=MeetingStatus.failed;db.commit()
+        raise HTTPException(503,"Processing queue temporarily unavailable")
     log_action(db, action="trigger_transcription", details=f"Triggered transcription job {job.id} for meeting {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return job
 
@@ -594,6 +611,11 @@ def retry_transcription(
     if not meeting.recording: raise HTTPException(status_code=400, detail="Cannot retry: recording is missing")
     job = ProcessingJob(id=str(uuid.uuid4()), meeting_id=meeting_id, status=JobStatus.queued, progress=0)
     db.add(job); meeting.status = MeetingStatus.processing; db.commit(); db.refresh(job)
-    run_background_job(transcribe_meeting, meeting_id, job.id)
+    try:
+        run_background_job(transcribe_meeting, meeting_id, job.id)
+    except Exception:
+        job.status=JobStatus.failed;job.error_message="Processing queue unavailable; retry later"
+        meeting.status=MeetingStatus.failed;db.commit()
+        raise HTTPException(503,"Processing queue temporarily unavailable")
     log_action(db, action="retry_transcription", details=f"Retried failed transcription job. New job ID: {job.id} for meeting {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return job

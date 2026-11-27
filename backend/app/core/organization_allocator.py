@@ -1,6 +1,7 @@
 """Privileged broker only: allocate on a dedicated PostgreSQL cluster."""
-import fcntl, hashlib, json, os, re, secrets, tempfile
+import fcntl, hashlib, json, os, re, secrets, tempfile, shutil
 from pathlib import Path
+from datetime import datetime,timezone,timedelta
 import psycopg
 from psycopg import sql
 from sqlalchemy import create_engine, select
@@ -64,6 +65,11 @@ class OrganizationAllocator:
                     cur.execute("SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname=%s",(role,))
                     owner=cur.fetchone()
                     if not path.exists():
+                        maximum=int(os.environ.get("MS_MAX_ORGANIZATIONS","10"))
+                        if not 1<=maximum<=50 or len(list(self.journal.glob("*.json")))>=maximum:
+                            raise IsolationError("Organization allocation capacity reached")
+                        if shutil.disk_usage(self.storage).free<15*1024**3:
+                            raise IsolationError("Insufficient allocation capacity")
                         if existing or owner:raise IsolationError("Unjournaled allocation exists")
                         record=dict(org_id=org,role=role,database=role,password=secrets.token_urlsafe(48),fingerprint=fingerprint,ready=False)
                         save(path,record)
@@ -88,6 +94,9 @@ class OrganizationAllocator:
             else:
                 if any(root.iterdir()):raise IsolationError("Unlabelled storage")
                 with marker.open("x") as f:f.write(org+"\n")
+            policy=root/"subscription.json"
+            if not policy.exists():
+                save(policy,dict(tenant=org,plan="starter",expiry=(datetime.now(timezone.utc).date()+timedelta(days=29)).isoformat(),grace_days=0,features=["live","recording","ai","templates","exports","actions","audit"],limits={"users":10,"storage_gib":5,"ai_minutes":300}))
             engine=create_engine(self.url.set(username=role,password=record["password"],database=role))
             try:
                 Base.metadata.create_all(engine)

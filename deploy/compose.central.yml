@@ -1,0 +1,79 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: /var/lib/minuteseal-central/private/postgres.env
+    volumes:
+      - central_pg:/var/lib/postgresql/data
+    networks: [private]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -h 127.0.0.1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server","--appendonly","yes","--maxmemory","256mb","--maxmemory-policy","noeviction"]
+    volumes:
+      - central_redis:/data
+    networks: [private]
+  backend:
+    image: cc-minuteseal-central-backend:reliability1
+    restart: unless-stopped
+    command: ["uvicorn","app.central_main:from_env","--factory","--host","0.0.0.0","--port","8000","--no-access-log"]
+    env_file: /var/lib/minuteseal-central/private/runtime.env
+    volumes:
+      - /var/lib/minuteseal-central/journal:/central/journal:ro
+      - /var/lib/minuteseal-central/storage:/central/storage
+      - /etc/minuteseal/onboarding.env:/run/minuteseal-mail/onboarding.env:ro
+      - /var/lib/minuteseal-turn/credentials:/run/minuteseal-turn:ro
+    ports: ["127.0.0.1:19284:8000"]
+    networks: [private,egress]
+    healthcheck:
+      test: ["CMD","python","-c","import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health',timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    security_opt: ["no-new-privileges:true"]
+  worker:
+    image: cc-minuteseal-central-backend:reliabilityworker1
+    restart: unless-stopped
+    command: ["celery","-A","app.workers.tasks","worker","--loglevel=warning","--concurrency=1"]
+    env_file: /var/lib/minuteseal-central/private/runtime.env
+    volumes:
+      - /var/lib/minuteseal-central/journal:/central/journal:ro
+      - /var/lib/minuteseal-central/storage:/central/storage
+      - /etc/minuteseal/onboarding.env:/run/minuteseal-mail/onboarding.env:ro
+      - /var/lib/minuteseal-turn/credentials:/run/minuteseal-turn:ro
+    networks: [private,egress]
+    security_opt: ["no-new-privileges:true"]
+  broker:
+    image: cc-minuteseal-central-backend:mailfix1
+    restart: unless-stopped
+    command: ["sh","-c","umask 007; rm -f /central/socket/broker.sock; exec python /workspace/deploy/central_registration_broker.py --inbox /central/registration/inbox.db --socket /central/socket/broker.sock --journal /central/journal --storage /central/storage"]
+    env_file:
+      - /var/lib/minuteseal-central/private/runtime.env
+      - /var/lib/minuteseal-central/private/allocator.env
+    environment:
+      PYTHONPATH: /workspace:/workspace/deploy
+    volumes:
+      - /var/lib/minuteseal-central/journal:/central/journal
+      - /var/lib/minuteseal-central/storage:/central/storage
+      - /var/lib/minuteseal-central/registration:/central/registration
+      - /var/lib/minuteseal-central/socket:/central/socket
+    networks: [private]
+    security_opt: ["no-new-privileges:true"]
+  frontend:
+    image: cc-minuteseal-central-frontend:reliability2-live
+    restart: unless-stopped
+    ports: ["127.0.0.1:19283:3000"]
+    networks: [egress]
+    security_opt: ["no-new-privileges:true"]
+networks:
+  private:
+    internal: true
+  egress: {}
+volumes:
+  central_pg: {}
+  central_redis: {}

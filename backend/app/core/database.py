@@ -20,5 +20,15 @@ if settings.is_sqlite:
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
 
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+_StandaloneSession = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+def SessionLocal(**kwargs):
+    from app.core.organization_context import current
+    context=current.get()
+    if context is not None:
+        return _StandaloneSession(bind=context.engine, **kwargs)
+    import os
+    if os.environ.get("MS_CENTRAL_REGISTRY_URL"):
+        raise RuntimeError("Central database access requires organization context")
+    return _StandaloneSession(**kwargs)
 Base = declarative_base()

@@ -1,3 +1,4 @@
+from app.core.organization_context import scoped_path
 from app.core.subscriptions import storage_write
 from pathlib import Path
 import re
@@ -23,7 +24,7 @@ def _enum_value(value):
 
 
 def _final_pdf_path(meeting_id: int) -> Path:
-    return Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf"
+    return scoped_path(Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf") if app_settings.TENANT_ID.startswith("org-") else Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf"
 
 
 def _gather_export_data(meeting_id: int, db: Session):
@@ -75,6 +76,8 @@ def _gather_export_data(meeting_id: int, db: Session):
         "registration": settings.get("organization_registration", ""),
         "logo_path": settings.get("school_logo_file", ""),
     }
+    if organization["logo_path"]:
+        organization["logo_path"]=str(scoped_path(organization["logo_path"]))
     return (
         meeting, participants, summary_text, decision_texts, action_items,
         transcript.content if transcript else "", organization,
@@ -220,6 +223,7 @@ def finalize_and_share_minutes(
         temporary.write_bytes(pdf_data)
         temporary.replace(path)
         if snapshot:
+            row.values_json = __import__("json").dumps(values, ensure_ascii=False)
             row.status = "final"
             try:
                 db.commit()

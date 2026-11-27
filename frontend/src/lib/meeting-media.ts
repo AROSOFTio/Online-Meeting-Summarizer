@@ -1,7 +1,11 @@
-export async function openMicrophone(deviceId=""): Promise<MediaStream> {
+export type AudioProfile="voice"|"natural";
+export function audioProfile():AudioProfile {
+ try{return localStorage.getItem("minuteseal-audio-profile")==="natural"?"natural":"voice";}catch{return "voice";}
+}
+export async function openMicrophone(deviceId="",profile:AudioProfile=audioProfile()): Promise<MediaStream> {
  if (!navigator.mediaDevices?.getUserMedia) throw new Error("Microphone access requires a supported browser and HTTPS.");
  const device=deviceId?{deviceId:{exact:deviceId}}:{};
- const audio={...device,echoCancellation:true,noiseSuppression:true,autoGainControl:true};
+ const audio={...device,echoCancellation:true,noiseSuppression:profile==="voice",autoGainControl:false,sampleRate:{ideal:48000},channelCount:{ideal:1}};
  try{return await navigator.mediaDevices.getUserMedia({audio,video:false});}
  catch(e){
   // Retry without processing constraints, but never silently change the selected device.
@@ -18,4 +22,21 @@ export function mediaError(e:unknown){
   return e.message;
  }
  return "Could not start the microphone.";
+}
+
+
+export function preferOpus(t:RTCRtpTransceiver){
+ try{
+  const codecs=RTCRtpReceiver.getCapabilities("audio")?.codecs||[];
+  const opus=codecs.filter(c=>c.mimeType.toLowerCase()==="audio/opus");
+  if(opus.length)t.setCodecPreferences([...opus,...codecs.filter(c=>c.mimeType.toLowerCase()!=="audio/opus")]);
+ }catch{/* Browser default codec remains available. */}
+}
+export async function tuneAudioSender(sender:RTCRtpSender){
+ try{
+  const params=sender.getParameters();
+  if(!params.encodings?.length)return;
+  for(const encoding of params.encodings)encoding.maxBitrate=96000;
+  await sender.setParameters(params);
+ }catch{/* Browser/network congestion control is always authoritative. */}
 }

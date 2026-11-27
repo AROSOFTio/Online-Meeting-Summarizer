@@ -27,6 +27,19 @@ def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     
+    from app.core.organization_context import current
+    context=current.get()
+    if context is not None:
+        principal=context.principal
+        if principal is None:
+            raise credentials_exception
+        user=db.get(User,principal.user_id)
+        if not user or not user.is_active or user.email.strip().lower()!=principal.email:
+            raise credentials_exception
+        if user.must_change_password and request.url.path not in {'/api/auth/me','/api/auth/change-password','/api/auth/logout'}:
+            raise HTTPException(403,"Change your temporary password before using the system")
+        return user
+
     # 1. Try to read from HTTP-Only cookie 'session_token'
     token = request.cookies.get(settings.session_cookie_name)
     

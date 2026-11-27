@@ -1,4 +1,6 @@
 import secrets
+import hashlib
+import json
 import threading
 import time
 import uuid
@@ -18,6 +20,7 @@ from app.core.config import settings
 from app.models.meeting_flow import DirectoryProfile, MeetingRuntime
 from app.models.models import (
     Meeting,
+    SystemSetting,
     MeetingInvitation,
     MeetingStatus,
     Participant,
@@ -45,7 +48,10 @@ class LivePeer:
     joined_at: float
     last_seen: float
     microphone_available: bool = True
+    guest_session: bool = False
     visual_mode: Optional[Literal['camera','screen']] = None
+    hand_raised: bool = False
+    identity: str = ""
 
 
 class JoinLiveRoom(BaseModel):
@@ -76,7 +82,7 @@ class ModerateRequest(BaseModel):
     peer_id: str
     session_key: str
     target_id: str
-    action: str = Field(pattern="^(mute|release)$")
+    action: str = Field(pattern="^(mute|release|raise-hand|lower-hand|lower-all|lock|unlock)$")
 
 
 class LeaveRequest(BaseModel):
@@ -85,9 +91,39 @@ class LeaveRequest(BaseModel):
 
 
 _LOCK = threading.RLock()
-_ROOMS: dict[int, dict[str, LivePeer]] = {}
-_SIGNALS: dict[int, dict[str, list[dict[str, Any]]]] = {}
+_ROOMS: dict[tuple[str,int], dict[str, LivePeer]] = {}
+_SIGNALS: dict[tuple[str,int], dict[str, list[dict[str, Any]]]] = {}
+_LOCKED_ROOMS: set[tuple[str,int]] = set()
 
+
+def _policy(db, meeting_id):
+    row = db.query(SystemSetting).filter_by(key=f"__ms_room_policy_{meeting_id}").first()
+    return row, json.loads(row.value) if row else {"locked": False, "muted": [], "admitted": []}
+
+def _save_policy(db, meeting_id, row, policy):
+    if row is None:
+        row = SystemSetting(key=f"__ms_room_policy_{meeting_id}", value="{}")
+        db.add(row)
+    row.value = json.dumps(policy)
+    db.commit()
+
+def _identity(user_id, invite_code="", name="", email=""):
+    raw = f"user:{user_id}" if user_id else ("email:"+email.casefold() if email else "invite:"+invite_code+":"+name.strip().casefold())
+    return hashlib.sha256(raw.encode()).hexdigest()
+
+def guest_peer_organization(meeting_id,peer_id,session_key):
+    # A caller never supplies the tenant. Resolve using the existing high-entropy
+    # peer capability, and only for guest peers in the specified meeting.
+    with _LOCK:
+        for (org,mid),room in _ROOMS.items():
+            if mid!=meeting_id or not org:continue
+            peer=room.get(peer_id)
+            if peer and peer.guest_session and secrets.compare_digest(peer.session_key,session_key) and time.monotonic()-peer.last_seen<=STALE_PEER_SECONDS:
+                return org
+    return None
+
+def _room_key(meeting_id):
+    return (settings.TENANT_ID,meeting_id)
 
 def _runtime_for(meeting: Meeting, db: Session) -> MeetingRuntime:
     runtime = db.query(MeetingRuntime).filter(MeetingRuntime.meeting_id == meeting.id).first()
@@ -105,6 +141,12 @@ def _runtime_for(meeting: Meeting, db: Session) -> MeetingRuntime:
 
 
 def _optional_user(request: Request, db: Session) -> Optional[User]:
+    from app.core.organization_context import current
+    context=current.get()
+    if context is not None:
+        if context.principal is None:return None
+        user=db.get(User,context.principal.user_id)
+        return user if user and user.is_active and not user.must_change_password and user.email.lower()==context.principal.email else None
     token = request.cookies.get(settings.session_cookie_name)
     if not token:
         auth_header = request.headers.get("Authorization", "")
@@ -233,19 +275,22 @@ def _register_invited_participant(
 
 
 def _signals_for(meeting_id: int, peer_id: str) -> list[dict[str, Any]]:
-    return _SIGNALS.setdefault(meeting_id, {}).setdefault(peer_id, [])
+    return _SIGNALS.setdefault(_room_key(meeting_id), {}).setdefault(peer_id, [])
 
 
 def _enqueue(meeting_id: int, target_id: str, message: dict[str, Any]) -> None:
-    _signals_for(meeting_id, target_id).append(message)
+    queue = _signals_for(meeting_id, target_id)
+    if len(queue) >= 256:
+        queue.pop(0)
+    queue.append(message)
 
 
 def _remove_peer_locked(meeting_id: int, peer_id: str) -> None:
-    room = _ROOMS.get(meeting_id, {})
+    room = _ROOMS.get(_room_key(meeting_id), {})
     if peer_id not in room:
         return
     room.pop(peer_id, None)
-    _SIGNALS.get(meeting_id, {}).pop(peer_id, None)
+    _SIGNALS.get(_room_key(meeting_id), {}).pop(peer_id, None)
     for other_id in list(room):
         _enqueue(
             meeting_id,
@@ -253,13 +298,14 @@ def _remove_peer_locked(meeting_id: int, peer_id: str) -> None:
             {"type": "peer-left", "from_peer_id": peer_id, "payload": None},
         )
     if not room:
-        _ROOMS.pop(meeting_id, None)
-        _SIGNALS.pop(meeting_id, None)
+        _ROOMS.pop(_room_key(meeting_id), None)
+        _SIGNALS.pop(_room_key(meeting_id), None)
+        _LOCKED_ROOMS.discard(_room_key(meeting_id))
 
 
 def _cleanup_stale_locked(meeting_id: int) -> None:
     now = time.monotonic()
-    room = _ROOMS.get(meeting_id, {})
+    room = _ROOMS.get(_room_key(meeting_id), {})
     stale_ids = [
         peer_id
         for peer_id, peer in room.items()
@@ -271,7 +317,7 @@ def _cleanup_stale_locked(meeting_id: int) -> None:
 
 def _peer_locked(meeting_id: int, peer_id: str, session_key: str) -> LivePeer:
     _cleanup_stale_locked(meeting_id)
-    peer = _ROOMS.get(meeting_id, {}).get(peer_id)
+    peer = _ROOMS.get(_room_key(meeting_id), {}).get(peer_id)
     if not peer or not secrets.compare_digest(peer.session_key, session_key):
         raise HTTPException(status_code=401, detail="Live meeting session expired. Rejoin the meeting.")
     peer.last_seen = time.monotonic()
@@ -279,7 +325,7 @@ def _peer_locked(meeting_id: int, peer_id: str, session_key: str) -> LivePeer:
 
 
 def _serialize_peers(meeting_id: int, self_id: Optional[str] = None) -> list[dict[str, Any]]:
-    room = _ROOMS.get(meeting_id, {})
+    room = _ROOMS.get(_room_key(meeting_id), {})
     return [
         {
             "peer_id": peer.peer_id,
@@ -291,6 +337,7 @@ def _serialize_peers(meeting_id: int, self_id: Optional[str] = None) -> list[dic
             "microphone_available": peer.microphone_available,
             "visual_mode": peer.visual_mode,
             "forced_muted": peer.forced_muted,
+            "hand_raised": peer.hand_raised,
             "is_self": peer.peer_id == self_id,
         }
         for peer in sorted(room.values(), key=lambda item: (not item.is_moderator, item.joined_at))
@@ -364,6 +411,7 @@ def live_meeting_info(
         "started_at": runtime.started_at,
         "ended_at": runtime.ended_at,
         "is_moderator": is_moderator,
+        "recovery_key": hashlib.sha256(f"{settings.TENANT_ID}:{current_user.id}:{meeting.id}:{meeting.created_at}".encode()).hexdigest() if is_moderator else None,
         "recording": (
             {
                 "id": meeting.recording.id,
@@ -391,6 +439,7 @@ def join_live_room(
 
     user = _optional_user(request, db)
     is_moderator = _moderator_for(meeting, user)
+    invitation = None
     if user:
         name, role_title = _register_authenticated_participant(meeting, user, db)
         user_id = user.id
@@ -412,7 +461,20 @@ def join_live_room(
             body.full_name,
             db,
         )
-    db.commit()
+    identity = _identity(user_id, invitation.code if invitation else "", name, invitation.email or "" if invitation else "")
+    with _LOCK:
+        _cleanup_stale_locked(meeting_id)
+        row, policy = _policy(db, meeting_id)
+        if policy["locked"] and not is_moderator and identity not in policy["admitted"]:
+            db.rollback()
+            raise HTTPException(423, "Meeting locked to new participants. Ask the organizer to unlock admission.")
+        room = _ROOMS.get(_room_key(meeting_id), {})
+        if len(room) >= 12:
+            db.rollback()
+            raise HTTPException(409, "Meeting capacity reached (12 simultaneous connections).")
+        if identity not in policy["admitted"]:
+            policy["admitted"].append(identity)
+        _save_policy(db, meeting_id, row, policy)
 
     peer_id = uuid.uuid4().hex
     session_key = secrets.token_urlsafe(32)
@@ -426,13 +488,22 @@ def join_live_room(
         is_moderator=is_moderator,
         muted=body.muted or not body.microphone_available,
         microphone_available=body.microphone_available,
-        forced_muted=False,
+        forced_muted=identity in policy["muted"],
+        identity=identity,
+        guest_session=user is None,
         joined_at=time.time(),
         last_seen=now,
     )
     with _LOCK:
         _cleanup_stale_locked(meeting_id)
-        _ROOMS.setdefault(meeting_id, {})[peer_id] = peer
+        _, policy = _policy(db, meeting_id)
+        if policy["locked"] and not is_moderator and identity not in policy["admitted"]:
+            raise HTTPException(423, "Meeting locked to new participants")
+        if len(_ROOMS.get(_room_key(meeting_id), {})) >= 12:
+            raise HTTPException(409, "Meeting capacity reached (12 simultaneous connections).")
+        peer.forced_muted = identity in policy["muted"]
+        peer.muted = peer.muted or peer.forced_muted
+        _ROOMS.setdefault(_room_key(meeting_id), {})[peer_id] = peer
         _signals_for(meeting_id, peer_id)
         participants = _serialize_peers(meeting_id, peer_id)
     return {
@@ -441,20 +512,25 @@ def join_live_room(
         "session_key": session_key,
         "is_moderator": is_moderator,
         "participants": participants,
+        "locked": policy["locked"],
+        "forced_muted": peer.forced_muted,
         **meeting_ice_servers(peer_id),
     }
 
 
 @router.post("/{meeting_id}/heartbeat")
-def heartbeat(meeting_id: int, body: Heartbeat):
+def heartbeat(meeting_id: int, body: Heartbeat, db: Session = Depends(deps.get_db)):
     with _LOCK:
         peer = _peer_locked(meeting_id, body.peer_id, body.session_key)
+        _, policy = _policy(db, meeting_id)
+        peer.forced_muted = peer.identity in policy["muted"]
         peer.microphone_available = body.microphone_available
         peer.visual_mode = body.visual_mode
         peer.muted = peer.forced_muted or not peer.microphone_available or body.muted
         return {
             "participants": _serialize_peers(meeting_id, body.peer_id),
             "forced_muted": peer.forced_muted,
+            "locked": policy["locked"],
             **(meeting_ice_servers(peer.peer_id) if body.refresh_ice else {}),
         }
 
@@ -465,7 +541,7 @@ def send_signal(meeting_id: int, body: SignalMessage):
         raise HTTPException(status_code=400, detail="Unsupported live meeting signal")
     with _LOCK:
         _peer_locked(meeting_id, body.peer_id, body.session_key)
-        target = _ROOMS.get(meeting_id, {}).get(body.target_id)
+        target = _ROOMS.get(_room_key(meeting_id), {}).get(body.target_id)
         if not target:
             return {"delivered": False}
         _enqueue(
@@ -495,12 +571,39 @@ def receive_signals(
 
 
 @router.post("/{meeting_id}/moderate")
-def moderate_live_room(meeting_id: int, body: ModerateRequest):
+def moderate_live_room(meeting_id: int, body: ModerateRequest, db: Session = Depends(deps.get_db)):
     with _LOCK:
         actor = _peer_locked(meeting_id, body.peer_id, body.session_key)
+        key = _room_key(meeting_id)
+        room = _ROOMS.get(key, {})
+        row, policy = _policy(db, meeting_id)
+        if body.action in {"raise-hand","lower-hand","lower-all","lock","unlock"}:
+            if body.action == "raise-hand":
+                if body.target_id != actor.peer_id:
+                    raise HTTPException(403, "Raise only your own hand")
+                actor.hand_raised = True
+            elif body.action == "lower-hand":
+                if body.target_id != actor.peer_id and not actor.is_moderator:
+                    raise HTTPException(403, "Only the organizer can lower another participant's hand")
+                target = room.get(body.target_id)
+                if not target:
+                    raise HTTPException(404, "Participant is no longer connected")
+                target.hand_raised = False
+            else:
+                if not actor.is_moderator:
+                    raise HTTPException(403, "Only the organizer can manage the meeting")
+                if body.action == "lower-all":
+                    for peer in room.values():
+                        peer.hand_raised = False
+                elif body.action == "lock":
+                    policy["locked"] = True
+                    _save_policy(db, meeting_id, row, policy)
+                else:
+                    policy["locked"] = False
+                    _save_policy(db, meeting_id, row, policy)
+            return {"participants": _serialize_peers(meeting_id, actor.peer_id), "locked": policy["locked"]}
         if not actor.is_moderator:
             raise HTTPException(status_code=403, detail="Only the meeting organiser or owner can control participant microphones")
-        room = _ROOMS.get(meeting_id, {})
         if body.target_id == "*":
             targets = [peer for peer in room.values() if peer.peer_id != actor.peer_id]
         else:
@@ -511,6 +614,16 @@ def moderate_live_room(meeting_id: int, body: ModerateRequest):
                 raise HTTPException(status_code=400, detail="Use your own microphone control for your microphone")
             targets = [target]
 
+        muted = set(policy["muted"])
+        for target in targets:
+            if body.action == "mute":
+                muted.add(target.identity)
+            else:
+                muted.discard(target.identity)
+        if body.target_id == "*" and body.action == "release":
+            muted.clear()
+        policy["muted"] = sorted(muted)
+        _save_policy(db, meeting_id, row, policy)
         for target in targets:
             if body.action == "mute":
                 target.forced_muted = True
@@ -537,7 +650,7 @@ def moderate_live_room(meeting_id: int, body: ModerateRequest):
                     },
                 )
         participants = _serialize_peers(meeting_id, actor.peer_id)
-    return {"participants": participants}
+    return {"participants": participants, "locked": policy["locked"]}
 
 
 @router.post("/{meeting_id}/leave")

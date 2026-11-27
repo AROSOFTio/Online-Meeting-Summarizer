@@ -47,6 +47,15 @@ handoffs = Table("central_registration_handoffs", metadata,
     Column("expires_at", Integer, nullable=False),
     Column("consumed", Boolean, nullable=False, default=False))
 
+login_attempts = Table("central_login_attempts", metadata,
+    Column("digest", String(64), primary_key=True),
+    Column("window", Integer, nullable=False),
+    Column("attempts", Integer, nullable=False))
+
+invitations = Table("central_invitation_routes", metadata,
+    Column("digest", String(64), primary_key=True),
+    Column("org_id", String(40), ForeignKey("central_organizations.id"), nullable=False))
+
 ORG = re.compile(r"[a-z][a-z0-9-]{1,39}")
 TOKEN = re.compile(r"[A-Za-z0-9_-]{43}")
 COOKIE = "__Host-minuteseal-session"
