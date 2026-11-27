@@ -4,6 +4,9 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Headphones, LogOut, Mic, MicOff, Shield, UserRound, Users, Volume2, VolumeX } from "lucide-react";
 
 import { apiRequest } from "@/lib/api";
+import {openMicrophone,mediaError} from "@/lib/meeting-media";
+import MicrophoneSetup from "./MicrophoneSetup";
+import {Video,VideoOff,MonitorUp,MonitorOff} from "lucide-react";
 
 interface LiveParticipant {
   peer_id: string;
@@ -66,46 +69,6 @@ const RTC_CONFIG: RTCConfiguration = {
   iceCandidatePoolSize: 4,
 };
 
-async function openBestMicrophone(): Promise<MediaStream> {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error("This browser does not support microphone access.");
-  }
-
-  try {
-    return await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: { ideal: 1 },
-      },
-      video: false,
-    });
-  } catch (error) {
-    // Some mobile and USB audio drivers reject processing constraints even
-    // though their default microphone works. Never require manual selection.
-    if (error instanceof DOMException && ["OverconstrainedError", "NotSupportedError", "TypeError"].includes(error.name)) {
-      return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-    }
-    throw error;
-  }
-}
-
-function friendlyMediaError(error: unknown) {
-  if (error instanceof DOMException) {
-    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
-      return "Microphone permission is required. Allow microphone access in the browser, then tap Retry.";
-    }
-    if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
-      return "No working microphone was found on this device. Connect or enable a microphone, then tap Retry.";
-    }
-    if (error.name === "NotReadableError" || error.name === "TrackStartError") {
-      return "The microphone is busy in another app or browser tab. Close the other app, then tap Retry.";
-    }
-  }
-  return error instanceof Error ? error.message : "Could not connect this device to the meeting.";
-}
-
 export default function LiveAudioRoom({
   meetingId,
   displayName,
@@ -125,8 +88,16 @@ export default function LiveAudioRoom({
   const [isModerator, setIsModerator] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
-  const [, setMicrophones] = useState<MediaDeviceInfo[]>([]);
+  const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
   const [currentMicrophone, setCurrentMicrophone] = useState("");
+  const [selectedMic,setSelectedMic]=useState("");
+  const [visual,setVisual]=useState<MediaStream|null>(null);
+  const [visualMode,setVisualMode]=useState<"camera"|"screen"|null>(null);
+  const [visualBusy,setVisualBusy]=useState(false);
+  const [remoteVisual,setRemoteVisual]=useState<Record<string,MediaStream>>({});
+  const visualRef=useRef<MediaStream|null>(null);
+  const visualBusyRef=useRef(false);
+  const visualGeneration=useRef(0);
   const [changingMicrophone, setChangingMicrophone] = useState(false);
   const [audioUnlockToken, setAudioUnlockToken] = useState(0);
 
@@ -169,6 +140,7 @@ export default function LiveAudioRoom({
       connectionsRef.current.delete(remotePeerId);
     }
     pendingIceRef.current.delete(remotePeerId);
+    setRemoteVisual(current=>{const next={...current};delete next[remotePeerId];return next;});
     reconnectingRef.current.delete(remotePeerId);
     setRemoteStreams((current) => {
       if (!current[remotePeerId]) return current;
@@ -232,13 +204,22 @@ export default function LiveAudioRoom({
 
       const stream = localStreamRef.current;
       stream?.getAudioTracks().forEach((track) => connection.addTrack(track, stream));
+      // Reserve one visual channel in the initial offer, so camera/screen switches do not renegotiate.
+      if(initiate){const t=connection.addTransceiver("video",{direction:"sendrecv"});await t.sender.replaceTrack(visualRef.current?.getVideoTracks()[0]||null);}
 
       connection.onicecandidate = (event) => {
         if (event.candidate) void postSignal(remotePeerId, "ice", event.candidate.toJSON());
       };
 
       connection.ontrack = (event) => {
-        const remoteStream = event.streams[0] || new MediaStream([event.track]);
+        if(event.track.kind==="video"){
+          const videoStream=new MediaStream([event.track]);
+          const show=()=>setRemoteVisual(current=>({...current,[remotePeerId]:videoStream}));
+          const hide=()=>setRemoteVisual(current=>{const next={...current};delete next[remotePeerId];return next;});
+          event.track.addEventListener("unmute",show);event.track.addEventListener("mute",hide);event.track.addEventListener("ended",hide);
+          if(!event.track.muted)show();return;
+        }
+        const remoteStream = new MediaStream([event.track]);
         setRemoteStreams((current) => ({ ...current, [remotePeerId]: remoteStream }));
         onRemoteStream?.(remotePeerId, remoteStream);
       };
@@ -339,6 +320,8 @@ export default function LiveAudioRoom({
         }
 
         await connection.setRemoteDescription(message.payload as RTCSessionDescriptionInit);
+        const video=connection.getTransceivers().find(t=>t.receiver.track.kind==="video");
+        if(video){video.direction="sendrecv";await video.sender.replaceTrack(visualRef.current?.getVideoTracks()[0]||null);}
         await flushPendingIce(message.from_peer_id, connection);
         const answer = await connection.createAnswer();
         await connection.setLocalDescription(answer);
@@ -384,7 +367,7 @@ export default function LiveAudioRoom({
 
     try {
       if (!stream) {
-        stream = await openBestMicrophone();
+        stream = await openMicrophone(selectedMic);
         ownsStream = true;
       }
 
@@ -417,14 +400,16 @@ export default function LiveAudioRoom({
       if (ownsStream) stream?.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
       ownsLocalStreamRef.current = false;
-      setError(friendlyMediaError(joinError));
+      setError(mediaError(joinError));
     } finally {
       joiningRef.current = false;
       setJoining(false);
     }
-  }, [displayName, ensureConnection, inviteCode, meetingId, providedStream, refreshMicrophones]);
+  }, [displayName, ensureConnection, inviteCode, meetingId, providedStream, refreshMicrophones, selectedMic]);
 
+  const clearVisual=useCallback(()=>{visualGeneration.current++;visualRef.current?.getTracks().forEach(t=>t.stop());visualRef.current=null;setVisual(null);setVisualMode(null);setRemoteVisual({});},[]);
   const leaveRoom = useCallback(async () => {
+    clearVisual();
     const peerId = peerIdRef.current;
     const sessionKey = sessionKeyRef.current;
     joinedRef.current = false;
@@ -459,7 +444,7 @@ export default function LiveAudioRoom({
     setForcedMuted(false);
     setLocalMuted(false);
     setPlaybackBlocked(false);
-  }, [meetingId]);
+  }, [meetingId,clearVisual]);
 
   const changeMicrophone = useCallback(async (deviceId: string) => {
     const previous = localStreamRef.current;
@@ -468,12 +453,7 @@ export default function LiveAudioRoom({
     setError(null);
     let replacement: MediaStream | null = null;
     try {
-      replacement = deviceId
-        ? await navigator.mediaDevices.getUserMedia({
-            audio: { deviceId: { exact: deviceId }, echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-            video: false,
-          })
-        : await openBestMicrophone();
+      replacement = await openMicrophone(deviceId);
       const newTrack = replacement.getAudioTracks()[0];
       if (!newTrack) throw new Error("The selected microphone supplied no audio track.");
       newTrack.enabled = !localMuted && !forcedMuted;
@@ -502,7 +482,7 @@ export default function LiveAudioRoom({
       void refreshMicrophones();
     } catch (deviceError) {
       replacement?.getTracks().forEach((track) => track.stop());
-      setError(friendlyMediaError(deviceError));
+      setError(mediaError(deviceError));
     } finally {
       setChangingMicrophone(false);
     }
@@ -518,6 +498,28 @@ export default function LiveAudioRoom({
     track.addEventListener("ended", recover);
     return () => track.removeEventListener("ended", recover);
   }, [joined, currentMicrophone, changeMicrophone]);
+
+  const toggleVisual=async(mode:"camera"|"screen")=>{
+    if(visualBusyRef.current||!joinedRef.current)return;
+    visualBusyRef.current=true;setVisualBusy(true);setError(null);
+    const generation=++visualGeneration.current;let candidate:MediaStream|null=null;
+    const previous=visualRef.current;
+    try{
+      const off=visualMode===mode;
+      if(!off){
+        if(mode==="screen"&&!navigator.mediaDevices?.getDisplayMedia)throw new Error("Screen sharing is not supported on this browser. Use a supported desktop browser.");
+        candidate=mode==="camera"?await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:360},frameRate:{ideal:15,max:24}},audio:false}):await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:10,max:15}},audio:false});
+      }
+      if(!joinedRef.current||generation!==visualGeneration.current)return;
+      const next=candidate?.getVideoTracks()[0]||null;
+      const senders=Array.from(connectionsRef.current.values()).flatMap(c=>c.getTransceivers().filter(t=>t.receiver.track.kind==="video").map(t=>t.sender));
+      const switched:RTCRtpSender[]=[];
+      try{for(const sender of senders){await sender.replaceTrack(next);switched.push(sender);}}catch(e){await Promise.allSettled(switched.map(s=>s.replaceTrack(previous?.getVideoTracks()[0]||null)));throw e;}
+      visualRef.current=candidate;setVisual(candidate);setVisualMode(off?null:mode);candidate=null;
+      previous?.getTracks().forEach(t=>t.stop());
+      if(next)next.addEventListener("ended",()=>{if(visualRef.current?.getVideoTracks()[0]!==next)return;visualRef.current=null;setVisual(null);setVisualMode(null);for(const c of connectionsRef.current.values())for(const t of c.getTransceivers())if(t.receiver.track.kind==="video")void t.sender.replaceTrack(null).catch(()=>{});},{once:true});
+    }catch(e){setError(e instanceof Error?e.message:"Could not start video or screen sharing.");}finally{candidate?.getTracks().forEach(t=>t.stop());visualBusyRef.current=false;setVisualBusy(false);}
+  };
 
   const toggleMute = useCallback(() => {
     if (!localStreamRef.current || forcedMuted) return;
@@ -680,6 +682,7 @@ export default function LiveAudioRoom({
 
   useEffect(
     () => () => {
+      visualGeneration.current++;visualRef.current?.getTracks().forEach(t=>t.stop());visualRef.current=null;
       if (!joinedRef.current) return;
 
       const peerId = peerIdRef.current;
@@ -719,8 +722,10 @@ export default function LiveAudioRoom({
             {joining ? "Joining meeting..." : error ? "Meeting audio needs attention" : "Connecting meeting audio..."}
           </h2>
           <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            The best available/default microphone is selected automatically. There is no microphone-selection or second join step.
+            Choose another microphone if the default input is unavailable.
           </p>
+          {!providedStream&&!joining&&<MicrophoneSetup value={selectedMic} onChange={setSelectedMic}/>}
+          {!joining&&!error&&<button type="button" onClick={()=>void joinRoom()} className="mt-4 rounded-lg bg-blue-700 px-4 py-2 text-white">Join meeting</button>}
           {joining && <div className="mx-auto mt-5 h-8 w-8 animate-spin rounded-full border-4 border-blue-700 border-t-transparent" />}
           {error && (
             <>
@@ -756,10 +761,10 @@ export default function LiveAudioRoom({
             <div>
               <div className="flex items-center gap-2">
                 <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-green-500" />
-                <h2 className="font-extrabold text-slate-950">Meeting audio connected</h2>
+                <h2 className="font-extrabold text-slate-950">Meeting connected</h2>
               </div>
               <p className="mt-1 text-xs text-slate-600">
-                {participants.length} connected participant{participants.length === 1 ? "" : "s"}. Default microphone connected automatically.
+                {participants.length} connected participant{participants.length === 1 ? "" : "s"}. Camera and screen sharing are optional.
               </p>
 
             </div>
@@ -799,6 +804,12 @@ export default function LiveAudioRoom({
             </div>
           </div>
 
+          <div className="flex flex-wrap items-center gap-2 border-y border-slate-200 py-3">
+            <label className="min-w-0 flex-1 text-xs font-semibold">Microphone<select aria-label="Meeting microphone" value={currentMicrophone} disabled={changingMicrophone} onChange={e=>void changeMicrophone(e.target.value)} className="mt-1 block w-full rounded-md border border-slate-300 bg-white p-2 text-sm"><option value="">System default</option>{microphones.map((m,i)=><option key={m.deviceId} value={m.deviceId}>{m.label||`Microphone ${i+1}`}</option>)}</select></label>
+            <button type="button" disabled={visualBusy} onClick={()=>void toggleVisual("camera")} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm">{visualMode==="camera"?<VideoOff size={17}/>:<Video size={17}/>} {visualMode==="camera"?"Stop camera":"Camera"}</button>
+            <button type="button" disabled={visualBusy} onClick={()=>void toggleVisual("screen")} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm">{visualMode==="screen"?<MonitorOff size={17}/>:<MonitorUp size={17}/>} {visualMode==="screen"?"Stop sharing":"Share screen"}</button>
+          </div>
+          {(visual||Object.keys(remoteVisual).length>0)&&<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{visual&&<VideoTile stream={visual} label={visualMode==="screen"?"Your screen":"Your camera"}/>}{Object.entries(remoteVisual).map(([id,stream])=><VideoTile key={id} stream={stream} label={participants.find(p=>p.peer_id===id)?.name||"Participant"}/>)}</div>}
           {isModerator && otherParticipants.length > 0 && (
             <button
               type="button"
@@ -993,3 +1004,5 @@ function AudioLevelMeter({ stream, muted, label }: { stream: MediaStream | null;
     </div>
   );
 }
+
+function VideoTile({stream,label}:{stream:MediaStream;label:string}){const ref=useRef<HTMLVideoElement>(null);useEffect(()=>{const el=ref.current;if(!el)return;el.srcObject=stream;void el.play().catch(()=>{});return()=>{el.srcObject=null;};},[stream]);return <div className="overflow-hidden rounded-lg bg-slate-950 text-white"><video ref={ref} autoPlay playsInline muted className="aspect-video w-full object-contain"/><p className="px-3 py-2 text-xs">{label}</p></div>;}

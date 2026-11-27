@@ -8,6 +8,8 @@ import { Calendar, CheckCircle2, Mail, Mic, Radio, RefreshCw, Square, Upload, Us
 
 import DashboardLayout from "@/components/DashboardLayout";
 import LiveAudioRoom from "@/components/LiveAudioRoom";
+import MicrophoneSetup from "@/components/MicrophoneSetup";
+import {openMicrophone,mediaError} from "@/lib/meeting-media";
 import LiveInvitePanel from "@/components/LiveInvitePanel";
 import { useAuth } from "@/context/AuthContext";
 import { apiRequest } from "@/lib/api";
@@ -37,43 +39,15 @@ interface Attendance {
 const formatTime = (seconds: number) =>
   `${Math.floor(seconds / 60).toString().padStart(2, "0")}:${(seconds % 60).toString().padStart(2, "0")}`;
 
-async function openBestMicrophone(): Promise<MediaStream> {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    throw new Error("This browser does not support microphone access.");
-  }
-
-  return navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      channelCount: { ideal: 1 },
-    },
-    video: false,
-  });
-}
-
-function friendlyMediaError(error: unknown) {
-  if (error instanceof DOMException) {
-    if (error.name === "NotAllowedError" || error.name === "SecurityError") {
-      return "Microphone permission is required. Allow microphone access in the browser, then start the meeting again.";
-    }
-    if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
-      return "No working microphone was found. Connect or enable a microphone, then start the meeting again.";
-    }
-    if (error.name === "NotReadableError" || error.name === "TrackStartError") {
-      return "The microphone is busy in another app or browser tab. Close the other app, then start the meeting again.";
-    }
-  }
-  return error instanceof Error ? error.message : "Microphone access or meeting start failed.";
-}
-
 export default function LiveMeetingPage() {
   const params = useParams<{ id: string }>();
   const meetingId = Number(params.id);
   const router = useRouter();
   const { user } = useAuth();
 
+  const [selectedMic,setSelectedMic]=useState("");
+  const [starting,setStarting]=useState(false);
+  const startingRef=useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [processing, setProcessing] = useState(false);
@@ -170,8 +144,10 @@ export default function LiveMeetingPage() {
       const oldSource = mixSourcesRef.current.get("__host__");
       oldSource?.disconnect();
       mixSourcesRef.current.set("__host__", replacement);
+      const previous=streamRef.current;
       streamRef.current = nextStream;
       setHostStream(nextStream);
+      previous?.getTracks().forEach(track=>track.stop());
     } catch (error) {
       replacement.disconnect();
       throw error;
@@ -201,6 +177,8 @@ export default function LiveMeetingPage() {
   );
 
   const startMeeting = useCallback(async () => {
+    if(startingRef.current)return;
+    startingRef.current=true;setStarting(true);
     leavingRef.current = false;
     setError(null);
     chunksRef.current = [];
@@ -210,12 +188,10 @@ export default function LiveMeetingPage() {
     let stream: MediaStream | null = null;
 
     try {
-      stream = await openBestMicrophone();
+      stream = await openMicrophone(selectedMic);
       streamRef.current = stream;
 
-      await apiRequest(`/api/meetings/${meetingId}/start`, { method: "POST" });
-      runtimeStarted = true;
-      await meetingQuery.refetch();
+      // Resume audio within the user gesture before network requests.
 
       const context = new AudioContext();
       audioContextRef.current = context;
@@ -259,8 +235,11 @@ export default function LiveMeetingPage() {
         void sendForMinutes(blob, `meeting-${meetingId}.${extension}`);
       };
 
+      await apiRequest(`/api/meetings/${meetingId}/start`, { method: "POST" });
+      runtimeStarted = true;
       recorder.start(1000);
       setHostStream(stream);
+      void meetingQuery.refetch();
       setIsRecording(true);
       void attendanceQuery.refetch();
 
@@ -276,9 +255,10 @@ export default function LiveMeetingPage() {
 
       cleanupMedia();
       setHostStream(null);
-      setError(friendlyMediaError(startError));
-    }
+      setError(mediaError(startError));
+    } finally {startingRef.current=false;setStarting(false);}
   }, [
+    selectedMic,
     attendanceQuery,
     cleanupMedia,
     meeting?.lifecycle,
@@ -384,7 +364,7 @@ export default function LiveMeetingPage() {
 
   return (
     <DashboardLayout>
-      <div className="mx-auto w-full max-w-4xl space-y-6">
+      <div className="mx-auto w-full max-w-6xl space-y-5">
         {inviteOpen && (
           <LiveInvitePanel
             meetingId={meeting.id}
@@ -447,7 +427,7 @@ export default function LiveMeetingPage() {
 
         {canManageMeeting && !isRecording && !processing && (
           <section className="rounded-2xl border border-slate-200 bg-white p-6 text-center shadow-sm sm:p-8">
-            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 text-blue-700">
+            <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full motion-safe:animate-pulse bg-blue-50 text-blue-700">
               {meeting.lifecycle === "live" ? <Radio size={36} /> : <Mic size={36} />}
             </div>
 
@@ -456,17 +436,19 @@ export default function LiveMeetingPage() {
             </h2>
 
             <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-              Start once. The browser automatically uses this device&apos;s best available/default microphone with echo cancellation and noise suppression. There is no microphone-selection step. Invited devices also join meeting audio automatically.
+              Choose your microphone and test it before starting. Camera and screen sharing are available inside the meeting.
             </p>
 
+            <MicrophoneSetup value={selectedMic} onChange={setSelectedMic} disabled={starting}/>
             <button
+              disabled={starting}
               id="start-meeting-button"
               type="button"
               onClick={() => void startMeeting()}
               className="mt-6 w-full rounded-xl bg-blue-700 px-5 py-4 text-base font-extrabold text-white shadow-sm hover:bg-blue-800 sm:w-auto sm:min-w-72"
             >
               <Mic className="mr-2 inline" size={20} />
-              {meeting.lifecycle === "live" ? "Continue Recording" : "Start Meeting"}
+              {starting ? "Connecting..." : meeting.lifecycle === "live" ? "Continue Recording" : "Start Meeting"}
             </button>
 
             {meeting.lifecycle !== "live" && (
