@@ -109,7 +109,7 @@ def wizard_field(label,name,placeholder,kind="text",maxlength=150,extra=""):
     return f'<label>{esc(label)}<input name="{esc(name)}" type="{kind}" required maxlength="{maxlength}" placeholder="{esc(placeholder)}" {extra}></label>'
 
 def registration_paused():
-    return os.environ.get("CC_ONBOARD_REGISTRATION_PAUSED","").lower() in ("1","true","yes")
+    return os.environ.get("CC_ONBOARD_REGISTRATION_PAUSED","").lower() in ("1","true","yes") or not os.environ.get("MS_CENTRAL_REGISTRATION_SOCKET")
 
 def paused_page():
     return page("Registration temporarily unavailable",'<section class="otp-card"><h2>New organization registration is temporarily unavailable</h2><p>We are updating organization access. Existing organizations can still sign in. No new workspace has been created.</p></section>')
@@ -130,16 +130,12 @@ def verify_page(state=None,message=""):
     return page("Verify your email",'<section class="otp-card"><h2>Enter your verification code</h2><p>Check your email: '+esc(state["email"])+'</p>'+alert+'<form method="post" action="/verify"><label>Six-digit code<input class="otp-input" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" minlength="6" maxlength="6" placeholder="000000" required></label><button>Verify email</button></form><form method="post" action="/resend" class="otp-resend"><button>Resend code</button></form><p class="note">Codes expire in 10 minutes. Wait 60 seconds before requesting another code.</p></section>')
 
 def verified_page(state):
-    if state["status"]=="rejected":
-        return page("Registration unavailable",'<section><p>This workspace request could not be activated. Contact support.</p></section>')
-    host=state.get("host")
-    if host and onboarding.SLUG.fullmatch(host.split(".")[0]) and re.fullmatch(r"[a-z0-9.-]+",host):
-        if state["status"]=="activated":return page("Registration complete",'<section class="otp-card"><h2>Your organization is ready</h2><p>Sign in using the email and password you chose during registration.</p><a class="ms-button" href="https://'+esc(host)+'/login">Open your organization</a></section>')
-        return page("Workspace ready",'<section><p>Your workspace is ready. Use the setup invitation sent to your email to finish activating your account.</p><a href="https://'+esc(host)+'/setup">Open workspace</a></section>')
-    if state.get("password_ready") and registration_paused():return paused_page()
-    if state.get("password_ready"):
-        return page("Preparing your organization",'<section class="otp-card"><h2>Email verified</h2><p>Your organization is being prepared. This page will continue automatically when it is ready. We will also email your sign-in link.</p><a class="ms-button ms-button-outline" href="/verify">Continue</a></section>').replace("</title>","</title><meta http-equiv=\"refresh\" content=\"10;url="+BASE+"/verify\">",1)
-    return page("Email verified",'<section class="otp-card"><h2>Email verified</h2><p>This registration was made before password creation was available. Register again to choose your password, or contact support if your organization is already active.</p><a class="ms-button" href="/">Register</a></section>')
+    # Legacy registration records can point at customer-specific hostnames.
+    # Never redirect public signup into a legacy workspace or an unauthenticated
+    # dashboard. Only the central authentication service may issue a session.
+    if state["status"] == "rejected":
+        return page("Registration unavailable", '<section><p>This registration could not be completed. Contact support.</p></section>')
+    return paused_page()
 
 class Server(HTTPServer):
     def __init__(self,path,port,origin):
@@ -188,8 +184,6 @@ class Handler(BaseHTTPRequestHandler):
         if path=="/" and registration_paused():return self.respond(paused_page(),503)
         if path=="/verify":
             state=onboarding.browser_state(self.server.inbox,*self.browser_session())
-            if state and state["status"]=="activated" and state.get("host") and re.fullmatch(r"[a-z0-9.-]+",state["host"]):
-                return self.respond("",303,location="https://"+state["host"]+"/login")
             return self.respond(verify_page(state))
         if path=="/status":
             return self.respond("",303,location=BASE+"/verify")
@@ -219,8 +213,14 @@ class Handler(BaseHTTPRequestHandler):
                 if path=="/resend":
                     sent=onboarding.resend_browser(self.server.inbox,ref,key)
                     return self.respond(verify_page(state,"A new code was sent." if sent else "Code could not be sent yet. Wait a minute and try again."),200)
-                ok=onboarding.verify_browser(self.server.inbox,ref,key,f.get("code",""))
-                if ok:return self.respond("",303,location=BASE+"/verify")
+                broker=os.environ.get("MS_CENTRAL_REGISTRATION_SOCKET")
+                # No fallback to the legacy subdomain-provisioning workflow.
+                if not broker:return self.respond(paused_page(),503)
+                import central_registration_client
+                token=central_registration_client.complete(broker,ref,key,f.get("code",""))
+                if token:
+                    cookie="__Host-minuteseal-session="+token+"; Path=/; Secure; HttpOnly; SameSite=Lax; Max-Age=86400"
+                    return self.respond("",303,cookie=cookie,location="/dashboard")
                 return self.respond(verify_page(state,"Invalid or expired code. Request a new code after five failed attempts."),400)
             return self.respond(page("Not found","Page not found"),404)
         except ValueError as e:

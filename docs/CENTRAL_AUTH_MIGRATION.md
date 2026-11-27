@@ -39,3 +39,32 @@ Required before cutover:
    subdomains or additional login. Test rollback before reopening registration.
 
 No production routing changes are part of this module.
+
+## OTP and allocation bridge (implemented, gated)
+The public registration handler sends only the browser reference, browser secret
+and OTP to a private Unix socket. The broker independently verifies these
+against the inbox and allocates a distinct PostgreSQL database and role, marks
+the data/storage identity, initializes the administrator with the original
+Argon2id hash, attaches membership, and exchanges a one-use handoff for an
+opaque central session. On success the public handler sets a host-only secure
+cookie and returns 303 /dashboard. No legacy provisioning fallback is allowed.
+The original registration token and pending password hash are retired.
+The allocator journals credentials before database DDL so retries can resume.
+
+Tested against disposable PostgreSQL with two automatically allocated tenants,
+real Unix-socket broker, wrong OTP/browser proof, OTP replay, identical record
+IDs and database CONNECT denial. Separately tested real HTTP handler redirect,
+cookie flags, cross-origin and broker failure with a mocked broker.
+
+Production configuration is deliberately NOT enabled. The cluster requires
+a dedicated PostgreSQL instance, explicit shared database comment
+'MinuteSeal central allocation cluster v1' on the maintenance DB, no unrelated
+databases, and PUBLIC CONNECT revoked from maintenance, template1 and registry.
+Broker must run with private journal/storage and a restricted Unix socket
+accessible only to its designated public listener group. Configure secrets
+through protected service configuration, not command-line arguments.
+Production readiness still requires resource quotas, expiry/trial policy,
+operational rate limits, recovery tests, membership lifecycle and central
+runtime integration (including dashboard, workers, storage and guest routes).
+Until then keep CC_ONBOARD_REGISTRATION_PAUSED=1 and no broker socket configured.
+The test used a captured OTP email, not live SMTP delivery.
