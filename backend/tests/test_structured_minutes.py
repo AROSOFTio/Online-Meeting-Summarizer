@@ -95,7 +95,7 @@ def test_create_meeting_with_selected_template(client,db):
     assert client.post("/api/auth/login",data={"username":"testadmin@starlight.sc.ug","password":"TestAdminPass123!"}).status_code==200
     payload={"title":"Template selection test","date":datetime.now(timezone.utc).isoformat(),"participants":[],"minute_format":definition().model_dump()}
     r=client.post("/api/meetings/",json=payload)
-    assert r.status_code==200,r.text
+    assert r.status_code==201,r.text
     snap=client.get("/api/minute-formats/meeting/"+str(r.json()["id"])).json()
     assert snap["definition"]==definition().model_dump()
     payload["minute_format_id"]=999999
