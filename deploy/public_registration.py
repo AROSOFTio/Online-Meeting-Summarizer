@@ -103,10 +103,16 @@ def page(title,body):
     if "wizard-card" not in body:
         body='<div class="ms-auth-split"><aside class="ms-auth-visual" aria-hidden="true"><img src="/images/heroes/'+group+'.webp" alt=""><div><img class="ms-auth-logo" src="/minuteseal.svg" alt=""><h2>Meetings made simple.</h2><p>Minutes, decisions and follow-up.</p></div></aside><div class="ms-auth-form">'+body+'</div></div>'
     hero='<section data-page-hero="true" class="ms-public-hero ms-hero-compact"><img class="ms-hero-image" src="/images/heroes/'+group+'.webp" alt="" aria-hidden="true"><div class="ms-hero-overlay" aria-hidden="true"></div><div class="ms-hero-content"><h1 class="ms-hero-title">'+esc(title)+'</h1><p class="ms-hero-description">'+esc(description)+'</p></div></section>'
-    return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><link rel="icon" href="/minuteseal.svg"><link rel="stylesheet" href="/minuteseal-public.css?v=5"><script src="/minuteseal-menu.js?v=1" defer></script><script src="/minuteseal-registration.js?v=3" defer></script><style>'+CSS+'</style></head><body class="ms-page">'+brand_header()+hero+'<main class="ms-public-content">'+nav+'<div class="reg-body">'+body+'</div></main>'+brand_footer()+'</body></html>'
+    return '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>'+esc(title)+' | MinuteSeal</title><link rel="icon" href="/minuteseal.svg"><link rel="stylesheet" href="/minuteseal-public.css?v=5"><script src="/minuteseal-menu.js?v=1" defer></script><script src="'+BASE+'/assets/registration.js?v=3" defer></script><style>'+CSS+'</style></head><body class="ms-page">'+brand_header()+hero+'<main class="ms-public-content">'+nav+'<div class="reg-body">'+body+'</div></main>'+brand_footer()+'</body></html>'
 
 def wizard_field(label,name,placeholder,kind="text",maxlength=150,extra=""):
     return f'<label>{esc(label)}<input name="{esc(name)}" type="{kind}" required maxlength="{maxlength}" placeholder="{esc(placeholder)}" {extra}></label>'
+
+def registration_paused():
+    return os.environ.get("CC_ONBOARD_REGISTRATION_PAUSED","").lower() in ("1","true","yes")
+
+def paused_page():
+    return page("Registration temporarily unavailable",'<section class="otp-card"><h2>New organization registration is temporarily unavailable</h2><p>We are updating organization access. Existing organizations can still sign in. No new workspace has been created.</p></section>')
 
 def registration():
     email_ready=bool(os.environ.get("CC_ONBOARD_SMTP_HOST") and os.environ.get("CC_ONBOARD_SMTP_FROM"))
@@ -130,6 +136,7 @@ def verified_page(state):
     if host and onboarding.SLUG.fullmatch(host.split(".")[0]) and re.fullmatch(r"[a-z0-9.-]+",host):
         if state["status"]=="activated":return page("Registration complete",'<section class="otp-card"><h2>Your organization is ready</h2><p>Sign in using the email and password you chose during registration.</p><a class="ms-button" href="https://'+esc(host)+'/login">Open your organization</a></section>')
         return page("Workspace ready",'<section><p>Your workspace is ready. Use the setup invitation sent to your email to finish activating your account.</p><a href="https://'+esc(host)+'/setup">Open workspace</a></section>')
+    if state.get("password_ready") and registration_paused():return paused_page()
     if state.get("password_ready"):
         return page("Preparing your organization",'<section class="otp-card"><h2>Email verified</h2><p>Your organization is being prepared. This page will continue automatically when it is ready. We will also email your sign-in link.</p><a class="ms-button ms-button-outline" href="/verify">Continue</a></section>').replace("</title>","</title><meta http-equiv=\"refresh\" content=\"10;url="+BASE+"/verify\">",1)
     return page("Email verified",'<section class="otp-card"><h2>Email verified</h2><p>This registration was made before password creation was available. Register again to choose your password, or contact support if your organization is already active.</p><a class="ms-button" href="/">Register</a></section>')
@@ -145,10 +152,10 @@ class Handler(BaseHTTPRequestHandler):
         super().setup()
         self.connection.settimeout(15)
     def log_message(self,*args):pass
-    def respond(self,body,status=200,cookie=None,location=None):
+    def respond(self,body,status=200,cookie=None,location=None,content_type="text/html; charset=utf-8"):
         raw=body.encode()
         self.send_response(status)
-        for k,v in {"Content-Type":"text/html; charset=utf-8","Content-Length":str(len(raw)),"Cache-Control":"no-store","Referrer-Policy":"same-origin","X-Frame-Options":"DENY","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"}.items():
+        for k,v in {"Content-Type":content_type,"Content-Length":str(len(raw)),"Cache-Control":"no-store","Referrer-Policy":"same-origin","X-Frame-Options":"DENY","X-Content-Type-Options":"nosniff","Content-Security-Policy":"default-src 'none'; style-src 'self' 'unsafe-inline'; script-src 'self'; img-src 'self'; form-action 'self'; frame-ancestors 'none'; base-uri 'none'"}.items():
             self.send_header(k,v)
         if cookie:self.send_header("Set-Cookie",cookie)
         if location:self.send_header("Location",location)
@@ -174,6 +181,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("Host")!=self.server.hostname:
             return self.respond(page("Unavailable","Invalid host"),421)
         path=self.route_path()
+        if path=="/assets/registration.js":
+            asset=Path(__file__).with_name("minuteseal-registration.js")
+            if not asset.is_file():return self.respond("",404)
+            return self.respond(asset.read_text(),content_type="application/javascript; charset=utf-8")
+        if path=="/" and registration_paused():return self.respond(paused_page(),503)
         if path=="/verify":
             state=onboarding.browser_state(self.server.inbox,*self.browser_session())
             if state and state["status"]=="activated" and state.get("host") and re.fullmatch(r"[a-z0-9.-]+",state["host"]):
@@ -193,6 +205,7 @@ class Handler(BaseHTTPRequestHandler):
             f={k:v[0] for k,v in parse_qs(self.rfile.read(length).decode(),keep_blank_values=True,max_num_fields=16).items()}
             path=self.route_path()
             if path=="/register" or (BASE and path=="/"):
+                if registration_paused():return self.respond(paused_page(),503)
                 ref,key,sent=onboarding.register_browser(self.server.inbox,f)
                 cookie="__Host-ms-registration="+ref+"."+key+"; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=86400"
                 state=onboarding.browser_state(self.server.inbox,ref,key)
@@ -201,7 +214,8 @@ class Handler(BaseHTTPRequestHandler):
                 ref,key=self.browser_session()
                 state=onboarding.browser_state(self.server.inbox,ref,key)
                 if not state:return self.respond(verify_page(),400)
-                if state["status"]!="unverified":return self.respond(verified_page(state))
+                if state["status"]!="unverified":return self.respond("",303,location=BASE+"/verify")
+                if registration_paused():return self.respond(paused_page(),503)
                 if path=="/resend":
                     sent=onboarding.resend_browser(self.server.inbox,ref,key)
                     return self.respond(verify_page(state,"A new code was sent." if sent else "Code could not be sent yet. Wait a minute and try again."),200)
