@@ -15,6 +15,7 @@ interface LiveParticipant {
   user_id: number | null;
   is_moderator: boolean;
   muted: boolean;
+  microphone_available?: boolean;
   forced_muted: boolean;
   is_self: boolean;
 }
@@ -61,7 +62,11 @@ export default function LiveAudioRoom({
   const [joining, setJoining] = useState(false);
   const [participants, setParticipants] = useState<LiveParticipant[]>([]);
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
-  const [localMuted, setLocalMuted] = useState(false);
+  const [localMuted, setLocalMuted] = useState(true);
+  const [hasMicrophone,setHasMicrophone]=useState(false);
+  const [micNotice,setMicNotice]=useState("");
+  const micBusyRef=useRef(false);
+  const forcedMuteRef=useRef(false);
   const [forcedMuted, setForcedMuted] = useState(false);
   const [speakerEnabled, setSpeakerEnabled] = useState(true);
   const [isModerator, setIsModerator] = useState(false);
@@ -186,7 +191,9 @@ export default function LiveAudioRoom({
       connectionsRef.current.set(remotePeerId, connection);
 
       const stream = localStreamRef.current;
-      stream?.getAudioTracks().forEach((track) => connection.addTrack(track, stream));
+      // Always offer a bidirectional audio channel, including listen-only peers.
+      // A microphone can be attached later without rejoining or renegotiating.
+      if(initiate){const audio=connection.addTransceiver("audio",{direction:"sendrecv"});await audio.sender.replaceTrack(stream?.getAudioTracks().find(t=>t.readyState==="live")||null);}
       // Reserve one visual channel in the initial offer, so camera/screen switches do not renegotiate.
       if(initiate){const t=connection.addTransceiver("video",{direction:"sendrecv"});await t.sender.replaceTrack(visualRef.current?.getVideoTracks()[0]||null);}
 
@@ -273,6 +280,7 @@ export default function LiveAudioRoom({
       }
 
       if (message.type === "force-mute") {
+        forcedMuteRef.current=true;
         localStreamRef.current?.getAudioTracks().forEach((track) => {
           track.enabled = false;
         });
@@ -282,11 +290,9 @@ export default function LiveAudioRoom({
       }
 
       if (message.type === "release-mute") {
-        localStreamRef.current?.getAudioTracks().forEach((track) => {
-          track.enabled = true;
-        });
+        // The organiser can release the restriction, not turn on someone else's mic.
+        forcedMuteRef.current=false;
         setForcedMuted(false);
-        setLocalMuted(false);
         return;
       }
 
@@ -303,6 +309,8 @@ export default function LiveAudioRoom({
         }
 
         await connection.setRemoteDescription(message.payload as RTCSessionDescriptionInit);
+        const audio=connection.getTransceivers().find(t=>t.receiver.track.kind==="audio");
+        if(audio){audio.direction="sendrecv";await audio.sender.replaceTrack(localStreamRef.current?.getAudioTracks().find(t=>t.readyState==="live")||null);}
         const video=connection.getTransceivers().find(t=>t.receiver.track.kind==="video");
         if(video){video.direction="sendrecv";await video.sender.replaceTrack(visualRef.current?.getVideoTracks()[0]||null);}
         await flushPendingIce(message.from_peer_id, connection);
@@ -337,7 +345,7 @@ export default function LiveAudioRoom({
     [addPendingIce, closePeer, ensureConnection, flushPendingIce, postSignal],
   );
 
-  const joinRoom = useCallback(async () => {
+  const joinRoom = useCallback(async (listenOnly=false) => {
     if (joinedRef.current || joiningRef.current || testingMic) return;
 
     joiningRef.current = true;
@@ -345,18 +353,22 @@ export default function LiveAudioRoom({
     setError(null);
     setPlaybackBlocked(false);
 
-    let stream: MediaStream | null = providedStream;
+    setMicNotice("");
+    let stream: MediaStream | null = listenOnly?null:providedStream;
     let ownsStream = false;
 
     try {
-      if (!stream) {
-        stream = await openMicrophone(selectedMic);
-        ownsStream = true;
+      if (!stream&&!listenOnly) {
+        try {stream = await openMicrophone(selectedMic);ownsStream=true;}
+        catch(e){setMicNotice(mediaError(e));stream=null;}
       }
+      const mic=stream?.getAudioTracks().find(t=>t.readyState==="live");
+      const microphoneAvailable=Boolean(mic);
 
       localStreamRef.current = stream;
       ownsLocalStreamRef.current = ownsStream;
-      setCurrentMicrophone(stream.getAudioTracks()[0]?.getSettings().deviceId || "");
+      setCurrentMicrophone(mic?.getSettings().deviceId || "");
+      setHasMicrophone(microphoneAvailable);
       void refreshMicrophones();
 
       const response = (await apiRequest(`/api/live-rooms/${meetingId}/join`, {
@@ -364,6 +376,8 @@ export default function LiveAudioRoom({
         body: JSON.stringify({
           invite_code: inviteCode || null,
           full_name: displayName || null,
+          microphone_available:microphoneAvailable,
+          muted:!microphoneAvailable||!mic?.enabled,
         }),
       })) as JoinResponse;
 
@@ -376,8 +390,8 @@ export default function LiveAudioRoom({
       setJoined(true);
       setIsModerator(response.is_moderator);
       setParticipants(response.participants);
-      setLocalMuted(false);
-      setForcedMuted(false);
+      setLocalMuted(!microphoneAvailable||!mic?.enabled);
+      forcedMuteRef.current=false;setForcedMuted(false);
 
       for (const participant of response.participants) {
         if (!participant.is_self) await ensureConnection(participant.peer_id, peerIdRef.current > participant.peer_id);
@@ -427,25 +441,26 @@ export default function LiveAudioRoom({
     setParticipants([]);
     setJoined(false);
     setIsModerator(false);
-    setForcedMuted(false);
-    setLocalMuted(false);
+    forcedMuteRef.current=false;setForcedMuted(false);
+    setLocalMuted(true);setHasMicrophone(false);setMicNotice("");
     setPlaybackBlocked(false);
   }, [meetingId,clearVisual]);
 
-  const changeMicrophone = useCallback(async (deviceId: string) => {
+  const changeMicrophone = useCallback(async (deviceId: string,enable=false) => {
     const previous = localStreamRef.current;
-    if (!previous || changingMicrophone) return;
-    setChangingMicrophone(true);
+    if (!joinedRef.current || micBusyRef.current || (enable&&forcedMuteRef.current)) return;
+    micBusyRef.current=true;setChangingMicrophone(true);
     setError(null);
     let replacement: MediaStream | null = null;
     try {
       replacement = await openMicrophone(deviceId);
       const newTrack = replacement.getAudioTracks()[0];
       if (!newTrack) throw new Error("The selected microphone supplied no audio track.");
-      newTrack.enabled = !localMuted && !forcedMuted;
-      const oldTrack = previous.getAudioTracks()[0];
+      if(!joinedRef.current){replacement.getTracks().forEach(t=>t.stop());return;}
+      newTrack.enabled = (enable||!localMuted) && !forcedMuteRef.current;
+      const oldTrack = previous?.getAudioTracks()[0];
       const senders = Array.from(connectionsRef.current.values())
-        .flatMap((connection) => connection.getSenders().filter((sender) => sender.track?.kind === "audio"));
+        .flatMap((connection) => connection.getTransceivers().filter(t=>t.receiver.track.kind==="audio").map(t=>t.sender));
       const switched: RTCRtpSender[] = [];
       try {
         for (const sender of senders) {
@@ -461,16 +476,17 @@ export default function LiveAudioRoom({
       localStreamRef.current = replacement;
       ownsLocalStreamRef.current = true;
       if (previousOwned || previous !== providedStream) {
-        previous.getTracks().forEach((track) => track.stop());
+        previous?.getTracks().forEach((track) => track.stop());
       }
       setCurrentMicrophone(newTrack.getSettings().deviceId || deviceId);
+      setHasMicrophone(true);setLocalMuted(!newTrack.enabled);setMicNotice("");
       replacement = null;
       void refreshMicrophones();
     } catch (deviceError) {
       replacement?.getTracks().forEach((track) => track.stop());
-      setError(mediaError(deviceError));
+      setMicNotice(mediaError(deviceError));
     } finally {
-      setChangingMicrophone(false);
+      micBusyRef.current=false;setChangingMicrophone(false);
     }
   }, [changingMicrophone, forcedMuted, localMuted, onMicrophoneChange, providedStream, refreshMicrophones]);
 
@@ -480,10 +496,10 @@ export default function LiveAudioRoom({
     if (!joined) return;
     const track = localStreamRef.current?.getAudioTracks()[0];
     if (!track) return;
-    const recover = () => { void changeMicrophone(""); };
+    const recover = () => {setHasMicrophone(false);setLocalMuted(true);setMicNotice("Microphone disconnected. You can continue listening and connect a microphone when ready.");};
     track.addEventListener("ended", recover);
     return () => track.removeEventListener("ended", recover);
-  }, [joined, currentMicrophone, changeMicrophone]);
+  }, [joined, currentMicrophone, hasMicrophone, changeMicrophone]);
 
   const toggleVisual=async(mode:"camera"|"screen")=>{
     if(visualBusyRef.current||!joinedRef.current)return;
@@ -508,13 +524,14 @@ export default function LiveAudioRoom({
   };
 
   const toggleMute = useCallback(() => {
-    if (!localStreamRef.current || forcedMuted) return;
+    if (forcedMuted||forcedMuteRef.current) return;
+    if (!localStreamRef.current?.getAudioTracks().some(t=>t.readyState==="live")) {void changeMicrophone(selectedMic||currentMicrophone,true);return;}
     const nextMuted = !localMuted;
     localStreamRef.current.getAudioTracks().forEach((track) => {
       track.enabled = !nextMuted;
     });
     setLocalMuted(nextMuted);
-  }, [forcedMuted, localMuted]);
+  }, [forcedMuted, localMuted, changeMicrophone, selectedMic, currentMicrophone]);
 
   const toggleSpeaker = useCallback(() => {
     setSpeakerEnabled((current) => {
@@ -576,14 +593,14 @@ export default function LiveAudioRoom({
   );
 
   useEffect(() => {
-    if (!autoJoin || autoJoinAttemptedRef.current) return;
+    if (!autoJoin || !providedStream || autoJoinAttemptedRef.current) return;
     const timer = window.setTimeout(() => {
       if (autoJoinAttemptedRef.current) return;
       autoJoinAttemptedRef.current = true;
       void joinRoom();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [autoJoin, joinRoom]);
+  }, [autoJoin, joinRoom, providedStream]);
 
   useEffect(() => {
     if (!joined) return;
@@ -620,7 +637,8 @@ export default function LiveAudioRoom({
           body: JSON.stringify({
             peer_id: peerIdRef.current,
             session_key: sessionKeyRef.current,
-            muted: localMuted,
+            muted: localMuted||!hasMicrophone,
+            microphone_available:hasMicrophone,
             refresh_ice:refreshIce,
           }),
         });
@@ -640,6 +658,7 @@ export default function LiveAudioRoom({
           }
         }
 
+        forcedMuteRef.current=Boolean(data.forced_muted);
         if (data.forced_muted) {
           localStreamRef.current?.getAudioTracks().forEach((track) => {
             track.enabled = false;
@@ -671,7 +690,7 @@ export default function LiveAudioRoom({
       window.clearInterval(signalTimer);
       window.clearInterval(heartbeatTimer);
     };
-  }, [ensureConnection, handleSignal, joined, localMuted, meetingId]);
+  }, [ensureConnection, handleSignal, joined, localMuted, hasMicrophone, meetingId]);
 
   useEffect(
     () => () => {
@@ -712,28 +731,20 @@ export default function LiveAudioRoom({
             <Headphones size={26} />
           </div>
           <h2 className="mt-3 text-lg font-extrabold text-slate-950">
-            {joining ? "Joining meeting..." : error ? "Meeting audio needs attention" : "Connecting meeting audio..."}
+            {joining ? "Joining meeting..." : error ? "Unable to join meeting" : "Join the meeting"}
           </h2>
           <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-            Choose another microphone if the default input is unavailable.
+            Join with your microphone, or listen without one. You cannot speak until your microphone is connected and enabled.
           </p>
           {!providedStream&&!joining&&<MicrophoneSetup value={selectedMic} onChange={setSelectedMic} onTestingChange={setTestingMic}/>}
-          {!joining&&!error&&<button type="button" disabled={testingMic} onClick={()=>void joinRoom()} className="mt-4 rounded-lg bg-blue-700 px-4 py-2 text-white">Join meeting</button>}
+          {!joining&&<div className="mt-4 flex flex-wrap justify-center gap-3"><button type="button" disabled={testingMic} onClick={()=>void joinRoom()} className="rounded-lg bg-blue-700 px-4 py-2.5 text-white">Join with microphone</button><button type="button" disabled={testingMic} onClick={()=>void joinRoom(true)} className="inline-flex items-center gap-2 rounded-lg border border-blue-300 px-4 py-2.5 font-semibold text-blue-700"><Headphones size={17}/> Join without microphone</button></div>}
           {joining && <div className="mx-auto mt-5 h-8 w-8 animate-spin rounded-full border-4 border-blue-700 border-t-transparent" />}
           {error && (
             <>
               <div className="mx-auto mt-4 max-w-xl rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
                 {error}
               </div>
-              <button
-                type="button"
-                onClick={() => void joinRoom()}
-                disabled={joining||testingMic}
-                className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white hover:bg-blue-800 disabled:opacity-50"
-              >
-                <Mic size={17} />
-                Retry
-              </button>
+
             </>
           )}
         </div>
@@ -766,13 +777,13 @@ export default function LiveAudioRoom({
               <button
                 type="button"
                 onClick={toggleMute}
-                disabled={forcedMuted}
+                disabled={forcedMuted||changingMicrophone}
                 className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold ${
                   localMuted ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
                 } disabled:cursor-not-allowed disabled:opacity-60`}
               >
                 {localMuted ? <MicOff size={15} /> : <Mic size={15} />}
-                {forcedMuted ? "Mic off by organiser" : localMuted ? "Turn my mic ON" : "Turn my mic OFF"}
+                {forcedMuted ? "Mic off by organiser" : !hasMicrophone ? "Connect microphone" : localMuted ? "Turn my mic ON" : "Turn my mic OFF"}
               </button>
 
               <button
@@ -797,6 +808,8 @@ export default function LiveAudioRoom({
             </div>
           </div>
 
+          {!hasMicrophone&&<div role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><strong>Listening only.</strong> You can hear the meeting, but you cannot speak until your microphone is connected and enabled. {micNotice&&<span className="block mt-1">{micNotice}</span>}</div>}
+          {hasMicrophone&&micNotice&&<p role="status" className="text-sm text-amber-800">{micNotice}</p>}
           <div className="flex flex-wrap items-center gap-2 border-y border-slate-200 py-3">
             <label className="min-w-0 flex-1 text-xs font-semibold">Microphone<select aria-label="Meeting microphone" value={currentMicrophone} disabled={changingMicrophone} onChange={e=>void changeMicrophone(e.target.value)} className="mt-1 block w-full rounded-md border border-slate-300 bg-white p-2 text-sm"><option value="">System default</option>{microphones.map((m,i)=><option key={m.deviceId} value={m.deviceId}>{m.label||`Microphone ${i+1}`}</option>)}</select></label>
             <button type="button" disabled={visualBusy} onClick={()=>void toggleVisual("camera")} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm">{visualMode==="camera"?<VideoOff size={17}/>:<Video size={17}/>} {visualMode==="camera"?"Stop camera":"Camera"}</button>
@@ -838,7 +851,7 @@ export default function LiveAudioRoom({
                     <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-600">
                       {participant.muted ? <MicOff size={12} /> : <Mic size={12} />}
                       <span>
-                        {participant.role_title || "Participant"} · {participant.muted ? "Microphone OFF" : "Microphone ON"}
+                        {participant.role_title || "Participant"} · {(participant.is_self?!hasMicrophone:participant.microphone_available===false)?"Listening only":participant.muted ? "Microphone OFF" : "Microphone ON"}
                       </span>
                     </div>
                     <div className="mt-2">
@@ -854,14 +867,15 @@ export default function LiveAudioRoom({
                 {isModerator && !participant.is_self && (
                   <button
                     type="button"
-                    onClick={() => void moderate(participant.peer_id, participant.muted ? "release" : "mute")}
+                    disabled={participant.microphone_available===false&&!participant.forced_muted}
+                    onClick={() => void moderate(participant.peer_id, participant.forced_muted ? "release" : "mute")}
                     className={`shrink-0 rounded-lg px-2.5 py-2 text-[11px] font-bold ${
                       participant.muted
                         ? "border border-green-200 bg-green-50 text-green-700"
                         : "border border-red-200 bg-red-50 text-red-700"
                     }`}
                   >
-                    {participant.muted ? "Turn Mic ON" : "Turn Mic OFF"}
+                    {participant.forced_muted ? "Allow microphone" : "Mute microphone"}
                   </button>
                 )}
               </div>
@@ -871,7 +885,7 @@ export default function LiveAudioRoom({
           {participants.length === 1 && (
             <div className="flex items-center justify-center gap-2 rounded-lg bg-slate-50 p-4 text-xs text-slate-600">
               <Users size={15} />
-              Other invited devices will join audio automatically when they enter the meeting.
+              Invited participants can join with or without a microphone.
             </div>
           )}
 

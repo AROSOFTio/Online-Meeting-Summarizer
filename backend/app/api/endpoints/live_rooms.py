@@ -44,11 +44,14 @@ class LivePeer:
     forced_muted: bool
     joined_at: float
     last_seen: float
+    microphone_available: bool = True
 
 
 class JoinLiveRoom(BaseModel):
     invite_code: Optional[str] = None
     full_name: Optional[str] = None
+    microphone_available: bool = True
+    muted: bool = False
 
 
 class Heartbeat(BaseModel):
@@ -56,6 +59,7 @@ class Heartbeat(BaseModel):
     session_key: str
     muted: bool = False
     refresh_ice: bool = False
+    microphone_available: bool = True
 
 
 class SignalMessage(BaseModel):
@@ -282,6 +286,7 @@ def _serialize_peers(meeting_id: int, self_id: Optional[str] = None) -> list[dic
             "user_id": peer.user_id,
             "is_moderator": peer.is_moderator,
             "muted": peer.muted,
+            "microphone_available": peer.microphone_available,
             "forced_muted": peer.forced_muted,
             "is_self": peer.peer_id == self_id,
         }
@@ -416,7 +421,8 @@ def join_live_room(
         role_title=role_title,
         user_id=user_id,
         is_moderator=is_moderator,
-        muted=False,
+        muted=body.muted or not body.microphone_available,
+        microphone_available=body.microphone_available,
         forced_muted=False,
         joined_at=time.time(),
         last_seen=now,
@@ -440,7 +446,8 @@ def join_live_room(
 def heartbeat(meeting_id: int, body: Heartbeat):
     with _LOCK:
         peer = _peer_locked(meeting_id, body.peer_id, body.session_key)
-        peer.muted = True if peer.forced_muted else body.muted
+        peer.microphone_available = body.microphone_available
+        peer.muted = peer.forced_muted or not peer.microphone_available or body.muted
         return {
             "participants": _serialize_peers(meeting_id, body.peer_id),
             "forced_muted": peer.forced_muted,
@@ -515,14 +522,14 @@ def moderate_live_room(meeting_id: int, body: ModerateRequest):
                 )
             else:
                 target.forced_muted = False
-                target.muted = False
+                # Release permission only; never remotely enable capture.
                 _enqueue(
                     meeting_id,
                     target.peer_id,
                     {
                         "type": "release-mute",
                         "from_peer_id": actor.peer_id,
-                        "payload": {"reason": "Microphone turned on by meeting organiser"},
+                        "payload": {"reason": "Microphone permission restored by meeting organiser"},
                     },
                 )
         participants = _serialize_peers(meeting_id, actor.peer_id)

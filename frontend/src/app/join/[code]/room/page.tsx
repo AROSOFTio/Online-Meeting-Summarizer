@@ -123,7 +123,7 @@ export default function PublicMeetingRoomPage() {
                     <Radio className="mx-auto animate-pulse text-green-600" size={42} />
                     <h2 className="mt-3 text-xl font-extrabold text-slate-950">Meeting is live</h2>
                     <p className="mt-2 text-sm text-slate-600">
-                      Audio joins automatically. If your browser asks for microphone permission, allow it once and the meeting continues immediately.
+                      Join with a microphone or listen without one. You can connect your microphone at any time.
                     </p>
                   </div>
                 )}
@@ -145,7 +145,7 @@ export default function PublicMeetingRoomPage() {
             meetingId={invitation.meeting_id}
             displayName={displayName}
             inviteCode={code}
-            autoJoin
+            autoJoin={false}
           />
         )}
       </div>
