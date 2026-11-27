@@ -121,9 +121,17 @@ def configure_route(row):
             run([str(NGINX),"-t"])
             run([str(NGINX),"-s","reload"])
             raise
-    result=json.loads(run(["/usr/bin/curl","--noproxy","*","-fsS","--max-time","12","--resolve",host+":443:127.0.0.1","https://"+host+"/api/health"],timeout=20))
-    if result.get("status")!="healthy" or result.get("database")!="healthy" or result.get("redis")!="healthy":
-        raise RuntimeError("Workspace health check failed")
+    # Nginx reload is asynchronous. Wait for the new worker to serve this
+    # exact hostname with a valid certificate; never skip TLS verification.
+    for attempt in range(12):
+        try:
+            result=json.loads(run(["/usr/bin/curl","--noproxy","*","-fsS","--max-time","5","--resolve",host+":443:127.0.0.1","https://"+host+"/api/health"],timeout=8))
+            if all(result.get(k)=="healthy" for k in ("status","database","redis")):
+                return
+        except (RuntimeError,ValueError,subprocess.TimeoutExpired):
+            pass
+        time.sleep(2)
+    raise RuntimeError("Workspace HTTPS health check failed")
 
 def start_stack(root,row):
     tenantctl.validate(row["slug"],row["host"],row["admin_email"],row["port"])
@@ -162,13 +170,20 @@ def activate_one(root,path,rows):
         row["activation_attempts"]=row.get("activation_attempts",0)+1
         persist(root,rows)
         try:
+            row["activation_stage"]="starting"
+            persist(root,rows)
             if not row["enabled"]:start_stack(root,row)
+            row["activation_stage"]="https"
             persist(root,rows)
             configure_route(row)
+            row["activation_stage"]="administrator"
+            persist(root,rows)
             if not operator_onboarding.finish_password(path,root,row,rows=rows):raise RuntimeError("Registration password unavailable")
             row["activation_attempts"]=0
+            row["activation_stage"]="complete"
             admin.audit(root,"automatic_trial",slug,"success")
-        except Exception:
+        except Exception as exc:
+            print("Automatic trial failed at",row.get("activation_stage","unknown"),type(exc).__name__,flush=True)
             admin.audit(root,"automatic_trial",slug,"failed")
         persist(root,rows)
         return True
