@@ -6,7 +6,7 @@ import { Headphones, LogOut, Mic, MicOff, Shield, UserRound, Users, Volume2, Vol
 import { apiRequest } from "@/lib/api";
 import {openMicrophone,mediaError} from "@/lib/meeting-media";
 import MicrophoneSetup from "./MicrophoneSetup";
-import {Video,VideoOff,MonitorUp,MonitorOff} from "lucide-react";
+import {Video,VideoOff,MonitorUp,MonitorOff,Maximize,LayoutGrid,PanelRight,PhoneOff} from "lucide-react";
 
 interface LiveParticipant {
   peer_id: string;
@@ -16,6 +16,7 @@ interface LiveParticipant {
   is_moderator: boolean;
   muted: boolean;
   microphone_available?: boolean;
+  visual_mode?: "camera"|"screen"|null;
   forced_muted: boolean;
   is_self: boolean;
 }
@@ -79,6 +80,11 @@ export default function LiveAudioRoom({
   const [visual,setVisual]=useState<MediaStream|null>(null);
   const [visualMode,setVisualMode]=useState<"camera"|"screen"|null>(null);
   const [visualBusy,setVisualBusy]=useState(false);
+  const [shareMenu,setShareMenu]=useState(false);
+  const [gallery,setGallery]=useState(false);
+  const [portrait,setPortrait]=useState(false);
+  const [pin,setPin]=useState<string|null>(null);
+  const stageRef=useRef<HTMLDivElement>(null);
   const [remoteVisual,setRemoteVisual]=useState<Record<string,MediaStream>>({});
   const visualRef=useRef<MediaStream|null>(null);
   const visualBusyRef=useRef(false);
@@ -501,7 +507,8 @@ export default function LiveAudioRoom({
     return () => track.removeEventListener("ended", recover);
   }, [joined, currentMicrophone, hasMicrophone, changeMicrophone]);
 
-  const toggleVisual=async(mode:"camera"|"screen")=>{
+  const toggleVisual=async(mode:"camera"|"screen",surface?:"monitor"|"window"|"browser")=>{
+    setShareMenu(false);
     if(visualBusyRef.current||!joinedRef.current)return;
     visualBusyRef.current=true;setVisualBusy(true);setError(null);
     const generation=++visualGeneration.current;let candidate:MediaStream|null=null;
@@ -510,7 +517,7 @@ export default function LiveAudioRoom({
       const off=visualMode===mode;
       if(!off){
         if(mode==="screen"&&!navigator.mediaDevices?.getDisplayMedia)throw new Error("Screen sharing is not supported on this browser. Use a supported desktop browser.");
-        candidate=mode==="camera"?await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:360},frameRate:{ideal:15,max:24}},audio:false}):await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:10,max:15}},audio:false});
+        candidate=mode==="camera"?await navigator.mediaDevices.getUserMedia({video:{width:{ideal:640},height:{ideal:360},frameRate:{ideal:15,max:24}},audio:false}):await navigator.mediaDevices.getDisplayMedia({video:{frameRate:{ideal:15,max:24},...(surface?{displaySurface:surface}:{})} as MediaTrackConstraints,audio:false});
       }
       if(!joinedRef.current||generation!==visualGeneration.current)return;
       const next=candidate?.getVideoTracks()[0]||null;
@@ -639,6 +646,7 @@ export default function LiveAudioRoom({
             session_key: sessionKeyRef.current,
             muted: localMuted||!hasMicrophone,
             microphone_available:hasMicrophone,
+            visual_mode:visualMode,
             refresh_ice:refreshIce,
           }),
         });
@@ -690,7 +698,7 @@ export default function LiveAudioRoom({
       window.clearInterval(signalTimer);
       window.clearInterval(heartbeatTimer);
     };
-  }, [ensureConnection, handleSignal, joined, localMuted, hasMicrophone, meetingId]);
+  }, [ensureConnection, handleSignal, joined, localMuted, hasMicrophone, meetingId,visualMode]);
 
   useEffect(
     () => () => {
@@ -722,9 +730,15 @@ export default function LiveAudioRoom({
   );
 
   const otherParticipants = participants.filter((participant) => !participant.is_self);
+  const streamFor=(p:LiveParticipant)=>p.is_self?visual:remoteVisual[p.peer_id]||null;
+  const modeFor=(p:LiveParticipant)=>p.is_self?visualMode:p.visual_mode||null;
+  const focus=gallery?undefined:participants.find(p=>p.peer_id===pin)||participants.find(p=>modeFor(p)==="screen"&&streamFor(p));
+  const control="inline-flex items-center justify-center gap-2 rounded-md px-3 py-3 text-xs font-semibold disabled:opacity-50";
+  const tile=(p:LiveParticipant)=> <MeetingTile key={p.peer_id} label={p.name+(p.is_self?" (You)":"")} stream={streamFor(p)} screen={modeFor(p)==="screen"} portrait={portrait} muted={p.is_self?localMuted||forcedMuted:p.muted} focus={()=>{setPin(p.peer_id);setGallery(false);}}/>;
+
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+    <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-3 sm:p-4">
       {!joined ? (
         <div className="text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-blue-700">
@@ -749,73 +763,26 @@ export default function LiveAudioRoom({
           )}
         </div>
       ) : (
-        <div className="space-y-5">
-          {speakerEnabled && (
-            <button
-              type="button"
-              onClick={unlockMeetingAudio}
-              className={`w-full rounded-xl border px-4 py-3 text-sm font-extrabold ${playbackBlocked ? "border-amber-400 bg-amber-100 text-amber-950" : "border-blue-300 bg-blue-50 text-blue-900"}`}
-            >
-              <Volume2 size={17} className="mr-2 inline-block" />
-              {playbackBlocked ? "Sound blocked by browser: TAP TO HEAR EVERYONE" : "Tap to enable / test meeting sound"}
-            </button>
-          )}
-
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-green-500" />
-                <h2 className="font-extrabold text-slate-950">Meeting connected</h2>
-              </div>
-              <p className="mt-1 text-xs text-slate-600">
-                {participants.length} connected participant{participants.length === 1 ? "" : "s"}. Camera and screen sharing are optional.
-              </p>
-
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-green-500 motion-safe:animate-pulse"/><strong>Live meeting</strong><span className="text-xs text-slate-600">{participants.length} participants</span></div><div className="flex gap-1"><button type="button" aria-label="Gallery layout" onClick={()=>{setGallery(true);setPin(null);}} className="rounded border p-2"><LayoutGrid size={17}/></button><button type="button" aria-label="Focus layout" onClick={()=>{setGallery(false);setPin(null);}} className="rounded border p-2"><PanelRight size={17}/></button><button type="button" onClick={()=>setPortrait(v=>!v)} className="rounded border px-2 text-xs">{portrait?"9:16":"16:9"}</button><button type="button" aria-label="Fullscreen" onClick={()=>{if(document.fullscreenElement)void document.exitFullscreen();else if(stageRef.current?.requestFullscreen)void stageRef.current.requestFullscreen().catch(()=>setError("Fullscreen unavailable"));else setError("Fullscreen unavailable on this browser");}} className="rounded border p-2"><Maximize size={17}/></button></div></div>
+          {!hasMicrophone&&<p role="status" className="rounded border border-blue-200 bg-blue-50 p-2 text-xs text-blue-900"><strong>Listening only.</strong> Connect a microphone to speak. {micNotice}</p>}
+          {hasMicrophone&&micNotice&&<p className="text-xs text-amber-800">{micNotice}</p>}
+          {speakerEnabled&&playbackBlocked&&<button type="button" onClick={unlockMeetingAudio} className="w-full rounded border bg-amber-50 p-2 text-sm">Tap to hear the meeting</button>}
+          <div ref={stageRef} className="space-y-3 bg-white fullscreen:overflow-y-auto fullscreen:p-4">
+            <div className={focus?"grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(160px,23%)]":"grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"}>
+              {focus&&<div className="min-w-0">{tile(focus)}</div>}
+              <div className={focus?"grid grid-cols-2 gap-2 lg:grid-cols-1 lg:auto-rows-min":"contents"}>{participants.filter(p=>p.peer_id!==focus?.peer_id).map(tile)}</div>
             </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={toggleMute}
-                disabled={forcedMuted||changingMicrophone}
-                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold ${
-                  localMuted ? "bg-red-50 text-red-700" : "bg-green-50 text-green-700"
-                } disabled:cursor-not-allowed disabled:opacity-60`}
-              >
-                {localMuted ? <MicOff size={15} /> : <Mic size={15} />}
-                {forcedMuted ? "Mic off by organiser" : !hasMicrophone ? "Connect microphone" : localMuted ? "Turn my mic ON" : "Turn my mic OFF"}
-              </button>
-
-              <button
-                type="button"
-                onClick={toggleSpeaker}
-                className={`inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-xs font-bold ${
-                  speakerEnabled ? "bg-blue-50 text-blue-700" : "bg-slate-100 text-slate-700"
-                }`}
-              >
-                {speakerEnabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
-                {speakerEnabled ? "Speaker ON" : "Speaker OFF"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void leaveRoom()}
-                className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700"
-              >
-                <LogOut size={15} />
-                Disconnect
-              </button>
+            <div className="sticky bottom-0 z-10 flex flex-wrap justify-center gap-2 border bg-white p-2">
+              <button type="button" onClick={toggleMute} disabled={forcedMuted||changingMicrophone} className={control+(localMuted?" bg-red-50 text-red-700":" bg-blue-50 text-blue-700")}>{localMuted?<MicOff size={19}/>:<Mic size={19}/>} {!hasMicrophone?"Connect mic":localMuted?"Unmute":"Mute"}</button>
+              <button type="button" disabled={visualBusy} onClick={()=>void toggleVisual("camera")} className={control+" bg-slate-100 text-slate-800"}>{visualMode==="camera"?<Video size={19}/>:<VideoOff size={19}/>} Camera</button>
+              <button type="button" onClick={toggleSpeaker} className={control+" bg-slate-100 text-slate-800"}>{speakerEnabled?<Volume2 size={19}/>:<VolumeX size={19}/>} Speaker</button>
+              <button type="button" disabled={visualBusy} onClick={()=>visualMode==="screen"?void toggleVisual("screen"):setShareMenu(v=>!v)} className={control+" bg-blue-700 text-white"}>{visualMode==="screen"?<MonitorOff size={19}/>:<MonitorUp size={19}/>} {visualMode==="screen"?"Stop share":"Share"}</button>
+              <button type="button" onClick={()=>void leaveRoom()} className={control+" bg-red-600 text-white"}><PhoneOff size={19}/> Leave</button>
             </div>
+            {shareMenu&&<div role="dialog" aria-label="Share screen" className="rounded border p-3"><h3 className="font-semibold">Share screen</h3><p className="my-2 text-xs text-slate-600">Confirm the content in your browser picker.</p><div className="grid gap-2 sm:grid-cols-3">{([["monitor","Entire screen"],["window","Application window"],["browser","Browser tab"]] as const).map(([surface,label])=><button key={surface} type="button" onClick={()=>void toggleVisual("screen",surface)} className="rounded border p-3 text-sm text-blue-700">{label}</button>)}</div></div>}
           </div>
-
-          {!hasMicrophone&&<div role="status" className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-900"><strong>Listening only.</strong> You can hear the meeting, but you cannot speak until your microphone is connected and enabled. {micNotice&&<span className="block mt-1">{micNotice}</span>}</div>}
-          {hasMicrophone&&micNotice&&<p role="status" className="text-sm text-amber-800">{micNotice}</p>}
-          <div className="flex flex-wrap items-center gap-2 border-y border-slate-200 py-3">
-            <label className="min-w-0 flex-1 text-xs font-semibold">Microphone<select aria-label="Meeting microphone" value={currentMicrophone} disabled={changingMicrophone} onChange={e=>void changeMicrophone(e.target.value)} className="mt-1 block w-full rounded-md border border-slate-300 bg-white p-2 text-sm"><option value="">System default</option>{microphones.map((m,i)=><option key={m.deviceId} value={m.deviceId}>{m.label||`Microphone ${i+1}`}</option>)}</select></label>
-            <button type="button" disabled={visualBusy} onClick={()=>void toggleVisual("camera")} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm">{visualMode==="camera"?<VideoOff size={17}/>:<Video size={17}/>} {visualMode==="camera"?"Stop camera":"Camera"}</button>
-            <button type="button" disabled={visualBusy} onClick={()=>void toggleVisual("screen")} className="inline-flex items-center gap-2 rounded-md border border-slate-300 px-3 py-2 text-sm">{visualMode==="screen"?<MonitorOff size={17}/>:<MonitorUp size={17}/>} {visualMode==="screen"?"Stop sharing":"Share screen"}</button>
-          </div>
-          {(visual||Object.keys(remoteVisual).length>0)&&<div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{visual&&<VideoTile stream={visual} label={visualMode==="screen"?"Your screen":"Your camera"}/>}{Object.entries(remoteVisual).map(([id,stream])=><VideoTile key={id} stream={stream} label={participants.find(p=>p.peer_id===id)?.name||"Participant"}/>)}</div>}
+          <details className="rounded border p-2"><summary className="cursor-pointer text-xs font-semibold">Microphone settings</summary><select aria-label="Meeting microphone" value={currentMicrophone} disabled={changingMicrophone} onChange={e=>void changeMicrophone(e.target.value)} className="mt-2 w-full rounded border bg-white p-2 text-sm"><option value="">System default</option>{microphones.map((m,i)=><option key={m.deviceId} value={m.deviceId}>{m.label||"Microphone "+(i+1)}</option>)}</select></details>
           {isModerator && otherParticipants.length > 0 && (
             <button
               type="button"
@@ -1012,4 +979,4 @@ function AudioLevelMeter({ stream, muted, label }: { stream: MediaStream | null;
   );
 }
 
-function VideoTile({stream,label}:{stream:MediaStream;label:string}){const ref=useRef<HTMLVideoElement>(null);useEffect(()=>{const el=ref.current;if(!el)return;el.srcObject=stream;void el.play().catch(()=>{});return()=>{el.srcObject=null;};},[stream]);return <div className="overflow-hidden rounded-lg bg-slate-950 text-white"><video ref={ref} autoPlay playsInline muted className="aspect-video w-full object-contain"/><p className="px-3 py-2 text-xs">{label}</p></div>;}
+function MeetingTile({stream,label,screen,portrait,muted,focus}:{stream:MediaStream|null;label:string;screen:boolean;portrait:boolean;muted:boolean;focus:()=>void}){const ref=useRef<HTMLVideoElement>(null);useEffect(()=>{const el=ref.current;if(!el)return;el.srcObject=stream;if(stream)void el.play().catch(()=>{});return()=>{el.srcObject=null;};},[stream]);return <div className={"relative min-w-0 overflow-hidden rounded-lg bg-slate-950 "+(screen||!portrait?"aspect-video":"aspect-[9/16]")}>{stream?<video ref={ref} autoPlay playsInline muted className={"absolute inset-0 h-full w-full "+(screen?"object-contain":"object-cover")}/>:<div className="absolute inset-0 flex items-center justify-center"><span className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-700 text-xl font-semibold text-white">{label.slice(0,2).toUpperCase()}</span></div>}<button type="button" aria-label={"Focus "+label} onClick={focus} className="absolute right-2 top-2 rounded bg-black/60 p-2 text-white"><Maximize size={16}/></button>{screen&&<span className="absolute left-2 top-2 rounded bg-black/60 px-2 py-1 text-xs text-white">Sharing screen</span>}<span className="absolute bottom-2 left-2 flex items-center gap-2 rounded bg-black/70 px-2 py-1 text-xs text-white">{muted?<MicOff size={14}/>:<Mic size={14}/>} {label}</span></div>;}

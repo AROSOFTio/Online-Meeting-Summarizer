@@ -9,9 +9,11 @@ services:
       ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Workspace Administrator}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:?Set tenant HTTPS URL}
       SMTP_VERIFY_TLS: "true"
+      PLATFORM_SMTP_CONFIG: /run/minuteseal-mail/onboarding.env
       MEETING_TURN_SECRET_FILE: /run/minuteseal-turn/secret
     volumes:
       - ${TENANT_POLICY_DIR:?Set tenant entitlement directory}:/run/convenecore-entitlements:ro
+      - ${MINUTESEAL_MAIL_CONFIG:-/etc/minuteseal/onboarding.env}:/run/minuteseal-mail/onboarding.env:ro
       - ${MINUTESEAL_TURN_DIR:-/var/lib/minuteseal-turn/credentials}:/run/minuteseal-turn:ro
   worker:
     environment:
@@ -19,8 +21,10 @@ services:
       SUBSCRIPTION_POLICY_FILE: /run/convenecore-entitlements/subscription.json
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:?Set tenant HTTPS URL}
       SMTP_VERIFY_TLS: "true"
+      PLATFORM_SMTP_CONFIG: /run/minuteseal-mail/onboarding.env
     volumes:
       - ${TENANT_POLICY_DIR:?Set tenant entitlement directory}:/run/convenecore-entitlements:ro
+      - ${MINUTESEAL_MAIL_CONFIG:-/etc/minuteseal/onboarding.env}:/run/minuteseal-mail/onboarding.env:ro
     depends_on:
       backend:
         condition: service_healthy

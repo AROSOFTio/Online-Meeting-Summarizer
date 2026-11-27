@@ -26,7 +26,9 @@ class EmailService:
             if settings.SMTP_USE_SSL:
                 with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30, context=context) as server:
                     server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                    server.send_message(message)
+                    refused = server.send_message(message)
+                    if refused:
+                        raise RuntimeError("One or more recipients were rejected by the mail server.")
             else:
                 with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
                     server.ehlo()
@@ -34,7 +36,9 @@ class EmailService:
                         server.starttls(context=context)
                         server.ehlo()
                     server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                    server.send_message(message)
+                    refused = server.send_message(message)
+                    if refused:
+                        raise RuntimeError("One or more recipients were rejected by the mail server.")
         except smtplib.SMTPAuthenticationError as exc:
             raise RuntimeError(
                 f"SMTP authentication failed for {settings.SMTP_USERNAME}. "
@@ -101,7 +105,7 @@ class EmailService:
             + f'<div style="padding:24px"><p>You have been invited to:</p><h3>{safe_title}</h3>'
             + f'<p><b>Date &amp; time:</b> {html.escape(date_text)}</p><p>{safe_org}</p>'
             + f'<p><a href="{safe_url}" style="display:inline-block;background:#173ea5;color:white;padding:13px 20px;text-decoration:none;border-radius:7px;font-weight:bold">Open Meeting</a></p>'
-            + '<p style="font-size:12px;color:#6b7280">This is an on-ground meeting. Your invitation lets your phone or computer microphone contribute to the meeting record; it is not a Zoom-style video call.</p></div></div>',
+            + '<p style="font-size:12px;color:#6b7280">Join from your phone or computer. Microphone and camera are optional.</p></div></div>',
         )
 
     def send_final_minutes(self, recipients: Iterable[str], meeting_title: str, meeting_id: int, pdf_data: bytes, organization_name: str) -> int:

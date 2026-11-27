@@ -4,6 +4,19 @@
  if(!form)return;
  const card=form.closest('.wizard-card'),steps=card.querySelector('.wizard-steps'),panels=Array.from(form.querySelectorAll('[data-step]')),tabs=Array.from(steps.querySelectorAll('[data-go]')),actions=form.querySelector('.wizard-actions'),back=form.querySelector('.wizard-back'),next=form.querySelector('.wizard-next'),submit=form.querySelector('.wizard-submit'),count=form.querySelector('.wizard-count'),review=form.querySelector('.wizard-review');
  let current=0,furthest=0,submitting=false;
+ const password=form.elements.namedItem('password'),confirm=form.elements.namedItem('confirm_password');
+ function update(){
+   const v=password.value;
+   const checks={length:Array.from(v).length>=8&&Array.from(v).length<=128,upper:/[A-Z]/.test(v),lower:/[a-z]/.test(v),special:/[^A-Za-z0-9]/.test(v),match:!!v&&v===confirm.value};
+   for(const [key,ok] of Object.entries(checks)){const el=form.querySelector('[data-rule="'+key+'"]');if(el){el.dataset.valid=String(ok);el.querySelector('span').textContent=ok?'✓':'○';}}
+   password.setCustomValidity(checks.length&&checks.upper&&checks.lower&&checks.special?'':'Password does not meet the requirements.');
+   confirm.setCustomValidity(checks.match?'':'Passwords do not match.');
+   const validPanel=i=>Array.from(panels[i].querySelectorAll('input,select')).every(f=>f.checkValidity());
+   next.disabled=!validPanel(current);
+   submit.disabled=submitting||!panels.every((_,i)=>validPanel(i));
+   tabs.forEach((tab,i)=>{tab.disabled=i>furthest||(i>current&&!panels.slice(0,i).every((_,n)=>validPanel(n)));});
+ }
+ form.addEventListener('input',update);form.addEventListener('change',update);
  const valid=(i)=>{for(const field of panels[i].querySelectorAll('input,select')){if(!field.checkValidity()){field.reportValidity();field.focus();return false;}}return true;};
  function show(i,focus=true){
   current=i;furthest=Math.max(furthest,i);
@@ -13,6 +26,7 @@
   next.hidden=i===panels.length-1;submit.hidden=i!==panels.length-1;
   count.textContent='Step '+(i+1)+' of '+panels.length;
   if(review&&i===panels.length-1){review.hidden=false;review.querySelectorAll('[data-review]').forEach(el=>{el.textContent=form.elements.namedItem(el.dataset.review).value.trim();});}
+  update();
   if(focus)panels[i].querySelector('h3').focus({preventScroll:true});
  }
  steps.hidden=false;actions.hidden=false;form.querySelector('.wizard-fallback').hidden=true;
@@ -21,11 +35,12 @@
  back.addEventListener('click',()=>{if(current>0)show(current-1);});
  tabs.forEach((tab,i)=>tab.addEventListener('click',()=>{if(i<=current){show(i);return;}for(let n=current;n<i;n++)if(!valid(n))return;show(i);}));
  form.addEventListener('submit',event=>{
+  update();
   if(submitting){event.preventDefault();return;}
   if(current<panels.length-1){event.preventDefault();if(valid(current))show(current+1);return;}
   for(let i=0;i<panels.length;i++){if(Array.from(panels[i].querySelectorAll('input,select')).some(f=>!f.checkValidity())){event.preventDefault();show(i);valid(i);return;}}
   submitting=true;submit.disabled=true;submit.textContent='Submitting…';
  });
- window.addEventListener('pageshow',()=>{submitting=false;submit.disabled=false;submit.textContent='Register';});
+ window.addEventListener('pageshow',()=>{submitting=false;submit.textContent='Register';update();});
  show(0,false);
 })();

@@ -71,9 +71,9 @@ export default function PublicMeetingRoomPage() {
   return (
     <main className="ms-page">
       <PublicNav active=""/>
-      <PageHero image="/images/heroes/room.webp" title="Meeting room" eyebrow="MinuteSeal" compact heading="p"/>
-      <div className="ms-public-content flex-1 py-5">
-      <div className="mx-auto w-full max-w-3xl space-y-5">
+      {invitation?.lifecycle!=="live"&&<PageHero image="/images/heroes/room.webp" title="Meeting room" eyebrow="MinuteSeal" compact heading="p"/>}
+      <div className="mx-auto w-full max-w-[1680px] flex-1 px-2 py-3 sm:px-5">
+      <div className={"mx-auto w-full space-y-3 "+(invitation?.lifecycle==="live"?"":"max-w-3xl")}>
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
           
 
@@ -118,15 +118,7 @@ export default function PublicMeetingRoomPage() {
                   </div>
                 )}
 
-                {invitation.lifecycle === "live" && (
-                  <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
-                    <Radio className="mx-auto animate-pulse text-green-600" size={42} />
-                    <h2 className="mt-3 text-xl font-extrabold text-slate-950">Meeting is live</h2>
-                    <p className="mt-2 text-sm text-slate-600">
-                      Join with a microphone or listen without one. You can connect your microphone at any time.
-                    </p>
-                  </div>
-                )}
+
 
                 {invitation.lifecycle === "ended" && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">

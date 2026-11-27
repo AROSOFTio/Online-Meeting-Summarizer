@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-3.6-flash"
 
+    PLATFORM_SMTP_CONFIG: Optional[str] = None
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 465
     SMTP_USERNAME: Optional[str] = None
@@ -86,6 +87,24 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+if settings.PLATFORM_SMTP_CONFIG and not (settings.SMTP_HOST and settings.SMTP_USERNAME and settings.SMTP_PASSWORD):
+    from dotenv import dotenv_values
+    try:
+        config = dotenv_values(settings.PLATFORM_SMTP_CONFIG, interpolate=False)
+        host, user, password = (config.get(k) for k in ("CC_ONBOARD_SMTP_HOST","CC_ONBOARD_SMTP_USER","CC_ONBOARD_SMTP_PASSWORD"))
+        sender = config.get("CC_ONBOARD_SMTP_FROM")
+        port = int(config.get("CC_ONBOARD_SMTP_PORT") or "465")
+        if host and user and password and sender and port in (465,587):
+            settings.SMTP_HOST = host
+            settings.SMTP_PORT = port
+            settings.SMTP_USERNAME = user
+            settings.SMTP_PASSWORD = password
+            settings.SMTP_FROM_EMAIL = sender
+            settings.SMTP_USE_SSL = port == 465
+            settings.SMTP_USE_STARTTLS = port == 587
+            settings.SMTP_VERIFY_TLS = True
+    except (OSError, ValueError):
+        pass
 Path(settings.STORAGE_DIR).mkdir(parents=True, exist_ok=True)
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 Path(settings.EXPORT_DIR).mkdir(parents=True, exist_ok=True)

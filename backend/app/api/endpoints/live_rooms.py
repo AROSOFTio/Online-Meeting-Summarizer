@@ -3,7 +3,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Optional, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from jose import JWTError
@@ -45,6 +45,7 @@ class LivePeer:
     joined_at: float
     last_seen: float
     microphone_available: bool = True
+    visual_mode: Optional[Literal['camera','screen']] = None
 
 
 class JoinLiveRoom(BaseModel):
@@ -60,6 +61,7 @@ class Heartbeat(BaseModel):
     muted: bool = False
     refresh_ice: bool = False
     microphone_available: bool = True
+    visual_mode: Optional[Literal['camera','screen']] = None
 
 
 class SignalMessage(BaseModel):
@@ -287,6 +289,7 @@ def _serialize_peers(meeting_id: int, self_id: Optional[str] = None) -> list[dic
             "is_moderator": peer.is_moderator,
             "muted": peer.muted,
             "microphone_available": peer.microphone_available,
+            "visual_mode": peer.visual_mode,
             "forced_muted": peer.forced_muted,
             "is_self": peer.peer_id == self_id,
         }
@@ -447,6 +450,7 @@ def heartbeat(meeting_id: int, body: Heartbeat):
     with _LOCK:
         peer = _peer_locked(meeting_id, body.peer_id, body.session_key)
         peer.microphone_available = body.microphone_available
+        peer.visual_mode = body.visual_mode
         peer.muted = peer.forced_muted or not peer.microphone_available or body.muted
         return {
             "participants": _serialize_peers(meeting_id, body.peer_id),
