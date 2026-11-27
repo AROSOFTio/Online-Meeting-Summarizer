@@ -47,6 +47,7 @@ export default function LiveMeetingPage() {
 
   const [selectedMic,setSelectedMic]=useState("");
   const [starting,setStarting]=useState(false);
+  const [testingMic,setTestingMic]=useState(false);
   const startingRef=useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [seconds, setSeconds] = useState(0);
@@ -177,7 +178,7 @@ export default function LiveMeetingPage() {
   );
 
   const startMeeting = useCallback(async () => {
-    if(startingRef.current)return;
+    if(startingRef.current||testingMic)return;
     startingRef.current=true;setStarting(true);
     leavingRef.current = false;
     setError(null);
@@ -258,7 +259,7 @@ export default function LiveMeetingPage() {
       setError(mediaError(startError));
     } finally {startingRef.current=false;setStarting(false);}
   }, [
-    selectedMic,
+    selectedMic,testingMic,
     attendanceQuery,
     cleanupMedia,
     meeting?.lifecycle,
@@ -439,9 +440,9 @@ export default function LiveMeetingPage() {
               Choose your microphone and test it before starting. Camera and screen sharing are available inside the meeting.
             </p>
 
-            <MicrophoneSetup value={selectedMic} onChange={setSelectedMic} disabled={starting}/>
+            <MicrophoneSetup value={selectedMic} onChange={setSelectedMic} disabled={starting} onTestingChange={setTestingMic}/>
             <button
-              disabled={starting}
+              disabled={starting||testingMic}
               id="start-meeting-button"
               type="button"
               onClick={() => void startMeeting()}

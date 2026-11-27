@@ -91,6 +91,7 @@ export default function LiveAudioRoom({
   const [microphones, setMicrophones] = useState<MediaDeviceInfo[]>([]);
   const [currentMicrophone, setCurrentMicrophone] = useState("");
   const [selectedMic,setSelectedMic]=useState("");
+  const [testingMic,setTestingMic]=useState(false);
   const [visual,setVisual]=useState<MediaStream|null>(null);
   const [visualMode,setVisualMode]=useState<"camera"|"screen"|null>(null);
   const [visualBusy,setVisualBusy]=useState(false);
@@ -355,7 +356,7 @@ export default function LiveAudioRoom({
   );
 
   const joinRoom = useCallback(async () => {
-    if (joinedRef.current || joiningRef.current) return;
+    if (joinedRef.current || joiningRef.current || testingMic) return;
 
     joiningRef.current = true;
     setJoining(true);
@@ -405,7 +406,7 @@ export default function LiveAudioRoom({
       joiningRef.current = false;
       setJoining(false);
     }
-  }, [displayName, ensureConnection, inviteCode, meetingId, providedStream, refreshMicrophones, selectedMic]);
+  }, [displayName, ensureConnection, inviteCode, meetingId, providedStream, refreshMicrophones, selectedMic, testingMic]);
 
   const clearVisual=useCallback(()=>{visualGeneration.current++;visualRef.current?.getTracks().forEach(t=>t.stop());visualRef.current=null;setVisual(null);setVisualMode(null);setRemoteVisual({});},[]);
   const leaveRoom = useCallback(async () => {
@@ -724,8 +725,8 @@ export default function LiveAudioRoom({
           <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-slate-600">
             Choose another microphone if the default input is unavailable.
           </p>
-          {!providedStream&&!joining&&<MicrophoneSetup value={selectedMic} onChange={setSelectedMic}/>}
-          {!joining&&!error&&<button type="button" onClick={()=>void joinRoom()} className="mt-4 rounded-lg bg-blue-700 px-4 py-2 text-white">Join meeting</button>}
+          {!providedStream&&!joining&&<MicrophoneSetup value={selectedMic} onChange={setSelectedMic} onTestingChange={setTestingMic}/>}
+          {!joining&&!error&&<button type="button" disabled={testingMic} onClick={()=>void joinRoom()} className="mt-4 rounded-lg bg-blue-700 px-4 py-2 text-white">Join meeting</button>}
           {joining && <div className="mx-auto mt-5 h-8 w-8 animate-spin rounded-full border-4 border-blue-700 border-t-transparent" />}
           {error && (
             <>
@@ -735,7 +736,7 @@ export default function LiveAudioRoom({
               <button
                 type="button"
                 onClick={() => void joinRoom()}
-                disabled={joining}
+                disabled={joining||testingMic}
                 className="mt-4 inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-3 text-sm font-extrabold text-white hover:bg-blue-800 disabled:opacity-50"
               >
                 <Mic size={17} />
