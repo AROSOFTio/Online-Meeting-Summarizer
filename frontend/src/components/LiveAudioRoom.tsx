@@ -25,6 +25,8 @@ interface JoinResponse {
   session_key: string;
   is_moderator: boolean;
   participants: LiveParticipant[];
+  ice_servers?: RTCIceServer[];
+  ice_expires_at?: number;
 }
 
 interface SignalEnvelope {
@@ -43,32 +45,9 @@ interface LiveAudioRoomProps {
   onMicrophoneChange?: (stream: MediaStream) => void;
 }
 
-const TURN_URLS = (process.env.NEXT_PUBLIC_TURN_URLS || "")
-  .split(",")
-  .map((value) => value.trim())
-  .filter(Boolean);
-
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: ["stun:stun.cloudflare.com:3478", "stun:stun.l.google.com:19302"] },
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
+  {urls:["stun:stun.cloudflare.com:3478","stun:stun.l.google.com:19302"]},
 ];
-
-if (
-  TURN_URLS.length > 0 &&
-  process.env.NEXT_PUBLIC_TURN_USERNAME &&
-  process.env.NEXT_PUBLIC_TURN_CREDENTIAL
-) {
-  ICE_SERVERS.push({
-    urls: TURN_URLS,
-    username: process.env.NEXT_PUBLIC_TURN_USERNAME,
-    credential: process.env.NEXT_PUBLIC_TURN_CREDENTIAL,
-  });
-}
-
-const RTC_CONFIG: RTCConfiguration = {
-  iceServers: ICE_SERVERS,
-  iceCandidatePoolSize: 4,
-};
-
 export default function LiveAudioRoom({
   meetingId,
   displayName,
@@ -102,6 +81,9 @@ export default function LiveAudioRoom({
   const [changingMicrophone, setChangingMicrophone] = useState(false);
   const [audioUnlockToken, setAudioUnlockToken] = useState(0);
 
+  const iceServersRef=useRef<RTCIceServer[]>(DEFAULT_ICE_SERVERS);
+  const iceExpiryRef=useRef(0);
+  const iceRefreshRef=useRef(0);
   const peerIdRef = useRef("");
   const sessionKeyRef = useRef("");
   const joinedRef = useRef(false);
@@ -200,7 +182,7 @@ export default function LiveAudioRoom({
       const existing = connectionsRef.current.get(remotePeerId);
       if (existing) return existing;
 
-      const connection = new RTCPeerConnection(RTC_CONFIG);
+      const connection = new RTCPeerConnection({iceServers:iceServersRef.current,iceCandidatePoolSize:0});
       connectionsRef.current.set(remotePeerId, connection);
 
       const stream = localStreamRef.current;
@@ -385,6 +367,9 @@ export default function LiveAudioRoom({
         }),
       })) as JoinResponse;
 
+      iceServersRef.current=response.ice_servers?.length?response.ice_servers:DEFAULT_ICE_SERVERS;
+      iceExpiryRef.current=response.ice_expires_at||0;
+      iceRefreshRef.current=Date.now();
       peerIdRef.current = response.peer_id;
       sessionKeyRef.current = response.session_key;
       joinedRef.current = true;
@@ -628,16 +613,23 @@ export default function LiveAudioRoom({
     const heartbeat = async () => {
       if (!active || !peerIdRef.current || !sessionKeyRef.current) return;
       try {
+        const refreshIce=Date.now()-iceRefreshRef.current>60000 && iceExpiryRef.current-Date.now()/1000<3600;
+        if(refreshIce)iceRefreshRef.current=Date.now();
         const data = await apiRequest(`/api/live-rooms/${meetingId}/heartbeat`, {
           method: "POST",
           body: JSON.stringify({
             peer_id: peerIdRef.current,
             session_key: sessionKeyRef.current,
             muted: localMuted,
+            refresh_ice:refreshIce,
           }),
         });
 
         if (!active) return;
+        if(data.ice_servers?.length && data.ice_expires_at>0){
+          iceServersRef.current=data.ice_servers;iceExpiryRef.current=data.ice_expires_at;
+          for(const conn of connectionsRef.current.values())try{conn.setConfiguration({...conn.getConfiguration(),iceServers:iceServersRef.current});}catch{/* next connection uses fresh credentials */}
+        }
         setParticipants(data.participants || []);
         for (const participant of (data.participants || []) as LiveParticipant[]) {
           if (participant.is_self || !peerIdRef.current || !participant.peer_id) continue;

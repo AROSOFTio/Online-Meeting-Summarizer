@@ -9,8 +9,10 @@ services:
       ADMIN_FULL_NAME: ${ADMIN_FULL_NAME:-Workspace Administrator}
       PUBLIC_APP_URL: ${PUBLIC_APP_URL:?Set tenant HTTPS URL}
       SMTP_VERIFY_TLS: "true"
+      MEETING_TURN_SECRET_FILE: /run/minuteseal-turn/secret
     volumes:
       - ${TENANT_POLICY_DIR:?Set tenant entitlement directory}:/run/convenecore-entitlements:ro
+      - ${MINUTESEAL_TURN_DIR:-/var/lib/minuteseal-turn/credentials}:/run/minuteseal-turn:ro
   worker:
     environment:
       TENANT_ID: ${TENANT_ID:?Set TENANT_ID}

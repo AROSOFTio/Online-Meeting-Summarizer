@@ -13,6 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core import deps
+from app.core.turn_relay import meeting_ice_servers
 from app.core.config import settings
 from app.models.meeting_flow import DirectoryProfile, MeetingRuntime
 from app.models.models import (
@@ -54,6 +55,7 @@ class Heartbeat(BaseModel):
     peer_id: str
     session_key: str
     muted: bool = False
+    refresh_ice: bool = False
 
 
 class SignalMessage(BaseModel):
@@ -430,6 +432,7 @@ def join_live_room(
         "session_key": session_key,
         "is_moderator": is_moderator,
         "participants": participants,
+        **meeting_ice_servers(peer_id),
     }
 
 
@@ -441,6 +444,7 @@ def heartbeat(meeting_id: int, body: Heartbeat):
         return {
             "participants": _serialize_peers(meeting_id, body.peer_id),
             "forced_muted": peer.forced_muted,
+            **(meeting_ice_servers(peer.peer_id) if body.refresh_ice else {}),
         }
 
 
