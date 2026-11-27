@@ -5,6 +5,7 @@ from sqlalchemy import Boolean, Column, Date, DateTime, Enum, Float, ForeignKey,
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
+from app.models.minute_formats import MeetingMinuteFormat
 
 meeting_participants = Table(
     "meeting_participants", Base.metadata,
@@ -70,6 +71,7 @@ class Meeting(Base):
     processing_jobs = relationship("ProcessingJob", back_populates="meeting", cascade="all, delete-orphan")
     exports = relationship("Export", back_populates="meeting", cascade="all, delete-orphan")
     invitations = relationship("MeetingInvitation", back_populates="meeting", cascade="all, delete-orphan")
+    minute_format_snapshot = relationship(MeetingMinuteFormat, uselist=False, cascade="all, delete-orphan")
 
 class MeetingInvitation(Base):
     __tablename__ = "meeting_invitations"

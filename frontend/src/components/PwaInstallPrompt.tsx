@@ -15,7 +15,8 @@ export default function PwaInstallPrompt() {
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw.js").then((registration) => {
-        void registration.update();
+        if (!registration) return;
+        void registration.update().catch(() => {});
         if (registration.waiting) registration.waiting.postMessage("SKIP_WAITING");
         registration.addEventListener("updatefound", () => {
           const worker = registration.installing;
@@ -25,7 +26,7 @@ export default function PwaInstallPrompt() {
             }
           });
         });
-      });
+      }).catch(() => {});
     }
     const handlePrompt = (event: Event) => {
       event.preventDefault();
@@ -48,13 +49,13 @@ export default function PwaInstallPrompt() {
   return (
     <div className="fixed bottom-4 left-4 right-4 z-[100] mx-auto flex max-w-md items-center gap-3 rounded-lg border border-blue-200 bg-white p-4 shadow-xl">
       <div className="flex-1">
-        <p className="font-semibold text-gray-900">Install Meeting Summarizer</p>
-        <p className="text-xs text-gray-500">Add it to this device for quicker access.</p>
+        <p className="font-semibold text-gray-900">Install MinuteSeal</p>
+        <p className="text-xs text-gray-600">Add it to this device for quicker access.</p>
       </div>
       <button onClick={() => void install()} className="inline-flex items-center gap-1 rounded bg-blue-700 px-3 py-2 text-sm font-medium text-white">
         <Download size={16} /> Install
       </button>
-      <button onClick={() => setVisible(false)} aria-label="Dismiss install prompt" className="p-1 text-gray-500">
+      <button onClick={() => setVisible(false)} aria-label="Dismiss install prompt" className="p-1 text-gray-600">
         <X size={18} />
       </button>
     </div>

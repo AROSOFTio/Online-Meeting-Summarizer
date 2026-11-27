@@ -8,31 +8,20 @@ const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Starlight S.S Meeting Summarizer",
-  description: "Meeting recording, attendance, transcription and official minutes for Starlight Secondary School.",
-  manifest: "/manifest.webmanifest?v=9",
-  icons: {
-    icon: [
-      { url: "/api/settings/logo?v=9", type: "image/jpeg", sizes: "any" },
-      { url: "/starlight-logo.jpg?v=9", type: "image/jpeg", sizes: "any" },
-    ],
-    shortcut: "/api/settings/logo?v=9",
-    apple: "/api/settings/logo?v=9",
-  },
+  title: "MinuteSeal",
+  description: "Meeting recording, attendance, transcription and professional minutes for every organization.",
+  manifest: "/manifest.webmanifest?v=11",
+  icons: { icon: "/minuteseal.svg", shortcut: "/minuteseal.svg" },
   appleWebApp: {
     capable: true,
-    title: "Starlight Meetings",
+    title: "MinuteSeal",
     statusBarStyle: "default",
   },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-    <head>
-      <link rel="icon" href="/api/settings/logo?v=9" />
-      <link rel="shortcut icon" href="/api/settings/logo?v=9" />
-      <link rel="apple-touch-icon" href="/api/settings/logo?v=9" />
-    </head>
+    <head><link rel="stylesheet" href="/minuteseal-public.css?v=5"/><script src="/minuteseal-menu.js?v=1" defer/></head>
     <body className="min-h-full flex flex-col bg-[#f9fafb]"><Providers>{children}</Providers></body>
   </html>;
 }

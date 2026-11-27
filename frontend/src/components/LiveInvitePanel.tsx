@@ -96,9 +96,9 @@ export default function LiveInvitePanel({ meetingId, onClose, onInvited }: { mee
         <div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white px-5 py-4 sm:px-6">
           <div>
             <h2 className="text-lg font-extrabold text-slate-950">Invite people during the meeting</h2>
-            <p className="mt-1 text-xs leading-5 text-slate-500">The live meeting and recording continue behind this window. Sending an invitation never leaves or stops the meeting.</p>
+            <p className="mt-1 text-xs leading-5 text-slate-600">The live meeting and recording continue behind this window. Sending an invitation never leaves or stops the meeting.</p>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 p-2 text-slate-500 hover:bg-slate-50" aria-label="Close invitation panel"><X size={18}/></button>
+          <button type="button" onClick={onClose} className="rounded-lg border border-slate-200 p-2 text-slate-600 hover:bg-slate-50" aria-label="Close invitation panel"><X size={18}/></button>
         </div>
 
         <div className="space-y-5 p-5 sm:p-6">

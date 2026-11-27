@@ -26,13 +26,18 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
+    if settings.TENANT_ID:
+        to_encode.update({"iss": "convenecore:" + settings.TENANT_ID})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
     return encoded_jwt
 
 def decode_access_token(token: str) -> Optional[dict]:
     """Decode and validate a JWT access token"""
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        kwargs = {"issuer": "convenecore:" + settings.TENANT_ID, "options": {"require_iss": True}} if settings.TENANT_ID else {}
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM], **kwargs)
+        if not settings.TENANT_ID and str(payload.get("iss", "")).startswith("convenecore:"):
+            return None
         return payload
     except JWTError:
         return None

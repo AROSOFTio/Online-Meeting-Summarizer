@@ -1,4 +1,4 @@
-FROM node:20-alpine AS base
+FROM node:20-alpine AS source
 
 WORKDIR /app
 
@@ -8,6 +8,19 @@ RUN npm ci
 
 # Copy source code
 COPY . .
+
+# Generate the public blank template files from the same presets used by the builder.
+RUN node scripts/export-template-manifest.cjs > /tmp/minuteseal-formats.json
+
+FROM python:3.12-slim AS template-documents
+WORKDIR /work
+RUN pip install --no-cache-dir reportlab==4.4.6 python-docx==1.2.0 pypdfium2==4.30.0 pillow==11.3.0
+COPY --from=source /tmp/minuteseal-formats.json ./formats.json
+COPY scripts/build-template-assets.py ./build-template-assets.py
+RUN python build-template-assets.py formats.json /generated
+
+FROM source AS base
+COPY --from=template-documents /generated ./public/template-files
 
 # TURN is optional. When configured, these values are compiled into the browser bundle
 # so WebRTC can relay audio for devices/networks that cannot connect directly with STUN.

@@ -1,13 +1,17 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.endpoints import action_items, attendance, auth, exports, health, live_rooms, meetings, recordings, settings as settings_router, staff, stats, summaries, system, transcripts
+from app.api.endpoints import action_items, attendance, auth, exports, health, live_rooms, meetings, minute_formats, recordings, settings as settings_router, staff, stats, summaries, system, transcripts
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.security import get_password_hash
+from app.core.subscriptions import check_request, SubscriptionDenied
+from app.api.endpoints import subscriptions
+from app.core.tenant_boundary import bind_or_verify_database, bind_or_verify_storage
 from app.models.meeting_flow import DirectoryProfile, MeetingRuntime  # noqa: F401
 from app.models.models import SystemSetting, User, UserRole
 
@@ -36,26 +40,32 @@ async def lifespan(app: FastAPI):
 
     db = SessionLocal()
     try:
+        bind_or_verify_database(db, initialize=True)
+        bind_or_verify_storage(initialize=True)
         retired_model_key = "whis" + "per_model"
         db.query(SystemSetting).filter(SystemSetting.key == retired_model_key).delete(synchronize_session=False)
 
         admin = db.query(User).filter(User.email == settings.ADMIN_EMAIL).first()
         if not admin:
+            if not settings.ADMIN_PASSWORD:
+                raise RuntimeError("Configure ADMIN_PASSWORD before creating the first workspace administrator")
             admin = User(
                 email=settings.ADMIN_EMAIL,
                 hashed_password=get_password_hash(settings.ADMIN_PASSWORD),
-                full_name="Starlight Administrator",
+                full_name=settings.ADMIN_FULL_NAME,
                 role=UserRole.admin,
                 is_active=True,
+                must_change_password=bool(settings.TENANT_ID),
             )
             db.add(admin)
             db.flush()
-        else:
+        elif not settings.TENANT_ID:
             # This is a single-organisation deployment. The configured admin
             # account is authoritative so changing ADMIN_PASSWORD/ADMIN_EMAIL
             # in production does not leave a stale database credential behind.
-            admin.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
-            admin.full_name = admin.full_name or "Starlight Administrator"
+            if settings.ADMIN_PASSWORD and not settings.TENANT_ID:
+                admin.hashed_password = get_password_hash(settings.ADMIN_PASSWORD)
+            admin.full_name = admin.full_name or "Workspace Administrator"
             admin.role = UserRole.admin
             admin.is_active = True
 
@@ -77,12 +87,30 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.PUBLIC_APP_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=[settings.PUBLIC_APP_URL] if settings.TENANT_ID else [settings.PUBLIC_APP_URL, "http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def tenant_origin_guard(request: Request, call_next):
+    if settings.TENANT_ID and request.method not in {"GET", "HEAD", "OPTIONS"}:
+        origin = request.headers.get("origin")
+        fetch_site = request.headers.get("sec-fetch-site")
+        if (origin and origin != settings.PUBLIC_APP_URL) or fetch_site in {"cross-site", "same-site"}:
+            return JSONResponse({"detail": "Cross-origin workspace mutation denied"}, status_code=403)
+    try:
+        check_request(request.url.path,request.method)
+    except SubscriptionDenied as exc:
+        return JSONResponse({"detail":exc.detail},status_code=exc.status_code,headers={"Cache-Control":"no-store"})
+    response = await call_next(request)
+    if settings.TENANT_ID and request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+app.include_router(subscriptions.router, prefix="/api/subscription", tags=["Subscription"])
 app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
 app.include_router(staff.router, prefix="/api/staff", tags=["Staff Management"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["Settings"])
@@ -98,4 +126,5 @@ app.include_router(recordings.router, prefix="/api/recordings", tags=["Recording
 app.include_router(transcripts.router, prefix="/api/transcripts", tags=["Transcripts"])
 app.include_router(summaries.router, prefix="/api/summaries", tags=["Summaries"])
 app.include_router(action_items.router, prefix="/api/action-items", tags=["Action Items"])
+app.include_router(minute_formats.router, prefix="/api/minute-formats", tags=["Minute Formats"])
 app.include_router(exports.router, prefix="/api/meetings", tags=["Exports"])

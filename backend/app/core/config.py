@@ -1,24 +1,38 @@
 from pathlib import Path
+from secrets import token_urlsafe
 from typing import Optional
 
-from pydantic import EmailStr, field_validator
+from pydantic import EmailStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "Online Meeting Summarizer"
-    SECRET_KEY: str = "supersecretkeydefaultforstarlightsecondaryschool2026!"
+    def __getattribute__(self,key):
+        # Preserve the original Pydantic object and introspection semantics.
+        # Only explicitly scoped values override platform defaults.
+        if key in {"TENANT_ID","DATABASE_URL","STORAGE_DIR","UPLOAD_DIR","EXPORT_DIR","SUBSCRIPTION_POLICY_FILE","PUBLIC_APP_URL","ADMIN_EMAIL","SECRET_KEY","is_sqlite"}:
+            from app.core.organization_context import current
+            context=current.get()
+            if context is not None and key in context.values:
+                return context.values[key]
+        return super().__getattribute__(key)
+
+    PROJECT_NAME: str = "MinuteSeal"
+    TENANT_ID: str = ""
+    SUBSCRIPTION_POLICY_FILE: str = "/run/convenecore-entitlements/subscription.json"
+    SECRET_KEY: str = token_urlsafe(48)
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24
-    PUBLIC_APP_URL: str = "https://starlightsecondaryschool.com"
+    PUBLIC_APP_URL: str = "http://localhost:3000"
 
     DATABASE_URL: str = "sqlite:///./meeting_summarizer.db"
     REDIS_URL: str = "redis://localhost:6379/0"
 
-    ADMIN_EMAIL: EmailStr = "admin@starlightsecondaryschool.com"
-    ADMIN_PASSWORD: str = "Starlight2026!"
+    ADMIN_FULL_NAME: str = "Workspace Administrator"
+    ADMIN_EMAIL: EmailStr = "admin@example.com"
+    ADMIN_PASSWORD: str = ""
 
-    SCHOOL_NAME: str = "Starlight Secondary School"
+    SCHOOL_NAME: str = "MinuteSeal"
     SCHOOL_LOGO_URL: str = "/api/settings/logo"
     TIMEZONE: str = "Africa/Kampala"
     RETENTION_PERIOD_DAYS: int = 365
@@ -27,11 +41,12 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = None
     GEMINI_MODEL: str = "gemini-3.6-flash"
 
+    PLATFORM_SMTP_CONFIG: Optional[str] = None
     SMTP_HOST: Optional[str] = None
     SMTP_PORT: int = 465
     SMTP_USERNAME: Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
-    SMTP_FROM_EMAIL: EmailStr = "info@starlightsecondaryschool.com"
+    SMTP_FROM_EMAIL: EmailStr = "notifications@example.com"
     SMTP_USE_SSL: bool = True
     SMTP_USE_STARTTLS: bool = False
     SMTP_VERIFY_TLS: bool = True
@@ -39,6 +54,26 @@ class Settings(BaseSettings):
     STORAGE_DIR: str = "storage"
     UPLOAD_DIR: str = "storage/recordings"
     EXPORT_DIR: str = "storage/exports"
+
+    @property
+    def session_cookie_name(self) -> str:
+        return "__Host-convenecore-session" if self.TENANT_ID else "session_token"
+
+    @model_validator(mode="after")
+    def managed_tenant_requirements(self):
+        if self.TENANT_ID:
+            import re
+            from urllib.parse import urlsplit
+            url = urlsplit(self.PUBLIC_APP_URL)
+            if not re.fullmatch(r"[a-z][a-z0-9-]{1,39}", self.TENANT_ID):
+                raise ValueError("Invalid tenant identifier")
+            if url.scheme != "https" or not url.hostname or url.username or url.password or url.path or url.query or url.fragment:
+                raise ValueError("Managed tenants require an HTTPS origin")
+            if self.DATABASE_URL.startswith("sqlite"):
+                raise ValueError("Managed tenants require a dedicated PostgreSQL database")
+            if "SECRET_KEY" not in self.model_fields_set or len(self.SECRET_KEY) < 48:
+                raise ValueError("Managed tenants require a dedicated signing key")
+        return self
 
     @property
     def is_sqlite(self) -> bool:
@@ -56,12 +91,30 @@ class Settings(BaseSettings):
     @field_validator("PUBLIC_APP_URL", mode="before")
     @classmethod
     def normalise_public_url(cls, v: Optional[str]) -> str:
-        return (v or "https://starlightsecondaryschool.com").rstrip("/")
+        return (v or "http://localhost:3000").rstrip("/")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
 
 settings = Settings()
+if settings.PLATFORM_SMTP_CONFIG and not (settings.SMTP_HOST and settings.SMTP_USERNAME and settings.SMTP_PASSWORD):
+    from dotenv import dotenv_values
+    try:
+        config = dotenv_values(settings.PLATFORM_SMTP_CONFIG, interpolate=False)
+        host, user, password = (config.get(k) for k in ("CC_ONBOARD_SMTP_HOST","CC_ONBOARD_SMTP_USER","CC_ONBOARD_SMTP_PASSWORD"))
+        sender = config.get("CC_ONBOARD_SMTP_FROM")
+        port = int(config.get("CC_ONBOARD_SMTP_PORT") or "465")
+        if host and user and password and sender and port in (465,587):
+            settings.SMTP_HOST = host
+            settings.SMTP_PORT = port
+            settings.SMTP_USERNAME = user
+            settings.SMTP_PASSWORD = password
+            settings.SMTP_FROM_EMAIL = sender
+            settings.SMTP_USE_SSL = port == 465
+            settings.SMTP_USE_STARTTLS = port == 587
+            settings.SMTP_VERIFY_TLS = True
+    except (OSError, ValueError):
+        pass
 Path(settings.STORAGE_DIR).mkdir(parents=True, exist_ok=True)
 Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 Path(settings.EXPORT_DIR).mkdir(parents=True, exist_ok=True)

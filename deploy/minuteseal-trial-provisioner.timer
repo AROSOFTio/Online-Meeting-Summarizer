@@ -1,0 +1,9 @@
+[Unit]
+Description=Process verified MinuteSeal trial registrations
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=30s
+AccuracySec=5s
+Unit=minuteseal-trial-provisioner.service
+[Install]
+WantedBy=timers.target

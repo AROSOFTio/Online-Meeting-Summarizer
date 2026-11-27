@@ -3,6 +3,7 @@ import smtplib
 import ssl
 from datetime import datetime
 from email.message import EmailMessage
+from email.utils import formatdate, make_msgid, parseaddr
 from typing import Iterable, Optional
 
 from app.core.config import settings
@@ -26,7 +27,9 @@ class EmailService:
             if settings.SMTP_USE_SSL:
                 with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30, context=context) as server:
                     server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                    server.send_message(message)
+                    refused = server.send_message(message)
+                    if refused:
+                        raise RuntimeError("One or more recipients were rejected by the mail server.")
             else:
                 with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=30) as server:
                     server.ehlo()
@@ -34,7 +37,9 @@ class EmailService:
                         server.starttls(context=context)
                         server.ehlo()
                     server.login(settings.SMTP_USERNAME, settings.SMTP_PASSWORD)
-                    server.send_message(message)
+                    refused = server.send_message(message)
+                    if refused:
+                        raise RuntimeError("One or more recipients were rejected by the mail server.")
         except smtplib.SMTPAuthenticationError as exc:
             raise RuntimeError(
                 f"SMTP authentication failed for {settings.SMTP_USERNAME}. "
@@ -64,13 +69,17 @@ class EmailService:
 
         message = EmailMessage()
         message["Subject"] = subject
-        message["From"] = f"Starlight Secondary School <{settings.SMTP_FROM_EMAIL}>"
+        message["From"] = f"MinuteSeal <{settings.SMTP_FROM_EMAIL}>"
         if len(unique_recipients) == 1:
             message["To"] = unique_recipients[0]
         else:
             message["To"] = str(settings.SMTP_FROM_EMAIL)
             message["Bcc"] = ", ".join(unique_recipients)
-        message["Reply-To"] = str(settings.SMTP_FROM_EMAIL)
+        # Replies already go to From. A redundant Reply-To matching the
+        # recipient also triggers Rspamd's REPLYTO_EQ_TO_ADDR rule.
+        sender_address = parseaddr(str(settings.SMTP_FROM_EMAIL))[1]
+        message["Date"] = formatdate(usegmt=True)
+        message["Message-ID"] = make_msgid(domain=sender_address.rsplit("@", 1)[1])
         message.set_content(text)
         message.add_alternative(html_body, subtype="html")
         if attachment:
@@ -81,13 +90,11 @@ class EmailService:
 
     @staticmethod
     def _brand_header() -> str:
-        logo = f"{settings.PUBLIC_APP_URL}/api/settings/logo"
         return (
             '<div style="font-family:Arial,sans-serif;max-width:640px;margin:auto;color:#1f2937">'
             '<div style="text-align:center;border-bottom:3px solid #173ea5;padding:18px 0">'
-            f'<img src="{html.escape(logo)}" alt="Starlight S.S" width="110" style="max-width:110px;height:auto">'
-            '<h2 style="margin:8px 0 2px;color:#173ea5">STARLIGHT SECONDARY SCHOOL</h2>'
-            '<div style="font-size:12px;color:#4b5563">RISE AND SHINE</div></div>'
+            '<h2 style="margin:8px 0 2px;color:#173ea5">MINUTESEAL</h2>'
+            '</div>'
         )
 
     def send_meeting_invitation(self, recipient: str, meeting_title: str, meeting_date: datetime, invitation_url: str, organization_name: str) -> int:
@@ -103,7 +110,7 @@ class EmailService:
             + f'<div style="padding:24px"><p>You have been invited to:</p><h3>{safe_title}</h3>'
             + f'<p><b>Date &amp; time:</b> {html.escape(date_text)}</p><p>{safe_org}</p>'
             + f'<p><a href="{safe_url}" style="display:inline-block;background:#173ea5;color:white;padding:13px 20px;text-decoration:none;border-radius:7px;font-weight:bold">Open Meeting</a></p>'
-            + '<p style="font-size:12px;color:#6b7280">This is an on-ground meeting. Your invitation lets your phone or computer microphone contribute to the meeting record; it is not a Zoom-style video call.</p></div></div>',
+            + '<p style="font-size:12px;color:#6b7280">Join from your phone or computer. Microphone and camera are optional.</p></div></div>',
         )
 
     def send_final_minutes(self, recipients: Iterable[str], meeting_title: str, meeting_id: int, pdf_data: bytes, organization_name: str) -> int:

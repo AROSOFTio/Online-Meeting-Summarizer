@@ -1,0 +1,15 @@
+Illustrative meeting photography from Pexels; not actual MinuteSeal customers. Pexels license: https://www.pexels.com/license/
+features.webp: https://www.pexels.com/photo/8190815/
+solutions.webp: https://www.pexels.com/photo/7869017/
+workflow.webp: https://www.pexels.com/photo/4623489/
+templates.webp: https://www.pexels.com/photo/7643871/
+builder.webp: https://www.pexels.com/photo/7433848/
+login.webp: https://www.pexels.com/photo/5945809/
+setup.webp: https://www.pexels.com/photo/8872202/
+password.webp: https://www.pexels.com/photo/12902921/
+join.webp: https://www.pexels.com/photo/7710139/
+invitation.webp: https://www.pexels.com/photo/7640434/
+room.webp: https://www.pexels.com/photo/6949523/
+register.webp: https://www.pexels.com/photo/3184291/
+verify.webp: https://www.pexels.com/photo/3184360/
+status.webp: https://www.pexels.com/photo/3184339/

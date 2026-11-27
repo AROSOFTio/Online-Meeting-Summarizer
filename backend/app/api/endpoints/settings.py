@@ -1,3 +1,4 @@
+from app.core.organization_context import scoped_path
 import os
 from pathlib import Path
 from time import time
@@ -10,21 +11,21 @@ from sqlalchemy.orm import Session
 from app.core import deps
 from app.core.audit import log_action
 from app.core.config import settings
+from app.core.subscriptions import storage_write
 from app.models.models import SystemSetting, User
 
 router = APIRouter()
 LOGO_SETTING_KEY = "school_logo_file"
-BUNDLED_LOGO = Path(__file__).resolve().parents[2] / "static" / "starlight-logo.jpg"
 ALLOWED_LOGO_TYPES = {"image/png": ".png", "image/jpeg": ".jpg", "image/webp": ".webp"}
 
 DEFAULT_SETTINGS = {
-    "school_name": "Starlight Secondary School",
+    "school_name": settings.SCHOOL_NAME,
     "school_logo_url": "/api/settings/logo",
-    "organization_address": "Amuria District, Uganda",
+    "organization_address": "",
     "organization_phone": "",
     "organization_email": "",
     "organization_website": settings.PUBLIC_APP_URL,
-    "organization_motto": "RISE AND SHINE",
+    "organization_motto": "",
     "organization_registration": "",
     "timezone": "Africa/Kampala",
     "retention_period_days": "365",
@@ -51,7 +52,7 @@ def get_settings(db: Session = Depends(deps.get_db), current_user: User = Depend
 
 
 @router.post("/logo")
-async def upload_logo(
+def upload_logo(
     file: UploadFile = File(...),
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_admin_user),
@@ -59,41 +60,40 @@ async def upload_logo(
     extension = ALLOWED_LOGO_TYPES.get(file.content_type or "")
     if not extension:
         raise HTTPException(status_code=400, detail="Logo must be PNG, JPEG, or WebP")
-    content = await file.read(5 * 1024 * 1024 + 1)
+    content = file.file.read(5 * 1024 * 1024 + 1)
     if len(content) > 5 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Logo must be 5 MB or smaller")
 
-    branding_dir = Path(settings.STORAGE_DIR) / "branding"
-    branding_dir.mkdir(parents=True, exist_ok=True)
-    for old_logo in branding_dir.glob("school-logo.*"):
-        old_logo.unlink(missing_ok=True)
-    logo_path = branding_dir / f"school-logo{extension}"
-    logo_path.write_bytes(content)
-
-    stored_path = db.query(SystemSetting).filter(SystemSetting.key == LOGO_SETTING_KEY).first()
-    if stored_path:
-        stored_path.value = str(logo_path)
-    else:
-        db.add(SystemSetting(key=LOGO_SETTING_KEY, value=str(logo_path)))
-
-    logo_url = f"/api/settings/logo?v={int(time())}"
-    url_setting = db.query(SystemSetting).filter(SystemSetting.key == "school_logo_url").first()
-    if url_setting:
-        url_setting.value = logo_url
-    else:
-        db.add(SystemSetting(key="school_logo_url", value=logo_url))
-    db.commit()
+    with storage_write(len(content)):
+        branding_dir = Path(settings.STORAGE_DIR) / "branding"
+        branding_dir.mkdir(parents=True, exist_ok=True)
+        for old_logo in branding_dir.glob("school-logo.*"):
+            old_logo.unlink(missing_ok=True)
+        logo_path = branding_dir / f"school-logo{extension}"
+        logo_path.write_bytes(content)
+    
+        stored_path = db.query(SystemSetting).filter(SystemSetting.key == LOGO_SETTING_KEY).first()
+        if stored_path:
+            stored_path.value = str(logo_path)
+        else:
+            db.add(SystemSetting(key=LOGO_SETTING_KEY, value=str(logo_path)))
+    
+        logo_url = f"/api/settings/logo?v={int(time())}"
+        url_setting = db.query(SystemSetting).filter(SystemSetting.key == "school_logo_url").first()
+        if url_setting:
+            url_setting.value = logo_url
+        else:
+            db.add(SystemSetting(key="school_logo_url", value=logo_url))
+        db.commit()
     return {"school_logo_url": logo_url}
 
 
 @router.get("/logo")
 def get_logo(db: Session = Depends(deps.get_db)):
     custom = db.query(SystemSetting).filter(SystemSetting.key == LOGO_SETTING_KEY).first()
-    if custom and os.path.isfile(custom.value) and not custom.value.lower().endswith(".svg"):
+    if custom and scoped_path(custom.value).is_file() and not custom.value.lower().endswith(".svg"):
         return FileResponse(custom.value)
-    if BUNDLED_LOGO.is_file():
-        return FileResponse(BUNDLED_LOGO, media_type="image/jpeg")
-    raise HTTPException(status_code=404, detail="School logo is not available")
+    raise HTTPException(status_code=404, detail="Organization logo is not available")
 
 
 @router.put("", include_in_schema=False)

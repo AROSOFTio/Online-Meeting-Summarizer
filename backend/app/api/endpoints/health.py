@@ -17,15 +17,15 @@ def health_check(db: Session = Depends(deps.get_db)):
     details = {}
     try:
         db.execute(text("SELECT 1"))
-    except Exception as exc:
+    except Exception:
         database_status = "unhealthy"
-        details["database_error"] = str(exc)
+        details["database_error"] = "Database unavailable"
     try:
         client = redis.Redis.from_url(settings.REDIS_URL, socket_timeout=2.0)
         client.ping()
     except Exception as exc:
         redis_status = "unhealthy"
-        details["redis_error"] = str(exc)
+        details["redis_error"] = "Queue unavailable"
 
     overall = "healthy" if database_status == "healthy" and redis_status == "healthy" else "degraded"
     response = {"status": overall, "database": database_status, "redis": redis_status}

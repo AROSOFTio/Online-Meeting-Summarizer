@@ -1,4 +1,6 @@
 "use client";
+import PageHero from "@/components/PageHero";
+import PublicNav,{PublicFooter} from "@/components/PublicNav";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -67,31 +69,26 @@ export default function PublicMeetingRoomPage() {
   const displayName = invitation?.known_name || savedName || "Guest";
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 sm:py-12">
-      <div className="mx-auto w-full max-w-3xl space-y-5">
-        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <header className="border-b border-slate-200 px-6 py-6 text-center">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/api/settings/logo"
-              alt="Starlight Secondary School"
-              className="mx-auto h-auto max-h-28 w-auto max-w-[230px] object-contain"
-            />
-            <p className="mt-2 text-xs font-bold uppercase tracking-[0.18em] text-blue-700">Meeting Room</p>
-          </header>
+    <main className="ms-page">
+      <PublicNav active=""/>
+      {invitation?.lifecycle!=="live"&&<PageHero image="/images/heroes/room.webp" title="Meeting room" eyebrow="MinuteSeal" compact heading="p"/>}
+      <div className="mx-auto w-full max-w-[1680px] flex-1 px-2 py-3 sm:px-5">
+      <div className={"mx-auto w-full space-y-3 "+(invitation?.lifecycle==="live"?"":"max-w-3xl")}>
+        <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          
 
-          <div className="p-6 sm:p-8">
-            {error && (
+          <div className={invitation?.lifecycle==="live"?"p-3 sm:p-4":"p-5 sm:p-8"}>
+            {error && !invitation && (
               <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>
             )}
             {!invitation && !error && (
-              <div className="py-12 text-center text-sm text-slate-500">Opening meeting room...</div>
+              <div className="py-12 text-center text-sm text-slate-600">Opening meeting room...</div>
             )}
 
             {invitation && (
               <div className="space-y-5">
-                <div className="rounded-xl bg-slate-50 p-5">
-                  <h1 className="text-2xl font-extrabold text-slate-950">{invitation.meeting_title}</h1>
+                <div className="rounded-lg bg-slate-50 p-3">
+                  <h1 className="text-base font-bold text-slate-950 sm:text-lg">{invitation.meeting_title}</h1>
                   <div className="mt-2 flex items-center gap-2 text-sm text-slate-600">
                     <Calendar size={16} />
                     {new Date(invitation.meeting_date).toLocaleString(undefined, {
@@ -117,23 +114,15 @@ export default function PublicMeetingRoomPage() {
                         ? `Starts in about ${Math.ceil(remainingSeconds / 60)} minute(s).`
                         : "The scheduled time has arrived. The room opens when the organiser starts the meeting."}
                     </p>
-                    <p className="mt-2 text-xs text-slate-500">This page updates automatically.</p>
+                    <p className="mt-2 text-xs text-slate-600">This page updates automatically.</p>
                   </div>
                 )}
 
-                {invitation.lifecycle === "live" && (
-                  <div className="rounded-xl border border-green-200 bg-green-50 p-6 text-center">
-                    <Radio className="mx-auto animate-pulse text-green-600" size={42} />
-                    <h2 className="mt-3 text-xl font-extrabold text-slate-950">Meeting is live</h2>
-                    <p className="mt-2 text-sm text-slate-600">
-                      Audio joins automatically. If your browser asks for microphone permission, allow it once and the meeting continues immediately.
-                    </p>
-                  </div>
-                )}
+
 
                 {invitation.lifecycle === "ended" && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-6 text-center">
-                    <ShieldCheck className="mx-auto text-slate-500" size={40} />
+                    <ShieldCheck className="mx-auto text-slate-600" size={40} />
                     <h2 className="mt-3 text-xl font-extrabold text-slate-950">Meeting has ended</h2>
                     <p className="mt-2 text-sm text-slate-600">The organiser has closed this meeting.</p>
                   </div>
@@ -148,10 +137,12 @@ export default function PublicMeetingRoomPage() {
             meetingId={invitation.meeting_id}
             displayName={displayName}
             inviteCode={code}
-            autoJoin
+            autoJoin={false}
           />
         )}
       </div>
+      </div>
+      <PublicFooter/>
     </main>
   );
 }

@@ -19,14 +19,14 @@ class GeminiService:
             raise RuntimeError("Cannot summarize an empty transcript")
 
         prompt = (
-            "Act as a professional minute secretary for Starlight Secondary School. Prepare formal, "
-            "publication-ready meeting minutes using only facts stated in the transcript. Write in "
+            "Act as a professional minute secretary for an organization. Prepare formal, "
+            "draft meeting minutes for human review using only facts stated in the transcript. Write in "
             "clear past tense and keep discussions, resolutions and conclusions in logical order. "
             "Never invent names, dates, attendance, decisions or deadlines. ALWAYS return a non-empty "
             "agenda. Infer concise agenda items from the topics actually discussed even when nobody "
             "explicitly announces an agenda. Topic changes may indicate new agenda items. If the meeting "
             "contains only one broad topic, return one agenda item describing that topic. Return a polished "
-            "summary, up to 10 key points, explicit decisions, and action items. Each action item must include "
+            "summary, up to 10 key points, explicit decisions, and action items. Distinguish proposals from adopted resolutions and use neutral agenda-based numbered headings in the summary. Do not invent a vote, consensus, priority or assigned person. Each action item must include "
             "description, assignee (empty when unknown), priority (low, medium or high), and due_date "
             "(ISO date or empty).\n\nTRANSCRIPT:\n" + transcript
         )

@@ -1,0 +1,15 @@
+[Unit]
+Description=MinuteSeal bounded automatic trial provisioning
+After=network-online.target docker.service minuteseal-registration.service
+Requires=docker.service
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/minuteseal-pilot
+ExecStart=/usr/bin/python3 /opt/minuteseal-pilot/deploy/trial_provisioner.py --root /var/lib/minuteseal-pilot --inbox /var/lib/minuteseal-registration/inbox.db
+EnvironmentFile=-/etc/minuteseal/onboarding.env
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+TimeoutStartSec=360

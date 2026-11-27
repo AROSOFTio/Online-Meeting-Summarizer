@@ -1,0 +1,9 @@
+[Unit]
+Description=Poll ConveneCore payment verification
+[Timer]
+OnBootSec=30s
+OnUnitInactiveSec=30s
+AccuracySec=5s
+Unit=convenecore-checkout-worker.service
+[Install]
+WantedBy=timers.target

@@ -1,4 +1,5 @@
 import concurrent.futures
+import tempfile
 import json
 import os
 import re
@@ -8,7 +9,9 @@ from celery import Celery
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.subscriptions import require, feature_enabled, check_ai_available
 from app.core.database import SessionLocal
+from app.core.tenant_boundary import bind_or_verify_database, bind_or_verify_storage
 from app.models.models import (
     ActionItem, ActionItemPriority, ActionItemStatus, Decision, JobStatus, Meeting,
     MeetingStatus, ProcessingJob, Recording, Summary, SystemSetting, Transcript,
@@ -32,6 +35,14 @@ local_executor = concurrent.futures.ThreadPoolExecutor(max_workers=3)
 def run_background_job(task_func, *args, **kwargs):
     if os.getenv("TESTING") == "true":
         print(f"[TEST] Skipping background queueing for '{task_func.__name__}'.")
+        return
+    from app.core.organization_context import current
+    context=current.get()
+    if context is not None:
+        # No unscoped fallback to the standalone worker or local executor.
+        if task_func.name!="tasks.transcribe_meeting":
+            raise RuntimeError("Unsupported central background task")
+        central_transcribe_meeting.delay(context.principal.org_id,*args,**kwargs)
         return
     try:
         task_func.delay(*args, **kwargs)
@@ -132,7 +143,7 @@ def _store_minutes(db: Session, meeting_id: int, full_text: str) -> str:
         if text_value:
             db.add(Decision(meeting_id=meeting_id, summary_id=summary.id, text=text_value))
 
-    if db.query(ActionItem).filter(ActionItem.meeting_id == meeting_id).count() == 0:
+    if feature_enabled("actions") and db.query(ActionItem).filter(ActionItem.meeting_id == meeting_id).count() == 0:
         for item in action_items:
             responsible_name = None
             if isinstance(item, dict):
@@ -204,6 +215,15 @@ def _build_generated_minutes_pdf(db: Session, meeting: Meeting, transcript_text:
         "logo_path": system_settings.get("school_logo_file", ""),
     }
 
+    if organization["logo_path"]:
+        from app.core.organization_context import scoped_path
+        organization["logo_path"]=str(scoped_path(organization["logo_path"]))
+    from app.services.structured_minutes import get_snapshot
+    snapshot = get_snapshot(db, meeting.id)
+    if snapshot:
+        from app.services.structured_export import render_pdf
+        row, definition, values = snapshot
+        return render_pdf(definition, values, organization, row.status == "final")
     return export_pdf(
         meeting_title=meeting.title,
         meeting_date=meeting.date,
@@ -219,8 +239,18 @@ def _build_generated_minutes_pdf(db: Session, meeting: Meeting, transcript_text:
 
 @celery_app.task(name="tasks.transcribe_meeting")
 def transcribe_meeting(meeting_id: int, job_id: str):
+    from app.core.organization_context import current
+    if os.environ.get("MS_CENTRAL_REGISTRY_URL") and current.get() is None:
+        raise RuntimeError("Central worker requires organization context")
     db: Session = SessionLocal()
-    normalized_path = os.path.join(settings.UPLOAD_DIR, f"normalised_{meeting_id}.wav")
+    try:
+        bind_or_verify_database(db)
+        bind_or_verify_storage()
+    except Exception:
+        db.close()
+        raise
+    temp_dir=tempfile.TemporaryDirectory(prefix="cc-audio-")
+    normalized_path=os.path.join(temp_dir.name,"normalised.wav")
     try:
         meeting = db.query(Meeting).filter(Meeting.id == meeting_id).first()
         job = db.query(ProcessingJob).filter(ProcessingJob.id == job_id).first()
@@ -229,6 +259,8 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             raise RuntimeError(f"Meeting {meeting_id} was not found")
         if not recording:
             raise RuntimeError("Recording file record not found")
+        if settings.TENANT_ID and (not job or job.meeting_id != meeting_id):
+            return
         if not job:
             job = ProcessingJob(id=job_id, meeting_id=meeting_id, status=JobStatus.queued, progress=0)
             db.add(job)
@@ -239,7 +271,10 @@ def transcribe_meeting(meeting_id: int, job_id: str):
         job.progress = 20
         db.commit()
 
-        duration = normalise_audio(recording.filepath, normalized_path)
+        require("ai")
+        check_ai_available()
+        from app.core.organization_context import scoped_path
+        duration = normalise_audio(str(scoped_path(recording.filepath)), normalized_path)
         recording.duration_seconds = duration
         job.status = JobStatus.transcribing
         job.progress = 50
@@ -290,6 +325,15 @@ def transcribe_meeting(meeting_id: int, job_id: str):
         job.progress = 85
         db.commit()
         summary_text = _store_minutes(db, meeting_id, full_text)
+        from app.services.structured_minutes import get_snapshot, generate_snapshot
+        custom_format = get_snapshot(db, meeting_id)
+        if custom_format and feature_enabled("templates") and feature_enabled("ai"):
+            try:
+                generate_snapshot(db, meeting, full_text)
+            except Exception:
+                db.rollback()
+                # Keep the completed transcript. The editor can retry custom generation.
+                print("[WARNING] Custom minute generation did not complete; draft preserved.")
 
         meeting.status = MeetingStatus.completed
         job.status = JobStatus.completed
@@ -302,7 +346,7 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             recipients = [participant.email for participant in meeting.participants if participant.email]
             if meeting.owner and meeting.owner.email:
                 recipients.append(meeting.owner.email)
-            if recipients and email_service.enabled:
+            if recipients and email_service.enabled and feature_enabled("exports"):
                 pdf_data = _build_generated_minutes_pdf(db, meeting, full_text)
                 sent = email_service.send_meeting_complete(
                     recipients=recipients,
@@ -332,4 +376,20 @@ def transcribe_meeting(meeting_id: int, job_id: str):
             db.rollback()
             print(f"[CRITICAL] Could not persist failure state: {db_error}")
     finally:
+        temp_dir.cleanup()
         db.close()
+
+
+@celery_app.task(name="tasks.central_transcribe_meeting")
+def central_transcribe_meeting(org_id,meeting_id,job_id):
+    from app.core.central_runtime import Runtime
+    from app.core.organization_context import bind
+    # Dedicated worker configuration required; no implicit legacy queue or DB.
+    runtime=Runtime(os.environ["MS_CENTRAL_REGISTRY_URL"],os.environ["MS_CENTRAL_JOURNAL"],os.environ["MS_CENTRAL_STORAGE"],os.environ["MS_CENTRAL_ORIGIN"])
+    context=runtime.trusted_context(org_id)
+    try:
+        with bind(context):
+            return transcribe_meeting.run(meeting_id,job_id)
+    finally:
+        runtime.registry.dispose()
+        for engine in runtime.engines.values():engine.dispose()

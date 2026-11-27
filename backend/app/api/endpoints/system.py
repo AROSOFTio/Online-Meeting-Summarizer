@@ -1,3 +1,4 @@
+from app.core.organization_context import scoped_path
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -49,6 +50,7 @@ def system_status(
         "smtp_username": settings.SMTP_USERNAME or "",
         "smtp_from_email": str(settings.SMTP_FROM_EMAIL),
         "public_app_url": settings.PUBLIC_APP_URL,
+        "tenant_id": settings.TENANT_ID or None,
         "database": "SQLite" if settings.is_sqlite else "PostgreSQL",
         "queue": "Redis + Celery",
         "timezone": timezone_setting.value if timezone_setting else settings.TIMEZONE,
@@ -69,16 +71,16 @@ def smtp_test(
     try:
         sent = email_service.send(
             recipients=[recipient],
-            subject="Starlight Meeting Summarizer email test",
+            subject="MinuteSeal email test",
             text=(
-                "This is a delivery test from the Starlight Secondary School Meeting Summarizer.\n\n"
+                "This is a delivery test from MinuteSeal.\n\n"
                 f"Production site: {settings.PUBLIC_APP_URL}\n"
                 f"Sender: {settings.SMTP_FROM_EMAIL}\n"
                 "If you received this message, SMTP authentication and outbound delivery are working."
             ),
             html_body=(
                 '<div style="font-family:Arial,sans-serif;max-width:620px;margin:auto;color:#1f2937">'
-                '<h2 style="color:#173ea5">Starlight Secondary School</h2>'
+                '<h2 style="color:#173ea5">MinuteSeal</h2>'
                 '<p>This is a delivery test from the Meeting Summarizer.</p>'
                 f'<p><b>Production site:</b> {settings.PUBLIC_APP_URL}<br>'
                 f'<b>Sender:</b> {settings.SMTP_FROM_EMAIL}</p>'
@@ -209,8 +211,10 @@ def create_backup(
         db.refresh(record)
         log_action(db, action="create_backup", details=f"Created validated database backup {path.name}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
         return {"id": record.id, "filename": path.name, "size_bytes": record.size_bytes, "status": record.status}
+    except HTTPException:
+        raise
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Backup failed: {exc}") from exc
+        raise HTTPException(status_code=500, detail="Backup failed; contact support") from exc
 
 
 @router.get("/backups/{backup_id}/download")
@@ -220,7 +224,7 @@ def download_backup(
     current_user: User = Depends(deps.get_admin_user),
 ):
     record = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
-    if not record or not os.path.isfile(record.filepath):
+    if not record or not scoped_path(record.filepath).is_file():
         raise HTTPException(status_code=404, detail="Backup file not found")
     validate_backup(Path(record.filepath))
     return FileResponse(record.filepath, filename=Path(record.filepath).name, media_type="application/octet-stream")
@@ -238,7 +242,7 @@ def run_retention_cleanup(
     recordings = db.query(Recording).join(Meeting).filter(Meeting.is_archived.is_(True), Recording.created_at < cutoff).all()
     removed = 0
     for recording in recordings:
-        if recording.filepath and os.path.isfile(recording.filepath):
+        if recording.filepath and scoped_path(recording.filepath).is_file():
             try:
                 os.remove(recording.filepath)
             except OSError:
@@ -248,3 +252,16 @@ def run_retention_cleanup(
     db.commit()
     log_action(db, action="retention_cleanup", details=f"Removed {removed} archived recording(s) older than {days} days", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return {"removed_recordings": removed, "retention_period_days": days}
+
+
+@router.delete("/backups/{backup_id}")
+def delete_backup(backup_id:int,db:Session=Depends(deps.get_db),current_user:User=Depends(deps.get_admin_user)):
+    record=db.query(BackupRecord).filter(BackupRecord.id==backup_id).first()
+    if not record:raise HTTPException(404,"Backup not found")
+    root=(Path(settings.STORAGE_DIR)/"backups").resolve()
+    path=Path(record.filepath).resolve()
+    if path.parent!=root:raise HTTPException(409,"Invalid backup path")
+    path.unlink(missing_ok=True)
+    db.delete(record)
+    db.commit()
+    return {"detail":"Backup deleted"}

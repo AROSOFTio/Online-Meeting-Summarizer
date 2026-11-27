@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 
 interface User {
@@ -16,7 +17,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string, organization?: string) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
 }
@@ -35,6 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const checkAuth = useCallback(async () => {
     try {
@@ -50,10 +52,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     checkAuth();
   }, [checkAuth]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (email: string, password: string, organization?: string) => {
     const formData = new URLSearchParams();
     formData.append("username", email);
     formData.append("password", password);
+    if (organization?.trim()) formData.append("organization", organization.trim());
 
     await apiRequest("/api/auth/login", {
       method: "POST",
@@ -63,6 +66,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       body: formData
     });
 
+    await queryClient.cancelQueries();
+    queryClient.clear();
     const profile = await apiRequest("/api/auth/me");
     setUser(profile);
     router.push(profile.must_change_password ? "/change-password" : "/dashboard");
@@ -74,6 +79,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (e: unknown) {
       console.error("Logout failed:", e);
     } finally {
+      await queryClient.cancelQueries();
+      queryClient.clear();
       setUser(null);
       router.push("/login");
     }

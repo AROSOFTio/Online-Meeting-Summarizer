@@ -4,12 +4,12 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: meeting_summarizer
-      POSTGRES_USER: starlight
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-StarlightDB2026!}
+      POSTGRES_USER: ${DB_USER:?Set DB_USER to the existing PostgreSQL role}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U starlight -d meeting_summarizer"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:?Set DB_USER} -d meeting_summarizer"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -33,24 +33,24 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://starlight:${DB_PASSWORD:-StarlightDB2026!}@db:5432/meeting_summarizer
+      DATABASE_URL: postgresql://${DB_USER:?Set DB_USER}:${DB_PASSWORD:?Set DB_PASSWORD}@db:5432/meeting_summarizer
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-supersecretkeydefaultforstarlightsecondaryschool2026!}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@starlightsecondaryschool.com}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-Starlight2026!}
-      SCHOOL_NAME: ${SCHOOL_NAME:-Starlight Secondary School}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?Set ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
+      SCHOOL_NAME: ${SCHOOL_NAME:-MinuteSeal}
       TIMEZONE: ${TIMEZONE:-Africa/Kampala}
-      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://starlightsecondaryschool.com}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
-      SMTP_HOST: ${SMTP_HOST:-stalwart}
+      SMTP_HOST: ${SMTP_HOST-stalwart}
       SMTP_PORT: ${SMTP_PORT:-465}
-      SMTP_USERNAME: ${SMTP_USERNAME:-info@starlightsecondaryschool.com}
+      SMTP_USERNAME: ${SMTP_USERNAME-notifications@example.com}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-info@starlightsecondaryschool.com}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-notifications@example.com}
       SMTP_USE_SSL: ${SMTP_USE_SSL:-true}
       SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-false}
-      SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-false}
+      SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-true}
     expose:
       - "8000"
     volumes:
@@ -71,19 +71,19 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql://starlight:${DB_PASSWORD:-StarlightDB2026!}@db:5432/meeting_summarizer
+      DATABASE_URL: postgresql://${DB_USER:?Set DB_USER}:${DB_PASSWORD:?Set DB_PASSWORD}@db:5432/meeting_summarizer
       REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-supersecretkeydefaultforstarlightsecondaryschool2026!}
-      SCHOOL_NAME: ${SCHOOL_NAME:-Starlight Secondary School}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY}
+      SCHOOL_NAME: ${SCHOOL_NAME:-MinuteSeal}
       TIMEZONE: ${TIMEZONE:-Africa/Kampala}
-      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-https://starlightsecondaryschool.com}
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.6-flash}
       SMTP_HOST: ${SMTP_HOST:-stalwart}
       SMTP_PORT: ${SMTP_PORT:-465}
-      SMTP_USERNAME: ${SMTP_USERNAME:-info@starlightsecondaryschool.com}
+      SMTP_USERNAME: ${SMTP_USERNAME:-notifications@example.com}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
-      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-info@starlightsecondaryschool.com}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-notifications@example.com}
       SMTP_USE_SSL: ${SMTP_USE_SSL:-true}
       SMTP_USE_STARTTLS: ${SMTP_USE_STARTTLS:-false}
       SMTP_VERIFY_TLS: ${SMTP_VERIFY_TLS:-false}
@@ -104,7 +104,7 @@ services:
     depends_on:
       - backend
     environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://starlightsecondaryschool.com}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3000}
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
       interval: 20s

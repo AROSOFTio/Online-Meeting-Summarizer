@@ -1,4 +1,6 @@
+from app.core.organization_context import scoped_path
 import os
+import json
 import secrets
 import string
 import uuid
@@ -24,6 +26,9 @@ from app.schemas.schemas import (
     ProcessingJobOut,
 )
 from app.services.email import email_service
+from app.core.subscriptions import check_ai_available, require
+from app.models.minute_formats import MinuteFormat, MeetingMinuteFormat
+from app.services.structured_minutes import FormatDefinition, metadata, validate_values
 from app.workers.tasks import run_background_job, transcribe_meeting
 
 router = APIRouter()
@@ -48,6 +53,17 @@ def _public_datetime(value: Optional[datetime]) -> Optional[datetime]:
 
 
 def _invite_code(db: Session, length: int = 8) -> str:
+    from app.core.organization_context import current
+    context=current.get()
+    if context is not None:
+        from sqlalchemy.exc import IntegrityError
+        for _ in range(20):
+            code="".join(secrets.choice(INVITE_ALPHABET) for _ in range(32))
+            try:
+                context.runtime.reserve_invitation(code,context.principal.org_id)
+                return code
+            except IntegrityError:continue
+        raise RuntimeError("Could not allocate invitation")
     for _ in range(20):
         code = "".join(secrets.choice(INVITE_ALPHABET) for _ in range(length))
         if not db.query(MeetingInvitation).filter(MeetingInvitation.code == code).first():
@@ -261,6 +277,18 @@ def create_meeting(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_minutes_editor),
 ):
+    definition = None
+    if meeting_in.minute_format_id is not None or meeting_in.minute_format is not None:
+        require("templates")
+        if meeting_in.minute_format_id is not None and meeting_in.minute_format is not None:
+            raise HTTPException(422,"Choose one minute format")
+        try:
+            if meeting_in.minute_format_id is not None:
+                saved=db.query(MinuteFormat).filter(MinuteFormat.id==meeting_in.minute_format_id,MinuteFormat.owner_id==current_user.id).first()
+                if not saved:raise HTTPException(404,"Format not found")
+                definition=FormatDefinition.model_validate_json(saved.definition)
+            else:definition=FormatDefinition.model_validate(meeting_in.minute_format)
+        except ValueError as exc:raise HTTPException(422,"Invalid minute format") from exc
     meeting = Meeting(
         title=meeting_in.title, description=meeting_in.description, date=_storage_datetime(meeting_in.date),
         owner_id=current_user.id, status=MeetingStatus.draft, is_archived=False,
@@ -281,6 +309,9 @@ def create_meeting(
             db.add(participant)
             db.flush()
         _link_participant(meeting, participant, db, p_in.attendance_status)
+    if definition:
+        db.flush()
+        db.add(MeetingMinuteFormat(meeting_id=meeting.id,definition=definition.model_dump_json(),values_json=json.dumps(validate_values(definition,metadata(db,meeting,definition)))))
     db.commit()
     db.refresh(meeting)
     log_action(db, action="create_meeting", details=f"User {current_user.email} created meeting: {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
@@ -493,7 +524,7 @@ def delete_meeting(
     meeting = _editable_meeting(meeting_id, db, current_user)
     title = meeting.title
     if permanent:
-        recording_path = meeting.recording.filepath if meeting.recording else None
+        recording_path = str(scoped_path(meeting.recording.filepath)) if meeting.recording else None
         db.delete(meeting); db.commit()
         if recording_path:
             try: os.remove(recording_path)
@@ -511,6 +542,7 @@ def trigger_transcription(
     current_user: User = Depends(deps.get_minutes_editor),
 ):
     meeting = _editable_meeting(meeting_id, db, current_user)
+    check_ai_available()
     if not meeting.recording:
         raise HTTPException(status_code=400, detail="Cannot transcribe meeting: no recording is attached")
     active_job = (
@@ -527,7 +559,12 @@ def trigger_transcription(
         runtime.lifecycle = "ended"
         runtime.ended_at = _storage_datetime(datetime.now(timezone.utc))
     db.commit(); db.refresh(job)
-    run_background_job(transcribe_meeting, meeting_id, job.id)
+    try:
+        run_background_job(transcribe_meeting, meeting_id, job.id)
+    except Exception:
+        job.status=JobStatus.failed;job.error_message="Processing queue unavailable; retry later"
+        meeting.status=MeetingStatus.failed;db.commit()
+        raise HTTPException(503,"Processing queue temporarily unavailable")
     log_action(db, action="trigger_transcription", details=f"Triggered transcription job {job.id} for meeting {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return job
 
@@ -569,10 +606,16 @@ def retry_transcription(
     current_user: User = Depends(deps.get_minutes_editor),
 ):
     meeting = _editable_meeting(meeting_id, db, current_user)
+    check_ai_available()
     if meeting.status != MeetingStatus.failed: raise HTTPException(status_code=400, detail="Cannot retry a job that has not failed")
     if not meeting.recording: raise HTTPException(status_code=400, detail="Cannot retry: recording is missing")
     job = ProcessingJob(id=str(uuid.uuid4()), meeting_id=meeting_id, status=JobStatus.queued, progress=0)
     db.add(job); meeting.status = MeetingStatus.processing; db.commit(); db.refresh(job)
-    run_background_job(transcribe_meeting, meeting_id, job.id)
+    try:
+        run_background_job(transcribe_meeting, meeting_id, job.id)
+    except Exception:
+        job.status=JobStatus.failed;job.error_message="Processing queue unavailable; retry later"
+        meeting.status=MeetingStatus.failed;db.commit()
+        raise HTTPException(503,"Processing queue temporarily unavailable")
     log_action(db, action="retry_transcription", details=f"Retried failed transcription job. New job ID: {job.id} for meeting {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)
     return job

@@ -1,3 +1,5 @@
+from app.core.organization_context import scoped_path
+from app.core.subscriptions import storage_write
 from pathlib import Path
 import re
 
@@ -8,6 +10,8 @@ from sqlalchemy.orm import Session
 from app.core import deps
 from app.models.models import Meeting, Transcript, Summary, Decision, ActionItem, User, UserRole, SystemSetting, meeting_participants
 from app.services.export import export_pdf, export_docx, export_txt
+from app.services.structured_minutes import get_snapshot, missing_required
+from app.services.structured_export import render_pdf, render_docx, render_txt
 from app.services.email import email_service
 from app.core.config import settings as app_settings
 from app.core.audit import log_action
@@ -20,7 +24,7 @@ def _enum_value(value):
 
 
 def _final_pdf_path(meeting_id: int) -> Path:
-    return Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf"
+    return scoped_path(Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf") if app_settings.TENANT_ID.startswith("org-") else Path(app_settings.EXPORT_DIR) / f"meeting-{meeting_id}-final-minutes.pdf"
 
 
 def _gather_export_data(meeting_id: int, db: Session):
@@ -63,7 +67,7 @@ def _gather_export_data(meeting_id: int, db: Session):
     setting_rows = db.query(SystemSetting).all()
     settings = {row.key: row.value for row in setting_rows}
     organization = {
-        "name": settings.get("school_name", "Starlight Secondary School"),
+        "name": settings.get("school_name", "MinuteSeal"),
         "address": settings.get("organization_address", ""),
         "phone": settings.get("organization_phone", ""),
         "email": settings.get("organization_email", ""),
@@ -72,6 +76,8 @@ def _gather_export_data(meeting_id: int, db: Session):
         "registration": settings.get("organization_registration", ""),
         "logo_path": settings.get("school_logo_file", ""),
     }
+    if organization["logo_path"]:
+        organization["logo_path"]=str(scoped_path(organization["logo_path"]))
     return (
         meeting, participants, summary_text, decision_texts, action_items,
         transcript.content if transcript else "", organization,
@@ -92,7 +98,13 @@ def export_meeting(
     if current_user.role not in {UserRole.admin, UserRole.staff} and meeting.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Not authorised to export this meeting")
 
-    filename_base = meeting.title.replace(" ", "_").replace("/", "-")[:40]
+    filename_base = re.sub(r"[^A-Za-z0-9._-]+", "-", meeting.title).strip("-")[:50] or "meeting"
+    snapshot = get_snapshot(db, meeting_id)
+    if snapshot:
+        row, definition, values = snapshot
+        final = row.status == "final"
+        renderer, media = {"pdf": (render_pdf, "application/pdf"), "docx": (render_docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"), "txt": (render_txt, "text/plain; charset=utf-8")}[format]
+        return Response(content=renderer(definition, values, organization, final), media_type=media, headers={"Content-Disposition": f'attachment; filename="{filename_base}.{format}"'})
 
     if format == "pdf":
         data = export_pdf(
@@ -178,24 +190,47 @@ def finalize_and_share_minutes(
     current_user: User = Depends(deps.get_admin_user),
 ):
     meeting, participants, summary_text, decisions, action_items, transcript_text, organization = _gather_export_data(meeting_id, db)
-    if not summary_text:
-        raise HTTPException(status_code=400, detail="Generate and review the minutes before finalizing")
-    pdf_data = export_pdf(
-        meeting_title=meeting.title,
-        meeting_date=meeting.date,
-        participants=participants,
-        summary_text=summary_text,
-        decisions=decisions,
-        action_items=action_items,
-        transcript_text=transcript_text,
-        organization=organization,
-        meeting_description=meeting.description or "",
-    )
-    path = _final_pdf_path(meeting_id)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(".tmp")
-    temporary.write_bytes(pdf_data)
-    temporary.replace(path)
+    db.query(Meeting).filter(Meeting.id == meeting_id).with_for_update().first()
+    snapshot = get_snapshot(db, meeting_id, lock=True)
+    if snapshot:
+        row, definition, values = snapshot
+        if meeting.status.value != "completed":
+            raise HTTPException(409, "Complete transcription before finalizing")
+        if row.status == "final":
+            raise HTTPException(409, "Minutes already finalized")
+        missing = missing_required(definition, values)
+        if missing:
+            raise HTTPException(422, "Required sections missing: " + ", ".join(missing))
+        pdf_data = render_pdf(definition, values, organization, True)
+    else:
+        if not summary_text:
+            raise HTTPException(status_code=400, detail="Generate and review the minutes before finalizing")
+        pdf_data = export_pdf(
+            meeting_title=meeting.title,
+            meeting_date=meeting.date,
+            participants=participants,
+            summary_text=summary_text,
+            decisions=decisions,
+            action_items=action_items,
+            transcript_text=transcript_text,
+            organization=organization,
+            meeting_description=meeting.description or "",
+        )
+    with storage_write(len(pdf_data)):
+        path = _final_pdf_path(meeting_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_bytes(pdf_data)
+        temporary.replace(path)
+        if snapshot:
+            row.values_json = __import__("json").dumps(values, ensure_ascii=False)
+            row.status = "final"
+            try:
+                db.commit()
+            except Exception:
+                path.unlink(missing_ok=True)
+                db.rollback()
+                raise
 
     recipients = sorted({p.email.strip() for p in meeting.participants if p.email and p.email.strip()})
     delivered = 0

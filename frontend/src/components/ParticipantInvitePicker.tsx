@@ -85,7 +85,7 @@ export default function ParticipantInvitePicker({
     <div className="space-y-5">
       <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
         <div className="flex items-center gap-2 text-sm font-extrabold text-slate-900"><Users size={17}/>Choose people from the directory</div>
-        <p className="mt-1 text-xs text-slate-500">Select individuals or add an entire organisational group.</p>
+        <p className="mt-1 text-xs text-slate-600">Select individuals or add an entire organisational group.</p>
 
         {groups.length > 0 && <div className="mt-4 flex flex-wrap gap-2">
           {groups.map((group) => {
@@ -95,13 +95,13 @@ export default function ParticipantInvitePicker({
           })}
         </div>}
 
-        <div className="relative mt-4"><Search className="absolute left-3 top-2.5 text-slate-400" size={17}/><input disabled={disabled} value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900" placeholder="Search name, email, position or group..." /></div>
+        <div className="relative mt-4"><Search className="absolute left-3 top-2.5 text-slate-600" size={17}/><input disabled={disabled} value={search} onChange={(event) => setSearch(event.target.value)} className="w-full rounded-lg border border-slate-300 bg-white py-2 pl-9 pr-3 text-sm text-slate-900" placeholder="Search name, email, position or group..." /></div>
 
         <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
-          {filtered.length === 0 ? <p className="py-5 text-center text-xs text-slate-500">No matching directory people.</p> : filtered.map((person) => (
+          {filtered.length === 0 ? <p className="py-5 text-center text-xs text-slate-600">No matching directory people.</p> : filtered.map((person) => (
             <label key={person.id} className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 ${selected.has(person.id) ? "border-blue-300 bg-blue-50" : "border-slate-200 bg-white"}`}>
               <input disabled={disabled} type="checkbox" checked={selected.has(person.id)} onChange={() => togglePerson(person.id)} className="mt-1" />
-              <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-slate-900">{person.name}</span><span className="block truncate text-xs text-slate-500">{person.position_title || person.directory_group || "Staff"} · {person.email}</span></span>
+              <span className="min-w-0 flex-1"><span className="block text-sm font-bold text-slate-900">{person.name}</span><span className="block truncate text-xs text-slate-600">{person.position_title || person.directory_group || "Staff"} · {person.email}</span></span>
               <span className="rounded bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-600">{person.directory_group || "Staff"}</span>
             </label>
           ))}

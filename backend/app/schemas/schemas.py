@@ -108,6 +108,8 @@ class MeetingBase(BaseModel):
 
 class MeetingCreate(MeetingBase):
     participants: List[ParticipantCreate] = Field(default_factory=list)
+    minute_format_id: Optional[int] = None
+    minute_format: Optional[dict] = None
 
 
 class MeetingUpdate(BaseModel):

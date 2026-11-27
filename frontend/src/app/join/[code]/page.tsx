@@ -1,4 +1,6 @@
 "use client";
+import PageHero from "@/components/PageHero";
+import PublicNav,{PublicFooter} from "@/components/PublicNav";
 
 import React, { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -109,16 +111,15 @@ export default function PublicJoinPage() {
   };
 
   return (
-    <main className="min-h-screen bg-slate-50 px-4 py-8 sm:py-12">
-      <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <header className="border-b border-slate-200 px-6 py-6 text-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/api/settings/logo" alt="Starlight Secondary School" className="mx-auto h-auto max-h-32 w-auto max-w-[240px] object-contain" />
-          <h1 className="mt-3 text-lg font-extrabold text-blue-950">STARLIGHT SECONDARY SCHOOL</h1>
-        </header>
+    <main className="ms-page">
+      <PublicNav active=""/>
+      <PageHero image="/images/heroes/invitation.webp" title="Meeting invitation" eyebrow="MinuteSeal" compact heading="p"/>
+      <div className="ms-public-content flex-1 py-5">
+      <div className="mx-auto w-full max-w-xl overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        
 
         <div className="p-6 sm:p-8">
-          {loading && <div className="py-12 text-center text-sm text-slate-500">Opening meeting invitation...</div>}
+          {loading && <div className="py-12 text-center text-sm text-slate-600">Opening meeting invitation...</div>}
           {loadError && <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700"><b>Meeting link unavailable.</b><br />{loadError}</div>}
 
           {invitation && <>
@@ -134,7 +135,7 @@ export default function PublicJoinPage() {
               <div className="space-y-5">
                 <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
                   <UserCheck className="shrink-0 text-blue-700" size={24}/>
-                  <div><div className="font-extrabold text-slate-900">{invitation.known_name ? `Invited: ${invitation.known_name}` : "Meeting invitation"}</div><div className="text-xs text-slate-500">Choose whether you are attending or send an apology if you cannot attend.</div></div>
+                  <div><div className="font-extrabold text-slate-900">{invitation.known_name ? `Invited: ${invitation.known_name}` : "Meeting invitation"}</div><div className="text-xs text-slate-600">Choose whether you are attending or send an apology if you cannot attend.</div></div>
                 </div>
 
                 {invitation.requires_name && <label className="block text-sm font-medium text-slate-700">Full name
@@ -159,6 +160,8 @@ export default function PublicJoinPage() {
           </>}
         </div>
       </div>
+      </div>
+      <PublicFooter/>
     </main>
   );
 }

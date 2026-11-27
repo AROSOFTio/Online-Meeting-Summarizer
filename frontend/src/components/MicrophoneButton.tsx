@@ -37,7 +37,7 @@ export const MicrophoneButton: React.FC<MicrophoneButtonProps> = ({
         <button
           onClick={onToggleMute}
           className={`flex items-center justify-center p-3 rounded-full transition-all duration-150 ${
-            isMuted ? "bg-amber-500 text-white" : "bg-slate-700 hover:bg-slate-800 text-white"
+            isMuted ? "bg-amber-700 text-white" : "bg-slate-700 hover:bg-slate-800 text-white"
           }`}
           title={isMuted ? "Unmute Mic" : "Mute Mic"}
         >

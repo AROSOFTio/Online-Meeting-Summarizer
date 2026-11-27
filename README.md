@@ -1,7 +1,4 @@
-# Online Meeting Summarizer
-
-**Case Study:** Starlight Secondary School, Amuria District, Uganda  
-**Academic Project:** Kumi University
+# ConveneCore
 
 A production-oriented three-tier web application for scheduling, inviting participants, recording/uploading meetings, AI transcription, editable minutes, action-item tracking, official exports and operational administration.
 
@@ -21,6 +18,10 @@ A production-oriented three-tier web application for scheduling, inviting partic
 
 Google Gemini is the single production transcription provider.
 
+## SaaS conversion status
+
+The public blank template library and browser-local format builder are available at `/templates` and `/templates/builder`. The existing meeting workspace remains single-organization until tenant isolation and server-side format integration are implemented and tested. See `docs/SAAS_CONVERSION.md`. Existing deployments must explicitly retain the database role and credentials in their environment before upgrading.
+
 ## Main features
 
 - Administrator, Minute Secretary and Staff roles.
@@ -34,7 +35,7 @@ Google Gemini is the single production transcription provider.
 - Responsible person can be selected from known people or typed manually.
 - Action-item filtering by status, priority, responsible person and deadline range.
 - PDF, DOCX and TXT minutes; transcript appendix begins on a new page in PDF/DOCX.
-- Starlight S.S official logo/branding in the application and exports.
+- Configurable organization logo/branding in the application and exports.
 - Notification indicator for completed/failed processing and open action items.
 - System Settings showing actual Gemini/SMTP/database readiness.
 - Validated database backup downloads, offline restore tooling and retention cleanup.
@@ -50,8 +51,8 @@ Google Gemini is the single production transcription provider.
 - Redis for Celery when exercising background jobs
 
 ```bash
-git clone <repository-url> starlight-meeting-summarizer
-cd starlight-meeting-summarizer
+git clone <repository-url> convenecore
+cd convenecore
 cp .env.example .env
 ```
 
@@ -129,4 +130,4 @@ When the backend is running, OpenAPI docs are available at `/api/docs`.
 
 ## License
 
-Academic project. All rights reserved.
+All rights reserved.

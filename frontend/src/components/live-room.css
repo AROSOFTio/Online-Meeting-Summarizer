@@ -1,0 +1,68 @@
+.ms-live-shell{min-width:0;color:#0b1935;font-size:13px}
+.ms-room{display:flex;flex-direction:column;gap:10px;min-width:0}
+.ms-room-status{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;padding:4px 2px}
+.ms-live-pill{display:inline-flex;align-items:center;gap:5px;background:#15943c;color:white;border-radius:999px;padding:5px 11px;font-size:11px;font-weight:700}
+.ms-room-count{display:inline-flex;align-items:center;gap:5px;border-radius:999px;background:#e8eef8;padding:5px 10px}
+.ms-room-grid{display:grid;min-width:0;gap:12px;grid-template-columns:minmax(0,1fr) minmax(260px,30%);grid-template-areas:"stage side" "toolbar toolbar";align-items:start}
+.ms-room-stage,.ms-room-people,.ms-room-health,.ms-room-settings{background:#fff;border:1px solid #dce3ef;border-radius:12px;min-width:0}
+.ms-room-stage{padding:10px;display:flex;flex-direction:column;gap:8px}
+.ms-video-grid{display:flex;align-items:start;justify-content:center;gap:7px;flex-wrap:wrap}
+.ms-video-primary{flex:0 0 100%;min-width:0}
+.ms-video-primary>div{max-height: min(48vh,500px)!important;background:#232c3b}
+.ms-video-small{flex:1 1 24%;min-width:110px;max-width:31%}
+.ms-video-small>div{max-height:140px!important;border-radius:10px}
+.ms-audio-stage{padding:20px 10px;color:#64748b;text-align:center;display:flex;align-items:center;flex-direction:column;gap:9px;background:#f7f9fc;border-radius:9px}
+.ms-audio-stage strong{font-size:16px;color:#11244b}
+.ms-avatar-strip{display:flex;gap:7px}
+.ms-avatar{display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;width:33px;height:33px;border-radius:50%;background:#dbe7ff;color:#0843df;font-size:12px;font-weight:700}
+.ms-avatar-1{background:#e6defb;color:#572cc1}.ms-avatar-2{background:#fce1e4;color:#b91c35}
+.ms-room-side{grid-area:side;min-width:0;display:flex;flex-direction:column;gap:12px}
+.ms-room-stage{grid-area:stage}
+.ms-room-toolbar{grid-area:toolbar;display:flex;flex-wrap:wrap;align-items:center;gap:7px;background:white;border:1px solid #dce3ef;border-radius:12px;padding:10px;position:sticky;bottom:0;z-index:10}
+.ms-room-tool,.ms-small-button,.ms-icon-button,.ms-end-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
+.ms-room-tool{border:1px solid #d9e0eb;border-radius:8px;padding:10px 11px;font-size:11px;font-weight:600;color:#10213f;background:#f9fafc;min-height:39px}
+.ms-room-tool svg{flex-shrink:0}.ms-tool-primary,.ms-tool-selected{background:#e5edff;color:#0643ed;border-color:#c9d8ff}.ms-tool-muted{background:#fff0f0;color:#b91c1c}
+.ms-room-tool:disabled,.ms-moderation button:disabled,.ms-small-button:disabled{opacity:.4;cursor:not-allowed}
+.ms-layout-tools{display:flex;gap:5px;flex-wrap:wrap}
+.ms-end-button{margin-left:auto;border-radius:8px;background:#e81d35;color:white;padding:11px 13px;font-size:11px;font-weight:700}
+.ms-small-button{border:1px solid #cad9fc;border-radius:7px;color:#0643ed;background:white;padding:6px 9px;font-size:11px;font-weight:600}
+.ms-icon-button{border:0;background:none;color:#23364f;padding:4px}
+.ms-panel-head{padding:12px;display:flex;gap:6px;align-items:center;justify-content:space-between;border-bottom:1px solid #e0e6ef}
+.ms-room-panel-title{display:flex;align-items:center;gap:7px;font-weight:700;color:#10213f;font-size:14px}
+.ms-room-health{padding:12px;line-height:1.5}
+.ms-health-metrics{display:grid;grid-template-columns:1fr auto;gap:9px 5px;margin-top:12px;font-size:12px}
+.ms-health-metrics span{display:flex;align-items:center;gap:8px}.ms-health-metrics b{font-weight:600;color:#166534;text-align:right}
+.ms-room-people{order:-1}.ms-people-list{padding:3px 12px}
+.ms-person{position:relative;display:flex;align-items:center;gap:7px;padding:9px 0;border-bottom:1px solid #e4eaf3;min-width:0}
+.ms-person:last-child{border-bottom:0}.ms-person-main{flex:1;min-width:0}.ms-person-main b{font-size:12px;overflow-wrap:anywhere;font-weight:650}
+.ms-moderator{display:inline-flex;align-items:center;gap:3px;background:#e7eeff;color:#0843df;padding:2px 4px;border-radius:4px;font-size:9px}
+.ms-moderation{margin:0 12px 12px;border-top:1px solid #e0e6ef;padding-top:9px}
+.ms-moderation-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:8px}
+.ms-moderation-grid button{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:5px;background:#fafbfd;border:1px solid #dce3eb;border-radius:8px;padding:9px 3px;font-size:10px;line-height:1.2;text-align:center;min-height:54px}
+.ms-inline-menu{display:flex;flex-direction:column;gap:3px;padding:6px;background:white;border:1px solid #dce3eb;border-radius:8px;box-shadow:0 3px 10px #0f172a16}
+.ms-inline-menu button{display:flex;align-items:center;gap:6px;text-align:left;padding:6px;font-size:12px}
+.ms-person-menu{position:absolute;right:0;top:90%;z-index:20;min-width:150px}
+.ms-room-settings{padding:10px}.ms-sheet-tabs,.ms-sheet-handle{display:none}
+@media(max-width:1100px) and (min-width:768px){.ms-room-grid{grid-template-columns:minmax(0,1fr) minmax(235px,34%)}.ms-room-tool{padding:8px;font-size:10px}}
+@media(max-width:767px){
+.ms-room-grid{display:flex;flex-direction:column;gap:11px}.ms-room-stage,.ms-room-side,.ms-room-toolbar{width:100%}
+.ms-room-stage{padding:0;background:transparent;border:0}.ms-video-primary>div{max-height:220px!important}.ms-video-small{flex:0 1 30%;min-width:96px;max-width:31%}
+.ms-audio-stage{padding:14px 8px}
+.ms-room-toolbar{position:static;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px 3px;border:0;background:transparent;padding:4px 0}
+.ms-room-tool{flex-direction:column;justify-content:start;gap:6px;padding:0;border:0;background:transparent;font-size:10px;line-height:1.2;min-width:0;white-space:normal;min-height:65px}
+.ms-room-tool>svg{width:44px;height:44px;padding:12px;border-radius:50%;background:#e7edf8;color:#0c2250}
+.ms-tool-primary>svg{background:#084af0;color:white}.ms-tool-muted>svg{background:#fee2e2;color:#b91c1c}.ms-tool-selected>svg{background:#e2eaff;color:#084af0}
+.ms-layout-tools{order:6;grid-column:1/-1;display:flex;justify-content:center;gap:5px}
+.ms-layout-tools .ms-room-tool{flex-direction:row;min-height:28px;border:1px solid #dae2ef;border-radius:6px;padding:3px 6px;gap:4px;font-size:10px}.ms-layout-tools .ms-room-tool>svg{background:transparent;padding:0;width:13px;height:13px}
+.ms-end-button{order:7;grid-column:1/-1;margin:0;min-height:36px}
+.ms-room-side{gap:0;background:white;border:1px solid #e3e9f3;border-radius:20px 20px 12px 12px;padding:0 11px 10px;box-shadow:0 -4px 14px #10213f08}
+.ms-sheet-handle{display:block;width:33px;height:5px;border-radius:99px;background:#b8c1d0;margin:8px auto}
+.ms-sheet-tabs{display:flex;border-bottom:1px solid #e1e7ef;margin-bottom:10px}
+.ms-sheet-tabs button{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px 0;border-bottom:3px solid transparent;font-size:12px}
+.ms-sheet-tabs button[aria-pressed=true]{font-weight:700;color:#0643ed;border-color:#0643ed}
+.ms-room-people{border:0;order:0}.ms-room-health{background:#f0f8f6;border-color:#e5efed;padding:10px;margin:0 0 10px}
+.ms-side-health:not(.ms-tab-active) .ms-health-metrics{display:none}
+.ms-room-people:not(.ms-tab-active){display:none}
+.ms-panel-head{padding:8px 0}.ms-people-list{padding:0}.ms-moderation{margin:0;padding-top:10px}.ms-moderation-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.ms-room-settings-wrap{margin-top:10px}.ms-live-pill{background:#ef2938}
+}

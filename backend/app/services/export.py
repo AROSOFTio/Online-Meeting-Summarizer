@@ -3,12 +3,8 @@ import os
 import re
 from datetime import datetime
 from html import escape
-from pathlib import Path
 from typing import Any, List, Optional
 
-# This is the exact Starlight S.S logo supplied for the project.  Do not
-# replace it with a generated/recreated crest.
-BUNDLED_LOGO = Path(__file__).resolve().parents[1] / "static" / "starlight-logo.jpg"
 
 
 def _format_date(value: Any) -> str:
@@ -25,19 +21,14 @@ def _format_date(value: Any) -> str:
 def _org(organization: Optional[dict]) -> dict:
     data = organization or {}
     configured_logo = data.get("logo_path") or ""
-    # Keep a manually uploaded raster logo if one exists, but never fall back
-    # to the old recreated SVG crest. The bundled JPG is the real school logo.
-    if configured_logo and os.path.isfile(configured_logo) and not configured_logo.lower().endswith(".svg"):
-        logo_path = configured_logo
-    else:
-        logo_path = str(BUNDLED_LOGO) if BUNDLED_LOGO.is_file() else ""
+    logo_path = configured_logo if configured_logo and os.path.isfile(configured_logo) and not configured_logo.lower().endswith(".svg") else ""
     return {
-        "name": data.get("name") or "Starlight Secondary School",
-        "address": data.get("address") or "Amuria District, Uganda",
+        "name": data.get("name") or "MinuteSeal",
+        "address": data.get("address") or "",
         "phone": data.get("phone") or "",
         "email": data.get("email") or "",
-        "website": data.get("website") or "https://oms.arosoftlabs.com",
-        "motto": data.get("motto") or "RISE AND SHINE",
+        "website": data.get("website") or "",
+        "motto": data.get("motto") or "",
         "registration": data.get("registration") or "",
         "logo_path": logo_path,
     }
@@ -259,7 +250,7 @@ def export_pdf(
 
     def branded_page(canvas, document):
         canvas.saveState()
-        # No logo watermark. The exact crest remains in the official header;
+        # No logo watermark. The configured organization logo remains in the official header;
         # removing the centre watermark keeps minutes readable and professional.
         canvas.setFont("Helvetica", 8)
         canvas.setFillColor(colors.HexColor("#6B7280"))

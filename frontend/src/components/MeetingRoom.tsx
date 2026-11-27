@@ -47,7 +47,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
       setSummary(
         `The meeting "${meetingTitle}" convened with ${participants.length} attendees. The agenda items were reviewed, decisions recorded, and action plans approved.`,
       );
-      setDecisions([{ text: "Approved academic action plan for Starlight Secondary School." }]);
+      setDecisions([{ text: "Sample decision — not an official resolution." }]);
       setActionItems([
         {
           description: "Prepare District performance report",
@@ -61,7 +61,7 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 meeting-dark">
       <div className="flex flex-col justify-between gap-4 rounded-xl border border-slate-800 bg-slate-900 p-5 shadow-xl md:flex-row md:items-center">
         <div>
           <div className="mb-1 flex items-center gap-2">
@@ -72,17 +72,17 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
             <h1 className="text-xl font-bold text-slate-100">{meetingTitle}</h1>
           </div>
           {joinCode && (
-            <p className="font-mono text-xs text-slate-400">
-              Join Link: <span className="font-bold text-indigo-400">starlightsecondaryschool.com/join/{joinCode}</span>
+            <p className="font-mono text-xs text-slate-300">
+              Join Link: <span className="font-bold text-indigo-300">/join/{joinCode}</span>
             </p>
           )}
         </div>
 
         <div className="flex items-center gap-3">
           <div className="flex items-center rounded-lg border border-slate-800 bg-slate-950 p-1 text-xs">
-            <button type="button" onClick={() => setActiveTab("room")} className={`rounded-md px-3 py-1.5 font-medium transition-all ${activeTab === "room" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200"}`}>Meeting Room</button>
-            <button type="button" onClick={() => setActiveTab("transcript")} className={`rounded-md px-3 py-1.5 font-medium transition-all ${activeTab === "transcript" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200"}`}>Transcript ({segments.length})</button>
-            <button type="button" onClick={() => setActiveTab("report")} className={`rounded-md px-3 py-1.5 font-medium transition-all ${activeTab === "report" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-slate-200"}`}>Minutes Report</button>
+            <button type="button" onClick={() => setActiveTab("room")} className={`rounded-md px-3 py-1.5 font-medium transition-all ${activeTab === "room" ? "bg-indigo-600 text-white" : "text-slate-300 hover:text-slate-200"}`}>Meeting Room</button>
+            <button type="button" onClick={() => setActiveTab("transcript")} className={`rounded-md px-3 py-1.5 font-medium transition-all ${activeTab === "transcript" ? "bg-indigo-600 text-white" : "text-slate-300 hover:text-slate-200"}`}>Transcript ({segments.length})</button>
+            <button type="button" onClick={() => setActiveTab("report")} className={`rounded-md px-3 py-1.5 font-medium transition-all ${activeTab === "report" ? "bg-indigo-600 text-white" : "text-slate-300 hover:text-slate-200"}`}>Minutes Report</button>
           </div>
           <MuteButton isMuted={isMuted} onToggleMute={() => setIsMuted(!isMuted)} disabled={!isRecording} />
         </div>
@@ -92,10 +92,10 @@ export const MeetingRoom: React.FC<MeetingRoomProps> = ({
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <div className="space-y-6 lg:col-span-2">
             <div className="flex flex-col items-center justify-center space-y-4 rounded-xl border border-slate-800 bg-slate-900 p-8 text-center shadow-xl">
-              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-400"><Radio className={`h-10 w-10 ${isRecording ? "animate-pulse text-red-500" : ""}`} /></div>
+              <div className="flex h-20 w-20 items-center justify-center rounded-full border border-indigo-500/30 bg-indigo-500/10 text-indigo-300"><Radio className={`h-10 w-10 ${isRecording ? "animate-pulse text-red-500" : ""}`} /></div>
               <div>
                 <h3 className="text-lg font-semibold text-slate-100">{isRecording ? "Live Recording & Speaker Detection Active" : "Ready to Start Meeting Session"}</h3>
-                <p className="mt-1 max-w-md text-xs text-slate-400">The system will detect speaker turns from the attendee roster and prepare the meeting transcript and minutes.</p>
+                <p className="mt-1 max-w-md text-xs text-slate-300">The system will detect speaker turns from the attendee roster and prepare the meeting transcript and minutes.</p>
               </div>
               <MicrophoneButton isRecording={isRecording} isMuted={isMuted} onToggleRecord={handleToggleRecord} onToggleMute={() => setIsMuted(!isMuted)} />
             </div>
