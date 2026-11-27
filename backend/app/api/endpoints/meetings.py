@@ -1,4 +1,5 @@
 import os
+import json
 import secrets
 import string
 import uuid
@@ -24,7 +25,9 @@ from app.schemas.schemas import (
     ProcessingJobOut,
 )
 from app.services.email import email_service
-from app.core.subscriptions import check_ai_available
+from app.core.subscriptions import check_ai_available, require
+from app.models.minute_formats import MinuteFormat, MeetingMinuteFormat
+from app.services.structured_minutes import FormatDefinition, metadata, validate_values
 from app.workers.tasks import run_background_job, transcribe_meeting
 
 router = APIRouter()
@@ -262,6 +265,18 @@ def create_meeting(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_minutes_editor),
 ):
+    definition = None
+    if meeting_in.minute_format_id is not None or meeting_in.minute_format is not None:
+        require("templates")
+        if meeting_in.minute_format_id is not None and meeting_in.minute_format is not None:
+            raise HTTPException(422,"Choose one minute format")
+        try:
+            if meeting_in.minute_format_id is not None:
+                saved=db.query(MinuteFormat).filter(MinuteFormat.id==meeting_in.minute_format_id,MinuteFormat.owner_id==current_user.id).first()
+                if not saved:raise HTTPException(404,"Format not found")
+                definition=FormatDefinition.model_validate_json(saved.definition)
+            else:definition=FormatDefinition.model_validate(meeting_in.minute_format)
+        except ValueError as exc:raise HTTPException(422,"Invalid minute format") from exc
     meeting = Meeting(
         title=meeting_in.title, description=meeting_in.description, date=_storage_datetime(meeting_in.date),
         owner_id=current_user.id, status=MeetingStatus.draft, is_archived=False,
@@ -282,6 +297,9 @@ def create_meeting(
             db.add(participant)
             db.flush()
         _link_participant(meeting, participant, db, p_in.attendance_status)
+    if definition:
+        db.flush()
+        db.add(MeetingMinuteFormat(meeting_id=meeting.id,definition=definition.model_dump_json(),values_json=json.dumps(validate_values(definition,metadata(db,meeting,definition)))))
     db.commit()
     db.refresh(meeting)
     log_action(db, action="create_meeting", details=f"User {current_user.email} created meeting: {meeting.title}", user_id=current_user.id, user_email=current_user.email, ip_address=request.client.host if request.client else None)

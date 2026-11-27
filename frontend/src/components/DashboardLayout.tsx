@@ -11,7 +11,7 @@ export function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const section = pathname === "/dashboard" ? "Your meeting workspace" : pathname === "/create-meeting" ? "Plan your next meeting" : pathname === "/meetings" ? "Meeting records" : pathname.endsWith("/live") ? "Live meeting workspace" : pathname.endsWith("/invite") ? "Meeting invitations" : pathname.startsWith("/meetings/") ? "Meeting documentation" : pathname === "/staff" ? "People and access" : pathname === "/action-items" ? "Decisions into action" : pathname === "/settings" ? "Organization administration" : pathname === "/subscription" ? "Workspace management" : "MinuteSeal workspace";
+  const section = pathname === "/dashboard" ? "Your meeting workspace" : pathname === "/create-meeting" ? "Plan your next meeting" : pathname === "/meetings" ? "Meeting records" : pathname.endsWith("/live") ? "Live meeting workspace" : pathname.endsWith("/invite") ? "Meeting invitations" : pathname.startsWith("/meetings/") ? "Meeting documentation" : pathname.startsWith("/minute-formats") ? "Minute formats" : pathname === "/staff" ? "People and access" : pathname === "/action-items" ? "Decisions into action" : pathname === "/settings" ? "Organization administration" : pathname === "/subscription" ? "Workspace management" : "MinuteSeal workspace";
   const [toast, setToast] = useState<string | null>(null);
   const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 

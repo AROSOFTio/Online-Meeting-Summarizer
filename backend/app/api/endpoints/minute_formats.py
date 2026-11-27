@@ -49,7 +49,8 @@ def save_format(body:FormatDefinition,db:Session=Depends(deps.get_db),user:User=
 
 
 class Selection(BaseModel):
-    format_id:int
+    format_id:int|None=None
+    definition:FormatDefinition|None=None
 
 
 @router.get("/meeting/{meeting_id}")
@@ -61,14 +62,16 @@ def read_meeting(meeting_id:int,db:Session=Depends(deps.get_db),user:User=Depend
 @router.put("/meeting/{meeting_id}/format")
 def select_format(meeting_id:int,body:Selection,db:Session=Depends(deps.get_db),user:User=Depends(deps.get_minutes_editor)):
     meeting=meeting_access(db,meeting_id,user,True)
-    template=db.query(MinuteFormat).filter(MinuteFormat.id==body.format_id,MinuteFormat.owner_id==user.id).first()
-    if not template:
-        raise HTTPException(404,"Format not found")
+    if (body.format_id is None)==(body.definition is None):raise HTTPException(422,"Choose one minute format")
+    definition=body.definition
+    if body.format_id is not None:
+        template=db.query(MinuteFormat).filter(MinuteFormat.id==body.format_id,MinuteFormat.owner_id==user.id).first()
+        if not template:raise HTTPException(404,"Format not found")
+        definition=FormatDefinition.model_validate_json(template.definition)
     existing=db.get(MeetingMinuteFormat,meeting_id)
     if existing:
         raise HTTPException(409,"A format is already attached; preserve the existing meeting draft")
-    definition=FormatDefinition.model_validate_json(template.definition)
-    row=MeetingMinuteFormat(meeting_id=meeting_id,definition=template.definition,values_json=json.dumps(validate_values(definition,metadata(db,meeting,definition))))
+    row=MeetingMinuteFormat(meeting_id=meeting_id,definition=definition.model_dump_json(),values_json=json.dumps(validate_values(definition,metadata(db,meeting,definition))))
     db.add(row)
     db.commit()
     return payload(db,meeting_id)

@@ -25,7 +25,7 @@ export default function Sidebar() {
   const items = [
     { name: "Dashboard", path: "/dashboard", icon: LayoutDashboard, show: true },
     { name: "Meetings", path: "/meetings", icon: Calendar, show: true },
-    { name: "Minute Formats", path: "/templates", icon: CheckSquare, show: true },
+    { name: "Minute Formats", path: "/minute-formats", icon: CheckSquare, show: true },
     { name: "Action Items", path: "/action-items", icon: CheckSquare, show: !subscription.data?.managed||subscription.data.features.includes("actions") },
     { name: "Staff", path: "/staff", icon: Users, show: isAdmin },
     { name: "Subscription", path: "/subscription", icon: Settings, show: true },
@@ -57,7 +57,7 @@ export default function Sidebar() {
       {canEdit && <div className="p-3 pb-1"><Link href="/create-meeting" onClick={() => setMobileOpen(false)} title={collapsed ? "New Meeting" : undefined} className={`flex items-center justify-center gap-2 rounded-lg bg-blue-700 px-3 py-3 text-sm font-extrabold text-white hover:bg-blue-800 ${collapsed ? "px-2" : ""}`}><PlusCircle size={18}/>{!collapsed && <span>New Meeting</span>}</Link></div>}
 
       <nav className="flex-1 space-y-1 overflow-y-auto p-3">{items.map((item) => {
-        const active = pathname === item.path || (item.path === "/meetings" && pathname.startsWith("/meetings/"));
+        const active = pathname === item.path || ((item.path === "/meetings" || item.path === "/minute-formats") && pathname.startsWith(item.path+"/"));
         const Icon = item.icon;
         return <Link key={item.path} href={item.path} onClick={() => setMobileOpen(false)} title={collapsed ? item.name : undefined} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold ${active ? "bg-blue-50 text-blue-800" : "text-slate-600 hover:bg-slate-50 hover:text-slate-950"}`}><Icon size={18}/>{!collapsed && <span>{item.name}</span>}</Link>;
       })}</nav>

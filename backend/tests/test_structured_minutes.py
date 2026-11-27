@@ -88,3 +88,17 @@ def test_saved_format_to_ai_and_final_exports(client, db, monkeypatch, tmp_path)
     assert client.post("/api/auth/login",data={"username":"format-test@example.com","password":"FormatTest123!"}).status_code==200
     assert client.get("/api/minute-formats/library").json()==[]
     assert client.get(base).status_code==403
+
+
+def test_create_meeting_with_selected_template(client,db):
+    from datetime import datetime,timezone
+    assert client.post("/api/auth/login",data={"username":"testadmin@starlight.sc.ug","password":"TestAdminPass123!"}).status_code==200
+    payload={"title":"Template selection test","date":datetime.now(timezone.utc).isoformat(),"participants":[],"minute_format":definition().model_dump()}
+    r=client.post("/api/meetings/",json=payload)
+    assert r.status_code==200,r.text
+    snap=client.get("/api/minute-formats/meeting/"+str(r.json()["id"])).json()
+    assert snap["definition"]==definition().model_dump()
+    payload["minute_format_id"]=999999
+    assert client.post("/api/meetings/",json=payload).status_code==422
+    del payload["minute_format"]
+    assert client.post("/api/meetings/",json=payload).status_code==404

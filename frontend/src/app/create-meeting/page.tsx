@@ -7,6 +7,8 @@ import { CalendarClock, Check, Copy, MessageCircle, Mic, Play, Users } from "luc
 import DashboardLayout from "@/components/DashboardLayout";
 import ParticipantInvitePicker, { DirectoryPerson } from "@/components/ParticipantInvitePicker";
 import { apiRequest } from "@/lib/api";
+import {formats,type FormatField} from "@/lib/minute-formats";
+import Link from "next/link";
 
 interface InviteResult {
   meeting_id: number;
@@ -30,6 +32,11 @@ export default function CreateMeetingPage() {
   const router = useRouter();
   const [mode, setMode] = useState<"now" | "later">("later");
   const [title, setTitle] = useState("");
+  const [template,setTemplate]=useState("general");
+  const [saved,setSaved]=useState<{id:number;definition:{name:string;sector:string;fields:FormatField[]}}[]>([]);
+  const [templatesEnabled,setTemplatesEnabled]=useState(false);
+  const [templateLoading,setTemplateLoading]=useState(true);
+  useEffect(()=>{const q=new URLSearchParams(window.location.search);const preset=q.get("format");if(preset&&formats.some(f=>f.id===preset))setTemplate(preset);apiRequest("/api/subscription").then(async p=>{if(!p.managed||p.features?.includes("templates")){setTemplatesEnabled(true);const list=await apiRequest("/api/minute-formats/library");setSaved(list);const id=q.get("saved");if(id&&list.some((t:{id:number})=>String(t.id)===id))setTemplate("saved:"+id);}}).catch(()=>setError("Unable to load template options. You may continue with standard minutes.")).finally(()=>setTemplateLoading(false));},[]);
   const [description, setDescription] = useState("");
   const [dateTime, setDateTime] = useState(localNow());
   const [directory, setDirectory] = useState<DirectoryPerson[]>([]);
@@ -61,6 +68,7 @@ export default function CreateMeetingPage() {
           description: description.trim(),
           date: meetingDate,
           participants: [],
+          ...(templatesEnabled&&template.startsWith("saved:")?{minute_format_id:Number(template.slice(6))}:templatesEnabled&&template?{minute_format:(({name,sector,fields})=>({name,sector,fields}))(formats.find(f=>f.id===template)!)}:{}),
         }),
       });
 
@@ -172,6 +180,7 @@ export default function CreateMeetingPage() {
                 </label>
               )}
 
+              {templatesEnabled&&<div className="rounded-lg border border-slate-200 p-4"><label className="block text-sm font-semibold">Minutes template<select value={template} onChange={e=>setTemplate(e.target.value)} className="mt-2 w-full rounded-md border bg-white p-3"><option value="">Standard minutes</option><optgroup label="Ready-made formats">{formats.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</optgroup>{saved.length>0&&<optgroup label="My templates">{saved.map(t=><option key={t.id} value={"saved:"+t.id}>{t.definition.name}</option>)}</optgroup>}</select></label><p className="mt-2 text-xs text-slate-600">AI will follow the selected template’s sections and table columns. <Link href="/minute-formats" className="text-blue-700">Browse templates</Link></p></div>}
               <label className="block text-sm font-semibold text-slate-700">
                 Agenda <span className="font-normal text-slate-600">(optional to type)</span>
                 <textarea
@@ -182,7 +191,7 @@ export default function CreateMeetingPage() {
                   placeholder="Add agenda items if known. If left blank, the system will prepare an agenda from the meeting discussion."
                 />
                 <span className="mt-1 block text-xs font-normal text-slate-600">
-                  The final minutes will always contain an agenda, and the system will detect speakers automatically.
+                  Minutes follow the selected format. AI identifies speaker turns where possible.
                 </span>
               </label>
             </section>
@@ -207,7 +216,7 @@ export default function CreateMeetingPage() {
             {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
             <button
-              disabled={submitting}
+              disabled={submitting||templateLoading}
               type="submit"
               className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-700 px-5 py-4 text-base font-extrabold text-white hover:bg-blue-800 disabled:opacity-50"
             >
