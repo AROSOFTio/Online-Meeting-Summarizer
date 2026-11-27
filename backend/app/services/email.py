@@ -3,6 +3,7 @@ import smtplib
 import ssl
 from datetime import datetime
 from email.message import EmailMessage
+from email.utils import formatdate, make_msgid, parseaddr
 from typing import Iterable, Optional
 
 from app.core.config import settings
@@ -74,7 +75,11 @@ class EmailService:
         else:
             message["To"] = str(settings.SMTP_FROM_EMAIL)
             message["Bcc"] = ", ".join(unique_recipients)
-        message["Reply-To"] = str(settings.SMTP_FROM_EMAIL)
+        # Replies already go to From. A redundant Reply-To matching the
+        # recipient also triggers Rspamd's REPLYTO_EQ_TO_ADDR rule.
+        sender_address = parseaddr(str(settings.SMTP_FROM_EMAIL))[1]
+        message["Date"] = formatdate(usegmt=True)
+        message["Message-ID"] = make_msgid(domain=sender_address.rsplit("@", 1)[1])
         message.set_content(text)
         message.add_alternative(html_body, subtype="html")
         if attachment:

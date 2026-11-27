@@ -10,6 +10,7 @@ import ssl
 import time
 from contextlib import contextmanager
 from email.message import EmailMessage
+from email.utils import formatdate, make_msgid
 from pathlib import Path
 
 SECTORS=("Education","Government","Healthcare","Corporate","NGO & nonprofit","Association","Community","Research","Faith-based","Other")
@@ -81,6 +82,8 @@ def mail(recipient, subject, body):
     msg["From"]=sender
     msg["To"]=recipient
     msg["Subject"]=subject
+    msg["Date"]=formatdate(usegmt=True)
+    msg["Message-ID"]=make_msgid(domain=sender.rsplit("@",1)[1])
     msg.set_content(body)
     context=ssl.create_default_context()
     if port==465:
